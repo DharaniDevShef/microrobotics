@@ -34,6 +34,8 @@ def main():
             step_start = time.time()
             time.sleep(0.01)
 
+            data.ctrl[:] = -10
+
             # Advance the physics simulation
             mujoco.mj_step(model, data)
 

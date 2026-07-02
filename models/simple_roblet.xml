@@ -1,0 +1,40 @@
+<mujoco model="BodyFoldAssembly">
+    <compiler meshdir="../meshes" autolimits="true"/>
+    <option timestep="0.002" gravity="0 0 -9.81"/>
+
+    <asset>
+        <mesh name="BodyFoldPartA" file="BodyFoldPartA.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="BodyFoldPartB" file="BodyFoldPartB.stl" scale="0.001 0.001 0.001"/>
+    </asset>
+
+    <worldbody>
+        <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 1" dir="0 0 -1"/>
+        <camera name="closeup_fixed" mode="targetbody" target="BodyFoldPartA" pos="-0.03 0 0.02"/>
+
+        <geom name="ground" type="plane" size="1 1 0.01" pos="0 0 0" rgba="0.3 0.3 0.3 1"/>
+
+        <body name="BodyFoldPartA" pos="0 0 0.006">
+            <inertial pos="-0.006768 -0.020158 -0.052067" mass="0.000089" diaginertia="8.13e-10 9.10e-10 8.18e-10"/>
+            <joint name="fixed_partA" type="free"/>
+            <geom name="BodyFoldedSide1" type="mesh" mesh="BodyFoldPartA" density="1000" rgba="0.8 0.3 0.3 1"/>
+        </body>
+
+        <body name="BodyFoldPartB" pos="0 0 0.006">
+            <inertial pos="-0.00730 -0.016226 -0.050072" mass="0.000078" diaginertia="5.17e-10 9.71e-10 7.99e-10"/>
+            <joint name="rotation_joint"
+              type="hinge"
+              axis="1 0 0"
+              pos="0 0.001 0.0005"/>  <geom name="joint_marker" type="cylinder" size="0.0002 0.008"
+              pos="0 0.001 0.0005" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+            <geom name="BodyFoldedSide2" type="mesh" mesh="BodyFoldPartB" rgba="0.3 0.3 0.8 1"/>
+        </body>
+    </worldbody>
+    <actuator>
+        <position
+            name="fold_motor"
+            joint="rotation_joint"
+            kp="0.5"
+            ctrlrange="0 0.785398"
+            forcerange="-0.001 0.001"/>
+    </actuator>
+</mujoco>

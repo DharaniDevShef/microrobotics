@@ -5,7 +5,7 @@ import time
 
 def main():
     # Path to your XML model
-    model_path = "../models/assembly_model_basic.xml"
+    model_path = "../models/assembly_model.xml"
     
     if not os.path.exists(model_path):
         print(f"Error: Could not find '{model_path}' in the current directory.")

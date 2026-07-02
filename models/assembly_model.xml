@@ -18,42 +18,8 @@
     <worldbody>
         <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 1" dir="0 0 -1"/>
         <geom name="ground" type="plane" size="1 1 0.01" pos="0 0 0" rgba="0.3 0.3 0.3 1"/>
-        <body name="module_1" pos="0.000959000 -0.020409000 0.008010000" quat="1 0 0 0">
+        <body name="module_1" pos="-0.013564000 -0.024162000 0.008010000" quat="1 0 0 0">
             <freejoint name="free_module_1"/>
-            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
-            <body name="BodyFoldedSide1_1" pos="0.000000000 0.000000000 0.000000000" quat="0.922165 0 0 -0.386797">
-                <joint name="joint_1a" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
-                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
-                <geom name="geom_BodyFoldedSide1_1" type="mesh" mesh="BodyFoldedSide1" rgba="0.8 0.2 0.2 1"/>
-                <body name="SGA_1" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
-                    <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
-                    <geom name="geom_SGA_1" type="mesh" mesh="SGA" rgba="0.8 0.2 0.2 1"/>
-                    <geom name="magnet_SGA_1" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
-                </body>
-                <body name="SGB_1" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
-                    <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                    <geom name="geom_SGB_1" type="mesh" mesh="SGB" rgba="0.8 0.2 0.2 1"/>
-                    <geom name="magnet_SGB_1" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
-                </body>
-            </body>
-        </body>
-        <body name="module_2" pos="0.000959000 -0.020409000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_2"/>
-            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
-            <body name="BodyFoldedSide2_1" pos="0.000000000 0.000000000 0.000000000" quat="0.922165 0.000000 0.000000 -0.386797">
-                <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                <joint name="joint_1" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
-                <geom name="joint_marker_BodyFoldedSide2_1" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                <geom name="geom_BodyFoldedSide2_1" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.8 0.2 1"/>
-                <body name="SGB_2" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
-                    <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                    <geom name="geom_SGB_2" type="mesh" mesh="SGB" rgba="0.2 0.8 0.2 1"/>
-                    <geom name="magnet_SGB_2" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
-                </body>
-            </body>
-        </body>
-        <body name="module_3" pos="-0.013564000 -0.024162000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_3"/>
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="Body_1" pos="0.000000000 0.000000000 0.000000000" quat="0.922165 -0.000000 0.000000 -0.386797">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
@@ -75,8 +41,37 @@
                 </body>
             </body>
         </body>
-        <body name="module_4" pos="0.011471000 -0.031109000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_4"/>
+        <body name="module_2" pos="0.000959000 -0.020409000 0.008010000" quat="1 0 0 0">
+            <freejoint name="free_module_2"/>
+            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="BodyFoldedSide1_1" pos="0.000000000 0.000000000 0.000000000" quat="0.922165 0 0 -0.386797">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
+                <geom name="geom_BodyFoldedSide1_1" type="mesh" mesh="BodyFoldedSide1" rgba="0.8 0.2 0.2 1"/>
+                <body name="SGA_1" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
+                    <geom name="geom_SGA_1" type="mesh" mesh="SGA" rgba="0.8 0.2 0.2 1"/>
+                    <geom name="magnet_SGA_1" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
+                </body>
+                <body name="SGB_1" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
+                    <geom name="geom_SGB_1" type="mesh" mesh="SGB" rgba="0.8 0.2 0.2 1"/>
+                    <geom name="magnet_SGB_1" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
+                </body>
+                <body name="BodyFoldedSide2_1" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_1" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
+                    <geom name="joint_marker_BodyFoldedSide2_1" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_BodyFoldedSide2_1" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.8 0.2 1"/>
+                    <body name="SGB_2" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
+                        <geom name="geom_SGB_2" type="mesh" mesh="SGB" rgba="0.2 0.8 0.2 1"/>
+                        <geom name="magnet_SGB_2" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_3" pos="0.011471000 -0.031109000 0.008010000" quat="1 0 0 0">
+            <freejoint name="free_module_3"/>
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="Body_2" pos="0.000000000 0.000000000 0.000000000" quat="0.922165 -0.000000 -0.000000 -0.386797">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
@@ -89,20 +84,17 @@
                 <body name="SGX_1" pos="0.000000452 0.002329307 -0.002500001" quat="0.707106896 -0.707106896 0.000000250 -0.000000250">
                     <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
                     <geom name="geom_SGX_1" type="mesh" mesh="SGX" rgba="0.8 0.8 0.2 1"/>
-                    <geom name="magnet_SGX_1" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
                 <body name="SGX_2" pos="0.002017941 -0.001165050 -0.002500001" quat="0.353553772 -0.353553772 0.612372630 -0.612372630">
                     <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
                     <geom name="geom_SGX_2" type="mesh" mesh="SGX" rgba="0.8 0.8 0.2 1"/>
-                    <geom name="magnet_SGX_2" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
             </body>
         </body>
-        <body name="module_5" pos="0.003126000 -0.028794000 0.003010000" quat="1 0 0 0">
-            <freejoint name="free_module_5"/>
+        <body name="module_4" pos="0.003126000 -0.028794000 0.003010000" quat="1 0 0 0">
+            <freejoint name="free_module_4"/>
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="BodyFoldedSide1_2" pos="0.000000000 0.000000000 0.000000000" quat="-0.000000 0.796058 0.605220 0.000000">
-                <joint name="joint_2a" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
                 <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
                 <geom name="geom_BodyFoldedSide1_2" type="mesh" mesh="BodyFoldedSide1" rgba="0.8 0.2 0.8 1"/>
                 <body name="SGA_6" pos="-0.002017010 -0.001165046 -0.002499999" quat="-0.183013001 -0.683012546 -0.183013001 0.683012546">
@@ -115,28 +107,23 @@
                     <geom name="geom_SGA_7" type="mesh" mesh="SGA" rgba="0.8 0.2 0.8 1"/>
                     <geom name="magnet_SGA_7" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
-            </body>
-        </body>
-        <body name="module_6" pos="0.003126000 -0.028794000 0.003010000" quat="1 0 0 0">
-            <freejoint name="free_module_6"/>
-            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
-            <body name="BodyFoldedSide2_2" pos="0.000000000 0.000000000 0.000000000" quat="-0.000000 0.796058 0.605220 0.000000">
-                <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                <joint name="joint_2" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
-                <geom name="joint_marker_BodyFoldedSide2_2" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                <geom name="geom_BodyFoldedSide2_2" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.8 0.8 1"/>
-                <body name="SGB_9" pos="0 0.002329840 -0.002500000" quat="0.500000000 -0.500000000 -0.500000000 -0.500000000">
+                <body name="BodyFoldedSide2_2" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_2" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
+                    <geom name="joint_marker_BodyFoldedSide2_2" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_BodyFoldedSide2_2" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.8 0.8 1"/>
+                    <body name="SGB_9" pos="0 0.002329840 -0.002500000" quat="0.500000000 -0.500000000 -0.500000000 -0.500000000">
                     <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                    <geom name="geom_SGB_9" type="mesh" mesh="SGB" rgba="0.2 0.8 0.8 1"/>
+                        <geom name="geom_SGB_9" type="mesh" mesh="SGB" rgba="0.2 0.8 0.8 1"/>
                     <geom name="magnet_SGB_9" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
+                    </body>
                 </body>
             </body>
         </body>
-        <body name="module_7" pos="-0.003052000 -0.034862000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_7"/>
+        <body name="module_5" pos="-0.003052000 -0.034862000 0.008010000" quat="1 0 0 0">
+            <freejoint name="free_module_5"/>
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="BodyFoldedSide1_3" pos="0.000000000 0.000000000 0.000000000" quat="-0.126107 -0.000000 -0.000000 0.992017">
-                <joint name="joint_3a" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
                 <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
                 <geom name="geom_BodyFoldedSide1_3" type="mesh" mesh="BodyFoldedSide1" rgba="0.9 0.5 0.2 1"/>
                 <body name="SGA_5" pos="0.002017722 -0.001164886 -0.002500002" quat="-0.183012752 -0.683012795 0.183012752 -0.683012795">
@@ -149,28 +136,23 @@
                     <geom name="geom_SGB_6" type="mesh" mesh="SGB" rgba="0.9 0.5 0.2 1"/>
                     <geom name="magnet_SGB_6" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
-            </body>
-        </body>
-        <body name="module_8" pos="-0.003052000 -0.034862000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_8"/>
-            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
-            <body name="BodyFoldedSide2_3" pos="0.000000000 0.000000000 0.000000000" quat="-0.126107 -0.000000 -0.000000 0.992017">
-                <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                <joint name="joint_3" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
-                <geom name="joint_marker_BodyFoldedSide2_3" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                <geom name="geom_BodyFoldedSide2_3" type="mesh" mesh="BodyFoldedSide2" rgba="0.5 0.2 0.8 1"/>
-                <body name="SGB_7" pos="-0.000000005 0.002330113 -0.002500000" quat="-0.500000000 0.500000000 -0.500000000 -0.500000000">
-                    <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                    <geom name="geom_SGB_7" type="mesh" mesh="SGB" rgba="0.5 0.2 0.8 1"/>
-                    <geom name="magnet_SGB_7" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
+                <body name="BodyFoldedSide2_3" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_3" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
+                    <geom name="joint_marker_BodyFoldedSide2_3" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_BodyFoldedSide2_3" type="mesh" mesh="BodyFoldedSide2" rgba="0.5 0.2 0.8 1"/>
+                    <body name="SGB_7" pos="-0.000000005 0.002330113 -0.002500000" quat="-0.500000000 0.500000000 -0.500000000 -0.500000000">
+                        <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
+                        <geom name="geom_SGB_7" type="mesh" mesh="SGB" rgba="0.5 0.2 0.8 1"/>
+                        <geom name="magnet_SGB_7" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
+                    </body>
                 </body>
             </body>
         </body>
-        <body name="module_9" pos="-0.007385000 -0.018093000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_9"/>
+        <body name="module_6" pos="-0.007385000 -0.018093000 0.008010000" quat="1 0 0 0">
+            <freejoint name="free_module_6"/>
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="BodyFoldedSide1_4" pos="0.000000000 0.000000000 0.000000000" quat="0.992017 -0.000000 0.000000 0.126107">
-                <joint name="joint_4a" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
                 <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
                 <geom name="geom_BodyFoldedSide1_4" type="mesh" mesh="BodyFoldedSide1" rgba="0.2 0.5 0.2 1"/>
                 <body name="SGA_2" pos="-0.002018685 -0.001164978 -0.002500002" quat="0.683013104 0.183012443 -0.683013104 0.183012443">
@@ -183,28 +165,23 @@
                     <geom name="geom_SGB_3" type="mesh" mesh="SGB" rgba="0.2 0.5 0.2 1"/>
                     <geom name="magnet_SGB_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
-            </body>
-        </body>
-        <body name="module_10" pos="-0.007385000 -0.018093000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_10"/>
-            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
-            <body name="BodyFoldedSide2_4" pos="0.000000000 0.000000000 0.000000000" quat="0.992017 -0.000000 0.000000 0.126107">
-                <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                <joint name="joint_4" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
-                <geom name="joint_marker_BodyFoldedSide2_4" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                <geom name="geom_BodyFoldedSide2_4" type="mesh" mesh="BodyFoldedSide2" rgba="0.8 0.5 0.7 1"/>
-                <body name="SGA_3" pos="0 0.002330113 -0.002500000" quat="0.500000000 -0.500000000 -0.500000000 -0.500000000">
-                    <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
-                    <geom name="geom_SGA_3" type="mesh" mesh="SGA" rgba="0.8 0.5 0.7 1"/>
-                    <geom name="magnet_SGA_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
+                <body name="BodyFoldedSide2_4" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_4" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
+                    <geom name="joint_marker_BodyFoldedSide2_4" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_BodyFoldedSide2_4" type="mesh" mesh="BodyFoldedSide2" rgba="0.8 0.5 0.7 1"/>
+                    <body name="SGA_3" pos="0 0.002330113 -0.002500000" quat="0.500000000 -0.500000000 -0.500000000 -0.500000000">
+                        <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
+                        <geom name="geom_SGA_3" type="mesh" mesh="SGA" rgba="0.8 0.5 0.7 1"/>
+                        <geom name="magnet_SGA_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
+                    </body>
                 </body>
             </body>
         </body>
-        <body name="module_11" pos="-0.011397000 -0.032547000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_11"/>
+        <body name="module_7" pos="-0.011397000 -0.032547000 0.008010000" quat="1 0 0 0">
+            <freejoint name="free_module_7"/>
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="BodyFoldedSide1_5" pos="0.000000000 0.000000000 0.000000000" quat="0.386797 0.000000 0.000000 0.922165">
-                <joint name="joint_5a" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
                 <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
                 <geom name="geom_BodyFoldedSide1_5" type="mesh" mesh="BodyFoldedSide1" rgba="0.4 0.8 0.4 1"/>
                 <body name="SGA_8" pos="0.002018654 -0.001165751 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
@@ -217,25 +194,21 @@
                     <geom name="geom_SGB_8" type="mesh" mesh="SGB" rgba="0.4 0.8 0.4 1"/>
                     <geom name="magnet_SGB_8" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
-            </body>
-        </body>
-        <body name="module_12" pos="-0.011397000 -0.032547000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_12"/>
-            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
-            <body name="BodyFoldedSide2_5" pos="0.000000000 0.000000000 0.000000000" quat="0.386797 0.000000 0.000000 0.922165">
-                <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                <joint name="joint_5" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
-                <geom name="joint_marker_BodyFoldedSide2_5" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                <geom name="geom_BodyFoldedSide2_5" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.5 0.8 1"/>
-                <body name="SGA_9" pos="0.000000452 0.002329306 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
-                    <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
-                    <geom name="geom_SGA_9" type="mesh" mesh="SGA" rgba="0.2 0.5 0.8 1"/>
-                    <geom name="magnet_SGA_9" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
+                <body name="BodyFoldedSide2_5" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_5" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 90" limited="true" damping="0.01" armature="0.001"/>
+                    <geom name="joint_marker_BodyFoldedSide2_5" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_BodyFoldedSide2_5" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.5 0.8 1"/>
+                    <body name="SGA_9" pos="0.000000452 0.002329306 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
+                        <geom name="geom_SGA_9" type="mesh" mesh="SGA" rgba="0.2 0.5 0.8 1"/>
+                        <geom name="magnet_SGA_9" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
+                    </body>
                 </body>
             </body>
         </body>
-        <body name="module_13" pos="-0.000885000 -0.043247000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_13"/>
+        <body name="module_8" pos="-0.000885000 -0.043247000 0.008010000" quat="1 0 0 0">
+            <freejoint name="free_module_8"/>
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="Body_3" pos="0.000000000 0.000000000 0.000000000" quat="0.605220 -0.000000 0.000000 -0.796058">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
@@ -248,17 +221,15 @@
                 <body name="SGX_3" pos="-0.000000041 0.002329839 -0.002499999" quat="0.707106381 -0.707106381 0.000000126 -0.000000126">
                     <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
                     <geom name="geom_SGX_3" type="mesh" mesh="SGX" rgba="0.8 0.4 0.2 1"/>
-                    <geom name="magnet_SGX_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
                 <body name="SGX_4" pos="0.002017974 -0.001164779 -0.002499999" quat="0.353552837 -0.353552837 0.612372636 -0.612372636">
                     <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
                     <geom name="geom_SGX_4" type="mesh" mesh="SGX" rgba="0.8 0.4 0.2 1"/>
-                    <geom name="magnet_SGX_4" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
             </body>
         </body>
-        <body name="module_14" pos="0.007137000 -0.014340000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_14"/>
+        <body name="module_9" pos="0.007137000 -0.014340000 0.008010000" quat="1 0 0 0">
+            <freejoint name="free_module_9"/>
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="Body_4" pos="0.000000000 0.000000000 0.000000000" quat="0.992017 0.000000 0.000000 0.126107">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
@@ -271,17 +242,15 @@
                 <body name="SGX_5" pos="-0.000000005 0.002330114 -0.002500002" quat="0.707107316 -0.707107316 0.000000121 -0.000000121">
                     <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
                     <geom name="geom_SGX_5" type="mesh" mesh="SGX" rgba="0.4 0.2 0.8 1"/>
-                    <geom name="magnet_SGX_5" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
                 <body name="SGX_6" pos="0.002018690 -0.001165136 -0.002500002" quat="0.353553257 -0.353553257 0.612372506 -0.612372506">
                     <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
                     <geom name="geom_SGX_6" type="mesh" mesh="SGX" rgba="0.4 0.2 0.8 1"/>
-                    <geom name="magnet_SGX_6" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
             </body>
         </body>
-        <body name="module_15" pos="-0.017575000 -0.038615000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_15"/>
+        <body name="module_10" pos="-0.017575000 -0.038615000 0.008010000" quat="1 0 0 0">
+            <freejoint name="free_module_10"/>
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="Body_5" pos="0.000000000 0.000000000 0.000000000" quat="-0.126107 -0.000000 0.000000 0.992017">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
@@ -289,22 +258,19 @@
                 <body name="SGX_7" pos="-0.000000005 0.002330114 -0.002500002" quat="-0.707107316 0.707107316 -0.000000121 0.000000121">
                     <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
                     <geom name="geom_SGX_7" type="mesh" mesh="SGX" rgba="0.7 0.7 0.3 1"/>
-                    <geom name="magnet_SGX_7" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
                 <body name="SGX_8" pos="0.002017722 -0.001164886 -0.002500002" quat="0.353553257 -0.353553257 0.612372506 -0.612372506">
                     <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
                     <geom name="geom_SGX_8" type="mesh" mesh="SGX" rgba="0.7 0.7 0.3 1"/>
-                    <geom name="magnet_SGX_8" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
                 <body name="SGB_10" pos="-0.002017467 -0.001164260 -0.002500002" quat="-0.353554059 0.353554059 0.612372386 -0.612372386">
                     <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
                     <geom name="geom_SGB_10" type="mesh" mesh="SGB" rgba="0.7 0.7 0.3 1"/>
-                    <geom name="magnet_SGB_10" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
             </body>
         </body>
-        <body name="module_16" pos="-0.009552000 -0.009708000 0.008010000" quat="1 0 0 0">
-            <freejoint name="free_module_16"/>
+        <body name="module_11" pos="-0.009552000 -0.009708000 0.008010000" quat="1 0 0 0">
+            <freejoint name="free_module_11"/>
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="Body_6" pos="0.000000000 0.000000000 0.000000000" quat="0.796058 0.000000 0.000000 0.605220">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
@@ -312,12 +278,10 @@
                 <body name="SGX_9" pos="-0.000000308 0.002330803 -0.002499999" quat="0.707106381 -0.707106381 0.000000126 -0.000000126">
                     <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
                     <geom name="geom_SGX_9" type="mesh" mesh="SGX" rgba="0.3 0.7 0.7 1"/>
-                    <geom name="magnet_SGX_9" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
                 <body name="SGX_10" pos="0.002017974 -0.001164779 -0.002499999" quat="0.353552837 -0.353552837 0.612372636 -0.612372636">
                     <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
                     <geom name="geom_SGX_10" type="mesh" mesh="SGX" rgba="0.3 0.7 0.7 1"/>
-                    <geom name="magnet_SGX_10" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0"/>
                 </body>
                 <body name="SGB_11" pos="-0.002017933 -0.001165060 -0.002499999" quat="-0.353553544 0.353553544 0.612372509 -0.612372509">
                     <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
@@ -327,18 +291,6 @@
             </body>
         </body>
     </worldbody>
-    <equality>
-        <connect name="connect_1" body1="BodyFoldedSide1_1" body2="BodyFoldedSide2_1" anchor="0 0.001 -0.0055"/>
-        <joint name="equality_joint_1" joint1="joint_1a" joint2="joint_1" polycoef="0 1 0 0 0"/>
-        <connect name="connect_2" body1="BodyFoldedSide1_2" body2="BodyFoldedSide2_2" anchor="0 0.001 -0.0055"/>
-        <joint name="equality_joint_2" joint1="joint_2a" joint2="joint_2" polycoef="0 1 0 0 0"/>
-        <connect name="connect_3" body1="BodyFoldedSide1_3" body2="BodyFoldedSide2_3" anchor="0 0.001 -0.0055"/>
-        <joint name="equality_joint_3" joint1="joint_3a" joint2="joint_3" polycoef="0 1 0 0 0"/>
-        <connect name="connect_4" body1="BodyFoldedSide1_4" body2="BodyFoldedSide2_4" anchor="0 0.001 -0.0055"/>
-        <joint name="equality_joint_4" joint1="joint_4a" joint2="joint_4" polycoef="0 1 0 0 0"/>
-        <connect name="connect_5" body1="BodyFoldedSide1_5" body2="BodyFoldedSide2_5" anchor="0 0.001 -0.0055"/>
-        <joint name="equality_joint_5" joint1="joint_5a" joint2="joint_5" polycoef="0 1 0 0 0"/>
-    </equality>
     <contact>
         <exclude body1="BodyFoldedSide1_1" body2="BodyFoldedSide2_1"/>
         <exclude body1="BodyFoldedSide1_1" body2="SGA_1"/>
@@ -355,6 +307,18 @@
         <exclude body1="BodyFoldedSide1_5" body2="BodyFoldedSide2_5"/>
         <exclude body1="BodyFoldedSide1_5" body2="SGA_5"/>
         <exclude body1="BodyFoldedSide1_5" body2="SGB_5"/>
+        <exclude body1="module_1" body2="module_2"/>
+        <exclude body1="module_2" body2="module_3"/>
+        <exclude body1="module_3" body2="module_4"/>
+        <exclude body1="module_4" body2="module_5"/>
+        <exclude body1="module_5" body2="module_6"/>
+        <exclude body1="module_6" body2="module_1"/>
+        
+        <exclude body1="module_2" body2="module_7"/>
+        <exclude body1="module_3" body2="module_8"/>
+        <exclude body1="module_4" body2="module_9"/>
+        <exclude body1="module_5" body2="module_10"/>
+        <exclude body1="module_6" body2="module_11"/>
     </contact>
     <actuator>
         <position name="ctrl_joint1" joint="joint_1" kp="1" ctrlrange="-90 90" ctrllimited="true"/>

@@ -24,4 +24,4 @@ BODYFS1_4 SGA_2 SGB_3 BODYFS2_4 SGA_3 - module_6
 BODYFS1_5 SGA_8 SGB_8 BodyFS2_5 SGA_9 - module_7
 
 
-MAGNET = HEXAGON h=1.8mm each_side_len=1.27mm diagonal diamter = 2.54mm
+MAGNET - 2x2 mm cyclinder

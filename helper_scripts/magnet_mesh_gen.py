@@ -1,93 +1,44 @@
-import numpy as np
+import os
 import trimesh
-
 
 # ==========================
 # Dimensions (mm)
 # ==========================
 
-side_length = 1.27
-height = 1.8
+diameter = 2.0   # mm
+height = 2.0     # mm
 
-# mm -> meter
-s = side_length / 1000
-h = height / 1000
-
-
-# ==========================
-# Vertices
-# ==========================
-
-vertices = []
-
-# bottom + top hexagon
-for z in [0, h]:
-
-    for i in range(6):
-
-        angle = np.deg2rad(60*i)
-
-        x = s * np.cos(angle)
-        y = s * np.sin(angle)
-
-        vertices.append([x, y, z])
-
-
-vertices = np.array(vertices)
-
+# Convert to meters
+radius = (diameter / 2) / 1000
+height = height / 1000
 
 # ==========================
-# Triangular faces
+# Create cylinder
 # ==========================
 
-faces = []
-
-
-# Bottom face triangles
-faces.append([0,1,2])
-faces.append([0,2,3])
-faces.append([0,3,4])
-faces.append([0,4,5])
-
-
-# Top face triangles
-faces.append([6,8,7])
-faces.append([6,9,8])
-faces.append([6,10,9])
-faces.append([6,11,10])
-
-
-# Side walls
-for i in range(6):
-
-    j = (i+1) % 6
-
-    faces.append([i,j,i+6])
-    faces.append([j,j+6,i+6])
-
-
-faces = np.array(faces)
-
-
-# ==========================
-# Create STL mesh
-# ==========================
-
-mesh = trimesh.Trimesh(
-    vertices=vertices,
-    faces=faces
+mesh = trimesh.creation.cylinder(
+    radius=radius,
+    height=height,
+    sections=128  # Increase for smoother cylinder
 )
 
+# ==========================
+# Check mesh
+# ==========================
 
-mesh.fix_normals()
-
-
-# Check solid
 print("Watertight:", mesh.is_watertight)
 print("Volume:", mesh.volume)
 
-
+# ==========================
 # Export
-mesh.export("Magnet.stl")
+# ==========================
 
-print("STL created successfully")
+output_path = "../meshes/Magnet.stl"
+
+# Create directory if it doesn't exist
+os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+# Export (overwrites existing file)
+mesh.export(output_path)
+
+print(f"STL created successfully: {output_path}")

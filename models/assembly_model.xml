@@ -59,7 +59,7 @@
                 </body>
                 <body name="BodyFoldedSide2_1" pos="0 0 0" quat="1 0 0 0">
                     <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                    <joint name="joint_1" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true" damping="0.8" armature="0.001"/>
+                    <joint name="joint_1" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true"  armature="0.001"/>
                     <geom name="joint_marker_BodyFoldedSide2_1" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
                     <geom name="geom_BodyFoldedSide2_1" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1"/>
                     <body name="SGB_2" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
@@ -109,7 +109,7 @@
                 </body>
                 <body name="BodyFoldedSide2_2" pos="0 0 0" quat="1 0 0 0">
                     <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                    <joint name="joint_2" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true" damping="0.8" armature="0.001"/>
+                    <joint name="joint_2" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true"  armature="0.001"/>
                     <geom name="joint_marker_BodyFoldedSide2_2" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
                     <geom name="geom_BodyFoldedSide2_2" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1"/>
                     <body name="SGB_9" pos="0 0.002329840 -0.002500000" quat="0.500000000 -0.500000000 -0.500000000 -0.500000000">
@@ -138,7 +138,7 @@
                 </body>
                 <body name="BodyFoldedSide2_3" pos="0 0 0" quat="1 0 0 0">
                     <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                    <joint name="joint_3" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true" damping="0.8" armature="0.001"/>
+                    <joint name="joint_3" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true"  armature="0.001"/>
                     <geom name="joint_marker_BodyFoldedSide2_3" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
                     <geom name="geom_BodyFoldedSide2_3" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1"/>
                     <body name="SGB_7" pos="-0.000000005 0.002330113 -0.002500000" quat="-0.500000000 0.500000000 -0.500000000 -0.500000000">
@@ -167,7 +167,7 @@
                 </body>
                 <body name="BodyFoldedSide2_4" pos="0 0 0" quat="1 0 0 0">
                     <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                    <joint name="joint_4" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true" damping="0.8" armature="0.001"/>
+                    <joint name="joint_4" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true"  armature="0.001"/>
                     <geom name="joint_marker_BodyFoldedSide2_4" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
                     <geom name="geom_BodyFoldedSide2_4" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1"/>
                     <body name="SGA_3" pos="0 0.002330113 -0.002500000" quat="0.500000000 -0.500000000 -0.500000000 -0.500000000">
@@ -196,7 +196,7 @@
                 </body>
                 <body name="BodyFoldedSide2_5" pos="0 0 0" quat="1 0 0 0">
                     <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                    <joint name="joint_5" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true" damping="0.8" armature="0.001"/>
+                    <joint name="joint_5" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true"  armature="0.001"/>
                     <geom name="joint_marker_BodyFoldedSide2_5" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
                     <geom name="geom_BodyFoldedSide2_5" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1"/>
                     <body name="SGA_9" pos="0.000000452 0.002329306 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">

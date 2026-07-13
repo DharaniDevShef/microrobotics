@@ -2,7 +2,7 @@
 <mujoco model="FusionExportAssembly">
     <compiler meshdir="../meshes" autolimits="false"/>
     <size nconmax="500" njmax="1500" nstack="100000"/>
-    <option timestep="0.002" integrator="Euler">
+    <option timestep="0.01" viscosity="0.0009" integrator="implicitfast">
         <flag contact="enable"/>
     </option>
     <asset>
@@ -14,16 +14,24 @@
         <mesh name="SGX" file="SGX.stl" scale="0.001 0.001 0.001"/>
         <material name="silver" specular="1" shininess="0.8" rgba="0.85 0.85 0.9 1"/>
         <mesh name="Magnet" file="Magnet.stl" scale="1 1 1" inertia="shell"/>
+        <material name="submerged_glass" rgba="0.6 0.8 0.9 0.4" shininess="0.9" specular="1"/>
     </asset>
     <worldbody>
         <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 1" dir="0 0 -1"/>
-        <geom name="ground" type="plane" size="1 1 0.01" pos="0 0 0" rgba="0.3 0.3 0.3 1"/>
+        <geom name="wet_glass_floor" 
+          type="plane" 
+          size="1 1 0.1" 
+          material="submerged_glass" 
+          friction="0.25 0.005 0.0001" 
+          solimp="0.9 0.95 0.001 0.5 2" 
+          solref="0.01 1" 
+          condim="3"/>
         <body name="module_1" pos="-0.013564000 -0.024162000 0.008010000" quat="1 0 0 0">
             <freejoint name="free_module_1"/>
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="Body_1" pos="0.000000000 0.000000000 0.000000000" quat="0.922165 -0.000000 0.000000 -0.386797">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
-                <geom name="geom_Body_1" type="mesh" mesh="Body" rgba="0.2 0.2 0.8 1"/>
+                <geom name="geom_Body_1" type="mesh" mesh="Body" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                 <body name="SGB_4" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
                     <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
                     <geom name="geom_SGB_4" type="mesh" mesh="SGB" rgba="0.2 0.2 0.8 1"/>
@@ -46,7 +54,7 @@
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="BodyFoldedSide1_1" pos="0.000000000 0.000000000 0.000000000" quat="0.922165 0 0 -0.386797">
                 <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
-                <geom name="geom_BodyFoldedSide1_1" type="mesh" mesh="BodyFoldedSide1" rgba="0.2 0.2 0.8 1"/>
+                <geom name="geom_BodyFoldedSide1_1" type="mesh" mesh="BodyFoldedSide1" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                 <body name="SGA_1" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
                     <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
                     <geom name="geom_SGA_1" type="mesh" mesh="SGA" rgba="0.2 0.2 0.8 1"/>
@@ -61,7 +69,7 @@
                     <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
                     <joint name="joint_1" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true"  armature="0.001" damping="0"/>
                     <geom name="joint_marker_BodyFoldedSide2_1" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                    <geom name="geom_BodyFoldedSide2_1" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="geom_BodyFoldedSide2_1" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1"  fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                     <body name="SGB_2" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
                         <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
                         <geom name="geom_SGB_2" type="mesh" mesh="SGB" rgba="0.2 0.2 0.8 1"/>
@@ -75,7 +83,7 @@
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="Body_2" pos="0.000000000 0.000000000 0.000000000" quat="0.922165 -0.000000 -0.000000 -0.386797">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
-                <geom name="geom_Body_2" type="mesh" mesh="Body" rgba="0.2 0.2 0.8 1"/>
+                <geom name="geom_Body_2" type="mesh" mesh="Body" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                 <body name="SGA_10" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.353553124 -0.353553124 -0.612372380 0.612372380">
                     <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
                     <geom name="geom_SGA_10" type="mesh" mesh="SGA" rgba="0.2 0.2 0.8 1"/>
@@ -96,7 +104,7 @@
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="BodyFoldedSide1_2" pos="0.000000000 0.000000000 0.000000000" quat="-0.000000 0.796058 0.605220 0.000000">
                 <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
-                <geom name="geom_BodyFoldedSide1_2" type="mesh" mesh="BodyFoldedSide1" rgba="0.2 0.2 0.8 1"/>
+                <geom name="geom_BodyFoldedSide1_2" type="mesh" mesh="BodyFoldedSide1" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                 <body name="SGA_6" pos="-0.002017010 -0.001165046 -0.002499999" quat="-0.183013001 -0.683012546 -0.183013001 0.683012546">
                     <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
                     <geom name="geom_SGA_6" type="mesh" mesh="SGA" rgba="0.2 0.2 0.8 1"/>
@@ -111,7 +119,7 @@
                     <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
                     <joint name="joint_2" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true"  armature="0.001" damping="0"/>
                     <geom name="joint_marker_BodyFoldedSide2_2" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                    <geom name="geom_BodyFoldedSide2_2" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="geom_BodyFoldedSide2_2" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                     <body name="SGB_9" pos="0 0.002329840 -0.002500000" quat="0.500000000 -0.500000000 -0.500000000 -0.500000000">
                     <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
                         <geom name="geom_SGB_9" type="mesh" mesh="SGB" rgba="0.2 0.2 0.8 1"/>
@@ -125,7 +133,7 @@
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="BodyFoldedSide1_3" pos="0.000000000 0.000000000 0.000000000" quat="-0.126107 -0.000000 -0.000000 0.992017">
                 <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
-                <geom name="geom_BodyFoldedSide1_3" type="mesh" mesh="BodyFoldedSide1" rgba="0.2 0.2 0.8 1"/>
+                <geom name="geom_BodyFoldedSide1_3" type="mesh" mesh="BodyFoldedSide1" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                 <body name="SGA_5" pos="0.002017722 -0.001164886 -0.002500002" quat="-0.183012752 -0.683012795 0.183012752 -0.683012795">
                     <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
                     <geom name="geom_SGA_5" type="mesh" mesh="SGA" rgba="0.2 0.2 0.8 1"/>
@@ -140,7 +148,7 @@
                     <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
                     <joint name="joint_3" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true"  armature="0.001" damping="0"/>
                     <geom name="joint_marker_BodyFoldedSide2_3" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                    <geom name="geom_BodyFoldedSide2_3" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="geom_BodyFoldedSide2_3" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                     <body name="SGB_7" pos="-0.000000005 0.002330113 -0.002500000" quat="-0.500000000 0.500000000 -0.500000000 -0.500000000">
                         <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
                         <geom name="geom_SGB_7" type="mesh" mesh="SGB" rgba="0.2 0.2 0.8 1"/>
@@ -154,7 +162,7 @@
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="BodyFoldedSide1_4" pos="0.000000000 0.000000000 0.000000000" quat="0.992017 -0.000000 0.000000 0.126107">
                 <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
-                <geom name="geom_BodyFoldedSide1_4" type="mesh" mesh="BodyFoldedSide1" rgba="0.2 0.2 0.8 1"/>
+                <geom name="geom_BodyFoldedSide1_4" type="mesh" mesh="BodyFoldedSide1" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                 <body name="SGA_2" pos="-0.002018685 -0.001164978 -0.002500002" quat="0.683013104 0.183012443 -0.683013104 0.183012443">
                     <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
                     <geom name="geom_SGA_2" type="mesh" mesh="SGA" rgba="0.2 0.2 0.8 1"/>
@@ -169,7 +177,7 @@
                     <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
                     <joint name="joint_4" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true"  armature="0.001" damping="0"/>
                     <geom name="joint_marker_BodyFoldedSide2_4" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                    <geom name="geom_BodyFoldedSide2_4" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="geom_BodyFoldedSide2_4" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                     <body name="SGA_3" pos="0 0.002330113 -0.002500000" quat="0.500000000 -0.500000000 -0.500000000 -0.500000000">
                         <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
                         <geom name="geom_SGA_3" type="mesh" mesh="SGA" rgba="0.2 0.2 0.8 1"/>
@@ -183,7 +191,7 @@
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="BodyFoldedSide1_5" pos="0.000000000 0.000000000 0.000000000" quat="0.386797 0.000000 0.000000 0.922165">
                 <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
-                <geom name="geom_BodyFoldedSide1_5" type="mesh" mesh="BodyFoldedSide1" rgba="0.2 0.2 0.8 1"/>
+                <geom name="geom_BodyFoldedSide1_5" type="mesh" mesh="BodyFoldedSide1" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                 <body name="SGA_8" pos="0.002018654 -0.001165751 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
                     <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
                     <geom name="geom_SGA_8" type="mesh" mesh="SGA" rgba="0.2 0.2 0.8 1"/>
@@ -198,7 +206,7 @@
                     <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
                     <joint name="joint_5" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true"  armature="0.001" damping="0"/>
                     <geom name="joint_marker_BodyFoldedSide2_5" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                    <geom name="geom_BodyFoldedSide2_5" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="geom_BodyFoldedSide2_5" type="mesh" mesh="BodyFoldedSide2" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                     <body name="SGA_9" pos="0.000000452 0.002329306 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
                         <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
                         <geom name="geom_SGA_9" type="mesh" mesh="SGA" rgba="0.2 0.2 0.8 1"/>
@@ -212,7 +220,7 @@
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="Body_3" pos="0.000000000 0.000000000 0.000000000" quat="0.605220 -0.000000 0.000000 -0.796058">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
-                <geom name="geom_Body_3" type="mesh" mesh="Body" rgba="0.2 0.2 0.8 1"/>
+                <geom name="geom_Body_3" type="mesh" mesh="Body" rgba="0.2 0.2 0.8 1"  fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                 <body name="SGA_11" pos="-0.002017933 -0.001165060 -0.002499999" quat="0.353553544 -0.353553544 -0.612372509 0.612372509">
                     <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
                     <geom name="geom_SGA_11" type="mesh" mesh="SGA" rgba="0.2 0.2 0.8 1"/>
@@ -233,7 +241,7 @@
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="Body_4" pos="0.000000000 0.000000000 0.000000000" quat="0.992017 0.000000 0.000000 0.126107">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
-                <geom name="geom_Body_4" type="mesh" mesh="Body" rgba="0.2 0.2 0.8 1"/>
+                <geom name="geom_Body_4" type="mesh" mesh="Body" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                 <body name="SGA_12" pos="-0.002017717 -0.001165229 -0.002500002" quat="-0.353554059 0.353554059 0.612372386 -0.612372386">
                     <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
                     <geom name="geom_SGA_12" type="mesh" mesh="SGA" rgba="0.2 0.2 0.8 1"/>
@@ -254,7 +262,7 @@
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="Body_5" pos="0.000000000 0.000000000 0.000000000" quat="-0.126107 -0.000000 0.000000 0.992017">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
-                <geom name="geom_Body_5" type="mesh" mesh="Body" rgba="0.2 0.2 0.8 1"/>
+                <geom name="geom_Body_5" type="mesh" mesh="Body" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                 <body name="SGX_7" pos="-0.000000005 0.002330114 -0.002500002" quat="-0.707107316 0.707107316 -0.000000121 0.000000121">
                     <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
                     <geom name="geom_SGX_7" type="mesh" mesh="SGX" rgba="0.2 0.2 0.8 1"/>
@@ -275,7 +283,7 @@
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
             <body name="Body_6" pos="0.000000000 0.000000000 0.000000000" quat="0.796058 0.000000 0.000000 0.605220">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
-                <geom name="geom_Body_6" type="mesh" mesh="Body" rgba="0.2 0.2 0.8 1"/>
+                <geom name="geom_Body_6" type="mesh" mesh="Body" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
                 <body name="SGX_9" pos="-0.000000308 0.002330803 -0.002499999" quat="0.707106381 -0.707106381 0.000000126 -0.000000126">
                     <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
                     <geom name="geom_SGX_9" type="mesh" mesh="SGX" rgba="0.2 0.2 0.8 1"/>

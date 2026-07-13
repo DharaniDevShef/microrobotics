@@ -1,6 +1,7 @@
 import sys
 import math
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+import json
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF, QFont
 from PyQt6.QtCore import Qt, QPointF
 
@@ -11,7 +12,91 @@ class AssemblyGrid(QWidget):
         
         self.radius = 45  
         self.modules = {}
+        self.on_graph_update = None
         self.build_perfect_interlock_grid()
+
+    def get_hinge_info(self, state):
+        if state == 1:
+            return {'color': 'blue', 'role': 'bottom'}
+        if state == 2:
+            return {'color': 'violet', 'role': 'top'}
+        return {'color': 'none', 'role': 'none'}
+
+    def get_graph_data(self):
+        modules = []
+
+        for key, info in self.modules.items():
+            if not info['active']:
+                continue
+
+            module = {
+                'id': key,
+                'type': info['type'],
+                'position': [round(info['pos'][0], 3), round(info['pos'][1], 3)],
+                'angle': round(info['angle'], 1),
+                'hinges': []
+            }
+
+            for idx, state in enumerate(info['line_states']):
+                if state == 0:
+                    continue
+
+                hinge = self.get_hinge_info(state)
+                module['hinges'].append({
+                    'slot': idx,
+                    'state': state,
+                    'color': hinge['color'],
+                    'role': hinge['role'],
+                    'type': 'hinge',
+                    'axis': [1, 0, 0],
+                    'joint_range': [-45, 0],
+                    'limited': True,
+                    'armature': 0.001,
+                    'damping': 0
+                })
+
+            modules.append(module)
+
+        return {'assembly': {'modules': modules}}
+
+    def get_graph_text(self):
+        return json.dumps(self.get_graph_data(), indent=2)
+
+    def notify_graph_update(self):
+        if self.on_graph_update:
+            self.on_graph_update(self.get_graph_text())
+
+    def load_graph_data(self, graph_data):
+        assembly = graph_data.get('assembly', {})
+        modules_data = assembly.get('modules', [])
+        self.modules.clear()
+
+        for module_data in modules_data:
+            module_id = module_data.get('id')
+            if not module_id:
+                continue
+
+            pos = module_data.get('position', [0, 0])
+            angle = module_data.get('angle', 0)
+            module_type = module_data.get('type', 'outer')
+            line_states = [0, 0, 0]
+
+            for hinge in module_data.get('hinges', []):
+                slot = hinge.get('slot', 0)
+                state = hinge.get('state', 0)
+                if 0 <= slot < 3 and state in (1, 2):
+                    line_states[slot] = state
+
+            self.modules[module_id] = {
+                'pos': (pos[0], pos[1]),
+                'angle': angle,
+                'active': True,
+                'type': module_type,
+                'line_states': line_states
+            }
+
+        self.update()
+        self.notify_graph_update()
 
     def build_perfect_interlock_grid(self):
         """Calculates precise non-overlapping flat-to-flat contact layout"""
@@ -185,6 +270,7 @@ class AssemblyGrid(QWidget):
                     if math.hypot(click_pos.x() - mx, click_pos.y() - my) <= 12:
                         info['active'] = False
                         self.update()
+                        self.notify_graph_update()
                         return
 
             # Check 2: Did user click a green open edge to construct a new module?
@@ -221,6 +307,7 @@ class AssemblyGrid(QWidget):
                                 'line_states': [0, 0, 0]
                             }
                             self.update()
+                            self.notify_graph_update()
                             return
 
             # Check 3: Check which specific internal line was clicked by measuring distance to its center
@@ -257,6 +344,7 @@ class AssemblyGrid(QWidget):
                         # Cycles state ONLY for that chosen clicked line lane index
                         info['line_states'][closest_line_idx] = (info['line_states'][closest_line_idx] + 1) % 3
                         self.update()
+                        self.notify_graph_update()
                         return
 
     def clear_all(self):
@@ -267,11 +355,13 @@ class AssemblyGrid(QWidget):
                 self.modules[key]['active'] = False
                 self.modules[key]['line_states'] = [0, 0, 0]
         self.update()
+        self.notify_graph_update()
 
     def reset_all(self):
         self.modules.clear()
         self.build_perfect_interlock_grid()
         self.update()
+        self.notify_graph_update()
 
 
 class MainWindow(QMainWindow):
@@ -290,7 +380,7 @@ class MainWindow(QMainWindow):
         
         self.grid_canvas = AssemblyGrid()
         layout.addWidget(self.grid_canvas)
-        
+
         btn_layout = QHBoxLayout()
         self.clear_btn = QPushButton("Clear Canvas")
         self.reset_btn = QPushButton("Reset Pattern")
@@ -300,7 +390,40 @@ class MainWindow(QMainWindow):
         
         btn_layout.addWidget(self.clear_btn)
         btn_layout.addWidget(self.reset_btn)
+
+        self.save_btn = QPushButton("Save Graph")
+        self.save_btn.clicked.connect(self.save_graph_to_file)
+        btn_layout.addWidget(self.save_btn)
+
+        self.load_btn = QPushButton("Load Graph")
+        self.load_btn.clicked.connect(self.load_graph_from_file)
+        btn_layout.addWidget(self.load_btn)
+
         layout.addLayout(btn_layout)
+
+    def save_graph_to_file(self):
+        graph_json = self.grid_canvas.get_graph_text()
+        path, _ = QFileDialog.getSaveFileName(self, "Save Graph", "graph.json", "JSON Files (*.json);;All Files (*)")
+        if path:
+            with open(path, 'w', encoding='utf-8') as file:
+                file.write(graph_json)
+
+    def load_graph_from_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Load Graph", "", "JSON Files (*.json);;All Files (*)")
+        if not path:
+            return
+
+        try:
+            with open(path, 'r', encoding='utf-8') as file:
+                graph_data = json.load(file)
+        except Exception as exc:
+            QMessageBox.warning(self, "Load Graph Failed", f"Could not read JSON file:\n{exc}")
+            return
+
+        try:
+            self.grid_canvas.load_graph_data(graph_data)
+        except Exception as exc:
+            QMessageBox.warning(self, "Load Graph Failed", f"Invalid graph data format:\n{exc}")
 
 
 if __name__ == '__main__':

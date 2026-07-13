@@ -1,0 +1,216 @@
+{
+  "assembly": {
+    "modules": [
+      {
+        "id": "I1",
+        "type": "inner",
+        "position": [
+          65.082,
+          37.575
+        ],
+        "angle": 90,
+        "hinges": []
+      },
+      {
+        "id": "O1",
+        "type": "outer",
+        "position": [
+          130.164,
+          75.15
+        ],
+        "angle": 270,
+        "hinges": [
+          {
+            "slot": 0,
+            "state": 2,
+            "color": "violet",
+            "role": "top",
+            "type": "hinge",
+            "axis": [
+              1,
+              0,
+              0
+            ],
+            "joint_range": [
+              -45,
+              0
+            ],
+            "limited": true,
+            "armature": 0.001,
+            "damping": 0
+          }
+        ]
+      },
+      {
+        "id": "I2",
+        "type": "inner",
+        "position": [
+          0.0,
+          75.15
+        ],
+        "angle": 150,
+        "hinges": []
+      },
+      {
+        "id": "I3",
+        "type": "inner",
+        "position": [
+          -65.082,
+          37.575
+        ],
+        "angle": 210,
+        "hinges": []
+      },
+      {
+        "id": "O3",
+        "type": "outer",
+        "position": [
+          -130.164,
+          75.15
+        ],
+        "angle": 390,
+        "hinges": [
+          {
+            "slot": 0,
+            "state": 1,
+            "color": "blue",
+            "role": "bottom",
+            "type": "hinge",
+            "axis": [
+              1,
+              0,
+              0
+            ],
+            "joint_range": [
+              -45,
+              0
+            ],
+            "limited": true,
+            "armature": 0.001,
+            "damping": 0
+          }
+        ]
+      },
+      {
+        "id": "I4",
+        "type": "inner",
+        "position": [
+          -65.082,
+          -37.575
+        ],
+        "angle": 270,
+        "hinges": []
+      },
+      {
+        "id": "I5",
+        "type": "inner",
+        "position": [
+          -0.0,
+          -75.15
+        ],
+        "angle": 330,
+        "hinges": []
+      },
+      {
+        "id": "O5",
+        "type": "outer",
+        "position": [
+          -0.0,
+          -150.3
+        ],
+        "angle": 510,
+        "hinges": [
+          {
+            "slot": 0,
+            "state": 1,
+            "color": "blue",
+            "role": "bottom",
+            "type": "hinge",
+            "axis": [
+              1,
+              0,
+              0
+            ],
+            "joint_range": [
+              -45,
+              0
+            ],
+            "limited": true,
+            "armature": 0.001,
+            "damping": 0
+          }
+        ]
+      },
+      {
+        "id": "I6",
+        "type": "inner",
+        "position": [
+          65.082,
+          -37.575
+        ],
+        "angle": 390,
+        "hinges": []
+      },
+      {
+        "id": "O6",
+        "type": "outer",
+        "position": [
+          130.164,
+          -75.15
+        ],
+        "angle": 570,
+        "hinges": [
+          {
+            "slot": 0,
+            "state": 1,
+            "color": "blue",
+            "role": "bottom",
+            "type": "hinge",
+            "axis": [
+              1,
+              0,
+              0
+            ],
+            "joint_range": [
+              -45,
+              0
+            ],
+            "limited": true,
+            "armature": 0.001,
+            "damping": 0
+          }
+        ]
+      },
+      {
+        "id": "Custom_13",
+        "type": "outer",
+        "position": [
+          0.0,
+          150.3
+        ],
+        "angle": 330,
+        "hinges": [
+          {
+            "slot": 0,
+            "state": 1,
+            "color": "blue",
+            "role": "bottom",
+            "type": "hinge",
+            "axis": [
+              1,
+              0,
+              0
+            ],
+            "joint_range": [
+              -45,
+              0
+            ],
+            "limited": true,
+            "armature": 0.001,
+            "damping": 0
+          }
+        ]
+      }
+    ]
+  }
+}

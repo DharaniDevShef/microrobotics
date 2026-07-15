@@ -25,3 +25,5 @@ BODYFS1_5 SGA_8 SGB_8 BodyFS2_5 SGA_9 - module_7
 
 
 MAGNET - 2x2 mm cyclinder
+
+Form clear resin v4.0 1.17g/cm3

@@ -1,7 +1,10 @@
 import sys
 import math
 import json
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox
+import collections
+import networkx as nx
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox)
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF, QFont
 from PyQt6.QtCore import Qt, QPointF
 
@@ -15,97 +18,16 @@ class AssemblyGrid(QWidget):
         self.on_graph_update = None
         self.build_perfect_interlock_grid()
 
-    def get_hinge_info(self, state):
-        if state == 1:
-            return {'color': 'blue', 'role': 'bottom'}
-        if state == 2:
-            return {'color': 'violet', 'role': 'top'}
-        return {'color': 'none', 'role': 'none'}
-
-    def get_graph_data(self):
-        modules = []
-
-        for key, info in self.modules.items():
-            if not info['active']:
-                continue
-
-            module = {
-                'id': key,
-                'type': info['type'],
-                'position': [round(info['pos'][0], 3), round(info['pos'][1], 3)],
-                'angle': round(info['angle'], 1),
-                'hinges': []
-            }
-
-            for idx, state in enumerate(info['line_states']):
-                if state == 0:
-                    continue
-
-                hinge = self.get_hinge_info(state)
-                module['hinges'].append({
-                    'slot': idx,
-                    'state': state,
-                    'color': hinge['color'],
-                    'role': hinge['role'],
-                    'type': 'hinge',
-                    'axis': [1, 0, 0],
-                    'joint_range': [-45, 0],
-                    'limited': True,
-                    'armature': 0.001,
-                    'damping': 0
-                })
-
-            modules.append(module)
-
-        return {'assembly': {'modules': modules}}
-
-    def get_graph_text(self):
-        return json.dumps(self.get_graph_data(), indent=2)
-
-    def notify_graph_update(self):
-        if self.on_graph_update:
-            self.on_graph_update(self.get_graph_text())
-
-    def load_graph_data(self, graph_data):
-        assembly = graph_data.get('assembly', {})
-        modules_data = assembly.get('modules', [])
-        self.modules.clear()
-
-        for module_data in modules_data:
-            module_id = module_data.get('id')
-            if not module_id:
-                continue
-
-            pos = module_data.get('position', [0, 0])
-            angle = module_data.get('angle', 0)
-            module_type = module_data.get('type', 'outer')
-            line_states = [0, 0, 0]
-
-            for hinge in module_data.get('hinges', []):
-                slot = hinge.get('slot', 0)
-                state = hinge.get('state', 0)
-                if 0 <= slot < 3 and state in (1, 2):
-                    line_states[slot] = state
-
-            self.modules[module_id] = {
-                'pos': (pos[0], pos[1]),
-                'angle': angle,
-                'active': True,
-                'type': module_type,
-                'line_states': line_states
-            }
-
-        self.update()
-        self.notify_graph_update()
-
     def build_perfect_interlock_grid(self):
-        """Calculates precise non-overlapping flat-to-flat contact layout"""
+        """Calculates precise non-overlapping flat-to-flat contact layout using sequential naming."""
         center_to_inner = self.radius * 1.67
         inner_to_outer = self.radius * 1.67 
         
+        count = 1
         for i in range(6):
             angle_deg = i * 60
-            inner_key = f'I{i+1}'
+            inner_key = f'module_{count}'
+            count += 1
             pos_angle_rad = math.radians(angle_deg + 30)
             
             ix = center_to_inner * math.cos(pos_angle_rad)
@@ -117,10 +39,11 @@ class AssemblyGrid(QWidget):
                 'angle': inner_rot, 
                 'active': True,
                 'type': 'inner',
-                'line_states': [0, 0, 0]  # Tracks state independently for the 3 distinct lines
+                'line_states': [0, 0, 0]  
             }
             
-            outer_key = f'O{i+1}'
+            outer_key = f'module_{count}'
+            count += 1
             ox = ix + inner_to_outer * math.cos(pos_angle_rad)
             oy = iy + inner_to_outer * math.sin(pos_angle_rad)
             outer_rot = inner_rot + 180
@@ -133,20 +56,202 @@ class AssemblyGrid(QWidget):
                 'line_states': [0, 0, 0]  
             }
 
+    # =====================================================
+    # Dynamic Connector Resolution Logic
+    # =====================================================
+    def get_connector_mapping(self, line_states):
+        """
+        Determines which of the 3 boundary edges gets labeled C1, C2, C3.
+        - The edge parallel to the active hinge is C1.
+        - The top-left edge relative to C1 is C2.
+        - The top-right edge relative to C1 is C3.
+        """
+        active_hinge_idx = -1
+        for idx, state in enumerate(line_states):
+            if state in (1, 2):
+                active_hinge_idx = idx
+                break
+
+        # If no active hinge, default: Edge 1 -> C1, Edge 0 -> C2, Edge 2 -> C3
+        if active_hinge_idx == -1:
+            return {1: 1, 0: 2, 2: 3}
+
+        # Internal line indices:
+        # 0: Angled splitting line (Top-Left)
+        # 1: Horizontal splitting line (Bottom)
+        # 2: Angled splitting line (Top-Right)
+        if active_hinge_idx == 1:   # Hinge is bottom horizontal line
+            return {0: 1, 2: 2, 1: 3}
+        elif active_hinge_idx == 0: # Hinge is top-left angled line
+            return {2: 1, 1: 2, 0: 3}
+        else:                       # Hinge is top-right angled line (idx == 2)
+            return {1: 1, 0: 2, 2: 3}
+
+    # =====================================================
+    # NetworkX Integration (Save / Load Core with BFS Renaming)
+    # =====================================================
+    def get_networkx_graph(self) -> nx.Graph:
+        """Constructs a clean, simplified NetworkX Graph with tree-sorted naming."""
+        raw_G = nx.Graph()
+        
+        # 1. Add active modules as temporary nodes
+        for key, info in self.modules.items():
+            if not info['active']:
+                continue
+            
+            # Save: Blue (state 1) -> Mountain fold, Violet (state 2) -> valley fold
+            module_type = "non-foldable"
+            for state in info['line_states']:
+                if state == 1:
+                    module_type = "Mountain fold"
+                    break
+                elif state == 2:
+                    module_type = "valley fold"
+                    break
+                    
+            raw_G.add_node(
+                key,
+                module_type=module_type,
+                connectors={1: None, 2: None, 3: None},
+                hinge_angle=0,
+                _pos=info['pos'],
+                _angle=info['angle'],
+                _type=info['type'],
+                _line_states=info['line_states']
+            )
+
+        # 2. Map mating contacts with edge threshold checks
+        active_nodes = list(raw_G.nodes())
+        mating_threshold = self.radius * 0.90
+        
+        for i, u in enumerate(active_nodes):
+            u_pos = self.modules[u]['pos']
+            cx = self.width() / 2 + u_pos[0]
+            cy = self.height() / 2 - u_pos[1]
+            edges_u = self.get_edge_segments(cx, cy, self.radius, self.modules[u]['angle'])
+            port_map_u = self.get_connector_mapping(self.modules[u]['line_states'])
+            
+            for j, v in enumerate(active_nodes):
+                if i >= j:
+                    continue
+                
+                v_pos = self.modules[v]['pos']
+                mx_v = self.width() / 2 + v_pos[0]
+                my_v = self.height() / 2 - v_pos[1]
+                port_map_v = self.get_connector_mapping(self.modules[v]['line_states'])
+                
+                for edge_idx, (p1, p2) in enumerate(edges_u):
+                    midpoint = QPointF((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2)
+                    dist = math.hypot(midpoint.x() - mx_v, midpoint.y() - my_v)
+                    
+                    if dist < mating_threshold:
+                        connector_u = port_map_u.get(edge_idx, 1)
+                        edges_v = self.get_edge_segments(mx_v, my_v, self.radius, self.modules[v]['angle'])
+                        connector_v = 1
+                        
+                        for ev_idx, (vp1, vp2) in enumerate(edges_v):
+                            v_mid = QPointF((vp1.x() + vp2.x()) / 2, (vp1.y() + vp2.y()) / 2)
+                            if math.hypot(midpoint.x() - v_mid.x(), midpoint.y() - v_mid.y()) < 5.0:
+                                connector_v = port_map_v.get(ev_idx, 1)
+                                break
+                                
+                        raw_G.add_edge(u, v, connector1=connector_u, connector2=connector_v)
+                        raw_G.nodes[u]["connectors"][connector_u] = v
+                        raw_G.nodes[v]["connectors"][connector_v] = u
+
+        # 3. Perform BFS traversal from module_1 to rename modules sequentially based on tree distance
+        ordered_nodes = []
+        visited = set()
+        
+        # Start BFS from the base root node
+        start_node = "module_1"
+        if start_node in raw_G:
+            queue = collections.deque([start_node])
+            visited.add(start_node)
+            while queue:
+                curr = queue.popleft()
+                ordered_nodes.append(curr)
+                # Sort neighbors to keep traversal deterministic
+                neighbors = sorted(list(raw_G.neighbors(curr)))
+                for n in neighbors:
+                    if n not in visited:
+                        visited.add(n)
+                        queue.append(n)
+                        
+        # Append any remaining disconnected nodes (if any exist)
+        for node in raw_G.nodes():
+            if node not in visited:
+                ordered_nodes.append(node)
+                
+        # Build systematic rename map starting from module_1
+        mapping = {old_name: f"module_{idx+1}" for idx, old_name in enumerate(ordered_nodes)}
+        
+        # Relabel graph nodes
+        G = nx.relabel_nodes(raw_G, mapping)
+        
+        # Re-key nested internal connector references to align with new names
+        for node in G.nodes():
+            conns = G.nodes[node]["connectors"]
+            updated_conns = {c_idx: (mapping[nbr] if nbr in mapping else nbr) for c_idx, nbr in conns.items()}
+            G.nodes[node]["connectors"] = updated_conns
+
+        return G
+
+    def get_graph_text(self) -> str:
+        G = self.get_networkx_graph()
+        data = nx.node_link_data(G)
+        return json.dumps(data, indent=2)
+
+    def load_graph_data(self, graph_data: dict):
+        """Reconstructs the interactive PyQt6 canvas elements from NetworkX graph data."""
+        G = nx.node_link_graph(graph_data)
+        self.modules.clear()
+        
+        for node, attrs in G.nodes(data=True):
+            pos = attrs.get('_pos', (0.0, 0.0))
+            angle = attrs.get('_angle', 0.0)
+            module_type = attrs.get('_type', 'outer')
+            line_states = attrs.get('_line_states', [0, 0, 0])
+            
+            # Fallback mapper in case loading structural JSON without design states
+            if '_line_states' not in attrs:
+                m_type = attrs.get('module_type', 'non-foldable')
+                if m_type == 'Mountain fold':
+                    line_states = [1, 0, 0]
+                elif m_type == 'valley fold':
+                    line_states = [2, 0, 0]
+                else:
+                    line_states = [0, 0, 0]
+            
+            self.modules[node] = {
+                'pos': tuple(pos),
+                'angle': angle,
+                'active': True,
+                'type': module_type,
+                'line_states': list(line_states)
+            }
+            
+        self.update()
+        self.notify_graph_update()
+
+    def notify_graph_update(self):
+        if self.on_graph_update:
+            self.on_graph_update(self.get_graph_text())
+
+    # =====================================================
+    # Visual Painting & Click Events
+    # =====================================================
     def get_module_polygon(self, cx, cy, r, orientation_deg):
-        """Generates an accurate 3-tangent flattened polygon profile"""
         points = []
         num_sides = 3
         arc_segments = 24 
         
         for i in range(num_sides):
             corner_angle = math.radians(orientation_deg + (i * 360 / num_sides))
-            
             for j in range(arc_segments + 1):
                 factor = (j / arc_segments) - 0.5
                 sweep_angle = corner_angle + (factor * math.pi / 3)
                 current_r = r * (0.94 + 0.06 * math.cos(3 * (sweep_angle - math.radians(orientation_deg))))
-                
                 px = cx + current_r * math.cos(sweep_angle)
                 py = cy - current_r * math.sin(sweep_angle)
                 points.append(QPointF(px, py))
@@ -154,7 +259,6 @@ class AssemblyGrid(QWidget):
         return QPolygonF(points)
 
     def get_edge_segments(self, cx, cy, r, orientation_deg):
-        """Returns the 3 major flat tangent edge lines aligned with the mating faces"""
         edges = []
         num_sides = 3
         dist_to_edge = r * 0.81
@@ -171,22 +275,19 @@ class AssemblyGrid(QWidget):
             
             p1 = QPointF(mx - dx, my + dy)
             p2 = QPointF(mx + dx, my - dy)
+            # Retain standard mapping indexing: [0: Top-Left, 1: Bottom, 2: Top-Right]
             edges.append((p1, p2))
             
         return edges
 
     def is_edge_connected(self, current_key, edge_midpoint):
-        """Checks if a DIFFERENT neighbor module spans across this edge midpoint"""
         mating_threshold = self.radius * 0.90
-        
         for key, info in self.modules.items():
             if key == current_key:
                 continue
-                
             if info['active']:
                 mx = self.width() / 2 + info['pos'][0]
                 my = self.height() / 2 - info['pos'][1]
-                
                 dist = math.hypot(edge_midpoint.x() - mx, edge_midpoint.y() - my)
                 if dist < mating_threshold:
                     return True
@@ -199,7 +300,7 @@ class AssemblyGrid(QWidget):
         center_x = self.width() / 2
         center_y = self.height() / 2
 
-        # Step 1: Draw Module Bases
+        # Draw Module Bases
         for key, info in self.modules.items():
             if not info['active']:
                 continue
@@ -207,13 +308,19 @@ class AssemblyGrid(QWidget):
             x = center_x + info['pos'][0]
             y = center_y - info['pos'][1]
             
-            fill_color = QColor(230, 230, 230) if info['type'] == 'inner' else QColor(215, 215, 215)
+            # Base color layout
+            if key == "module_1":
+                # Distinct soft gold color for the protected Base node
+                fill_color = QColor(255, 210, 130)
+            else:
+                fill_color = QColor(230, 230, 230) if info['type'] == 'inner' else QColor(215, 215, 215)
+                
             painter.setPen(QPen(QColor(60, 60, 60), 2))
             painter.setBrush(QBrush(fill_color))
             module_poly = self.get_module_polygon(x, y, self.radius, info['angle'])
             painter.drawPolygon(module_poly)
 
-            # Step 2: Draw Three Interior Splitting Lines (One for each side angle direction)
+            # Draw Interior Line States
             for idx in range(3):
                 line_angle_rad = math.radians(info['angle'] + 30 + (idx * 120))
                 line_len = self.radius * 0.95
@@ -225,21 +332,49 @@ class AssemblyGrid(QWidget):
                 
                 state = info['line_states'][idx]
                 if state == 1:
-                    line_pen = QPen(QColor(0, 102, 204), 3, Qt.PenStyle.SolidLine)
+                    line_pen = QPen(QColor(0, 102, 204), 3, Qt.PenStyle.SolidLine)  # Mountain Fold (Blue)
                 elif state == 2:
-                    line_pen = QPen(QColor(138, 43, 226), 3, Qt.PenStyle.SolidLine)
+                    line_pen = QPen(QColor(138, 43, 226), 3, Qt.PenStyle.SolidLine) # Valley Fold (Violet)
                 else:
                     line_pen = QPen(QColor(150, 150, 150), 1, Qt.PenStyle.DotLine)
                 
                 painter.setPen(line_pen)
                 painter.drawLine(p1, p2)
 
-            # Step 3: Render Delete 'X' Anchor at Center
-            painter.setPen(QPen(QColor(200, 30, 30), 2))
+            # Draw Dynamic edge label numbers inside the body next to their edge
+            edges = self.get_edge_segments(x, y, self.radius, info['angle'])
+            port_map = self.get_connector_mapping(info['line_states'])
+            # Invert mapping to find physical segment matching each connector label
+            inv_port_map = {label: phys_idx for phys_idx, label in port_map.items()}
+            
+            painter.setPen(QPen(QColor(40, 40, 40)))
             painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-            painter.drawText(int(x - 5), int(y + 5), "X")
+            for label in [1, 2, 3]:
+                phys_idx = inv_port_map.get(label)
+                if phys_idx is not None:
+                    p1, p2 = edges[phys_idx]
+                    mid_x = (p1.x() + p2.x()) / 2
+                    mid_y = (p1.y() + p2.y()) / 2
+                    
+                    # Compute vector from edge midpoint to module center, move labels inside body
+                    dx = x - mid_x
+                    dy = y - mid_y
+                    dist = math.hypot(dx, dy)
+                    if dist > 0:
+                        lbl_x = mid_x + (dx / dist) * 15
+                        lbl_y = mid_y + (dy / dist) * 15
+                    else:
+                        lbl_x, lbl_y = mid_x, mid_y
+                        
+                    painter.drawText(int(lbl_x - 5), int(lbl_y + 5), str(label))
 
-        # Step 4: Evaluate and Draw Unconnected Free Green Edges
+            # Delete Anchor (Hidden on the core base node module_1)
+            if key != "module_1":
+                painter.setPen(QPen(QColor(200, 30, 30), 2))
+                painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+                painter.drawText(int(x - 5), int(y + 5), "X")
+
+        # Draw Free Green Edges
         green_pen = QPen(QColor(46, 184, 46), 4, Qt.PenStyle.SolidLine)
         for key, info in self.modules.items():
             if not info['active']:
@@ -251,7 +386,6 @@ class AssemblyGrid(QWidget):
             
             for p1, p2 in edges:
                 midpoint = QPointF((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2)
-                
                 if not self.is_edge_connected(key, midpoint):
                     painter.setPen(green_pen)
                     painter.drawLine(p1, p2)
@@ -262,9 +396,9 @@ class AssemblyGrid(QWidget):
         click_pos = event.position()
         
         if event.button() == Qt.MouseButton.LeftButton:
-            # Check 1: Did user click a central 'X' deletion anchor?
+            # Check 1: Deletion (Ensure module_1 cannot be deleted)
             for key, info in self.modules.items():
-                if info['active']:
+                if info['active'] and key != "module_1":
                     mx = center_x + info['pos'][0]
                     my = center_y - info['pos'][1]
                     if math.hypot(click_pos.x() - mx, click_pos.y() - my) <= 12:
@@ -273,7 +407,7 @@ class AssemblyGrid(QWidget):
                         self.notify_graph_update()
                         return
 
-            # Check 2: Did user click a green open edge to construct a new module?
+            # Check 2: Add New Module via Green Edge
             for key, info in self.modules.items():
                 if not info['active']:
                     continue
@@ -284,7 +418,6 @@ class AssemblyGrid(QWidget):
                 
                 for p1, p2 in edges:
                     midpoint = QPointF((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2)
-                    
                     if not self.is_edge_connected(key, midpoint):
                         dist_to_mid = math.hypot(click_pos.x() - midpoint.x(), click_pos.y() - midpoint.y())
                         if dist_to_mid <= 12:
@@ -297,7 +430,7 @@ class AssemblyGrid(QWidget):
                             new_vy = info['pos'][1] + step_dist * math.sin(angle_rad)
                             
                             new_rot = info['angle'] + 180
-                            new_key = f"Custom_{len(self.modules) + 1}"
+                            new_key = f"module_{len(self.modules) + 1}"
                             
                             self.modules[new_key] = {
                                 'pos': (new_vx, new_vy),
@@ -310,29 +443,20 @@ class AssemblyGrid(QWidget):
                             self.notify_graph_update()
                             return
 
-            # Check 3: Check which specific internal line was clicked by measuring distance to its center
+            # Check 3: Cycle Internal Line State (Single Hinge Enforcement)
             for key, info in self.modules.items():
                 if not info['active']:
                     continue
                 mx = center_x + info['pos'][0]
                 my = center_y - info['pos'][1]
                 
-                # If clicking the general module bounds, check if a specific line midpoint is closest
                 if math.hypot(click_pos.x() - mx, click_pos.y() - my) <= self.radius:
                     closest_line_idx = -1
                     min_dist = 99999.0
                     
-                    # We mathematically find the midpoint coordinates of each of the 3 internal lines
                     for idx in range(3):
                         line_angle_rad = math.radians(info['angle'] + 30 + (idx * 120))
-                        # Since the lines cut straight across the true center, their midpoints are at (mx, my)
-                        # We evaluate proximity to a small 14px tracking zone along its orientation axis
-                        lx = mx + 12 * math.cos(line_angle_rad + math.pi/2)
-                        ly = my - 12 * math.sin(line_angle_rad + math.pi/2)
-                        
                         dist_to_line = math.hypot(click_pos.x() - mx, click_pos.y() - my)
-                        
-                        # Project click onto the line normal to see which slice was selected
                         click_angle = math.atan2(-(click_pos.y() - my), click_pos.x() - mx)
                         angle_diff = abs(math.cos(click_angle - line_angle_rad))
                         
@@ -341,15 +465,23 @@ class AssemblyGrid(QWidget):
                             closest_line_idx = idx
                             
                     if closest_line_idx != -1:
-                        # Cycles state ONLY for that chosen clicked line lane index
-                        info['line_states'][closest_line_idx] = (info['line_states'][closest_line_idx] + 1) % 3
+                        next_state = (info['line_states'][closest_line_idx] + 1) % 3
+                        
+                        # Reset all lines to enforce "single hinge maximum"
+                        info['line_states'] = [0, 0, 0]
+                        info['line_states'][closest_line_idx] = next_state
+                        
                         self.update()
                         self.notify_graph_update()
                         return
 
     def clear_all(self):
+        # Clear everything except our root module_1 base
         for key in list(self.modules.keys()):
-            if "Custom_" in key:
+            if key == "module_1":
+                self.modules[key]['active'] = True
+                self.modules[key]['line_states'] = [0, 0, 0]
+            elif "module_" in key and int(key.split("_")[1]) > 12:
                 del self.modules[key]
             else:
                 self.modules[key]['active'] = False

@@ -112,6 +112,28 @@ def find_all_magnets(model):
     return magnet_map
 
 
+def find_module_labels(model):
+    """
+    Scans the model's bodies to locate modules and map their IDs 
+    to readable text labels (e.g., 'module_1', 'module_2').
+    """
+    module_labels = {}
+    for body_id in range(model.nbody):
+        body_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body_id)
+        if body_name:
+            if "module" in body_name.lower():
+                module_labels[body_id] = body_name
+            elif "connector" in body_name.lower():
+                parent_id = find_main_movable_parent(model, body_id)
+                try:
+                    module_idx = body_name.split("_")[-1]
+                    module_labels[parent_id] = f"module_{module_idx}"
+                except ValueError:
+                    module_labels[parent_id] = f"module_{parent_id}"
+                 
+    return module_labels
+
+
 def main():
     """Load the MuJoCo model, initialize magnets, and run the simulation."""
     model_path = "../models/assembly_model.xml"
@@ -130,8 +152,11 @@ def main():
     parent_body_magnet_map.clear()
     parent_body_magnet_map.update(find_all_magnets(model))
 
+    # Identify module bodies and assign their text labels
+    module_labels = find_module_labels(model)
+
     # Register callback
-    mujoco.set_mjcb_control(magnetic_field_callback)
+    # mujoco.set_mjcb_control(magnetic_field_callback)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         viewer.cam.distance = 0.5  # zoom
@@ -145,6 +170,35 @@ def main():
                 data.ctrl[:] = -10
 
             mujoco.mj_step(model, data)
+            
+            #  DYNAMIC TEXT RENDERING
+            # Reset custom user scene geoms at the start of each frame
+            viewer.user_scn.ngeom = 0
+            
+            for body_id, label_text in module_labels.items():
+                pos = data.xpos[body_id].copy()
+                # Offset slightly upwards along the Z-axis so the label floats
+                pos[2] += 0.0003  # 3 cm height offset (adjust as needed)
+                
+                # Fetch reference to current geom slot
+                geom = viewer.user_scn.geoms[viewer.user_scn.ngeom]
+                
+                # Call mjv_initGeom using ONLY the 6 expected positional arguments
+                mujoco.mjv_initGeom(
+                    geom,
+                    mujoco.mjtGeom.mjGEOM_LABEL,
+                    np.array([0.01, 0.01, 0.01], dtype=np.float64),
+                    pos.astype(np.float64),
+                    np.eye(3).flatten().astype(np.float64),
+                    np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32)
+                )
+                
+                # Direct attribute assignment for the string label
+                label = label_text.split("_")[-1]  # Extract the module number for display
+                geom.label = label
+                
+                viewer.user_scn.ngeom += 1
+
             viewer.sync()
 
             # Print torque ramp progress every second

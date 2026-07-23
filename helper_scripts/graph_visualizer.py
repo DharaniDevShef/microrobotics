@@ -6,7 +6,7 @@ import matplotlib.patches as mpatches
 # ----------------------------
 # Load JSON
 # ----------------------------
-with open("beetle_graph.json", "r") as f:
+with open("../graphs/star.json", "r") as f:
     data = json.load(f)
 
 # ----------------------------

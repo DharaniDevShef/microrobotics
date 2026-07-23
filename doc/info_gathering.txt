@@ -1,0 +1,301 @@
+ 
+
+Connector types
+ connectorA - mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"
+ connectorB - mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"
+ connectorC - mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"
+
+
+mountain fold and valley fold body template
+module_quat decides if it is a mountain fold or valley fold.
+connector pos and quat are to be computed for each module
+Joint pos is the position of the hinge joint in the bodyLink frame. It is should be 
+        <body name="module_{module_id}" pos="{module_pos}" quat="1 0 0 0">
+            <freejoint name="free_module_{module_id}"/>
+            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_{module_id}" pos="0.000000000 0.000000000 0.000000000" quat="{module_quat}">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
+                <geom name="geom_bodyBase_{module_id}" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
+                <body name="connector1_{module_id}" pos="{connector1_pos}" quat="{connector1_quat}">
+                    <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
+                    <geom name="geom_connector1_{module_id}" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector1_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="connector2_{module_id}" pos="{connector2_pos}" quat="{connector2_quat}">
+                    <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
+                    <geom name="geom_connector2_{module_id}" type="mesh" mesh="connectorB" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector2_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="bodyLink_{module_id}" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_{module_id}" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true"  armature="0.001" damping="0"/>
+                    <geom name="joint_marker_bodyLink_{module_id}" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_bodyLink_{module_id}" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
+                    <body name="connector3_{module_id}" pos="{connector3_pos}" quat="{connector3_quat}">
+                        <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
+                        <geom name="geom_connector3_{module_id}" type="mesh" mesh="connectorB" rgba="0.2 0.2 0.8 1"/>
+                        <geom name="magnet_connector3_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+
+This is non-fold body template
+        <body name="module_{module_id}" pos="{module_pos}" quat="1 0 0 0">
+            <freejoint name="free_module_{module_id}"/>
+            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyRigid_{module_id}" pos="0.000000000 0.000000000 0.000000000" quat="{module_quat}">
+                <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
+                <geom name="geom_bodyRigid_{module_id}" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
+                <body name="connector1_{module_id}" pos="{connector1_pos}" quat="{connector1_quat}">
+                    <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
+                    <geom name="geom_connector1_{module_id}" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector1_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="connector2_{module_id}" pos="{connector2_pos}" quat="{connector2_quat}">
+                    <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
+                    <geom name="geom_connector2_{module_id}" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1"/>
+                </body>
+                <body name="connector3_{module_id}" pos="{connector3_pos}" quat="{connector3_quat}">
+                    <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
+                    <geom name="geom_connector3_{module_id}" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1"/>
+                </body>
+            </body>
+        </body>
+
+based on the module_type in the json for a node is chosen one of above bodies
+
+Add contact, joints and weld based on the connectors of the nodes in the graph.
+
+    <contact>
+
+        <exclude body1="bodyBase_2" body2="bodyLink_2"/>
+        <exclude body1="bodyBase_2" body2="connector1_2"/>
+        <exclude body1="bodyBase_2" body2="connector2_2"/>
+        <exclude body1="bodyLink_2" body2="connector3_2"/>
+
+        <!-- Inner-Module 4 Exclusions -->
+        <exclude body1="bodyBase_4" body2="bodyLink_4"/>
+        <exclude body1="bodyBase_4" body2="connector1_4"/>
+        <exclude body1="bodyBase_4" body2="connector2_4"/>
+        <exclude body1="bodyLink_4" body2="connector3_4"/>
+
+        <!-- Inner-Module 6 Exclusions -->
+        <exclude body1="bodyBase_6" body2="bodyLink_6"/>
+        <exclude body1="bodyBase_6" body2="connector1_6"/>
+        <exclude body1="bodyBase_6" body2="connector2_6"/>
+        <exclude body1="bodyLink_6" body2="connector3_6"/>
+
+        <!-- Inner-Module 9 Exclusions (Rigid Module) -->
+        <exclude body1="bodyRigid_9" body2="connector1_9"/>
+        <exclude body1="bodyRigid_9" body2="connector2_9"/>
+        <exclude body1="bodyRigid_9" body2="connector3_9"/>
+
+        <!-- Welded Interface Exclusions (Prevents welded items from pushing away) -->
+        <exclude body1="connector1_2" body2="connector1_6"/>
+        <exclude body1="connector2_2" body2="connector2_4"/>
+        <exclude body1="connector3_2" body2="connector1_9"/>
+        
+        <!-- Inter-Module Macro Exclusions (Optional safety buffer) -->
+        <exclude body1="module_2" body2="module_4"/>
+        <exclude body1="module_2" body2="module_6"/>
+        <exclude body1="module_2" body2="module_9"/>
+    </contact>
+    <actuator>
+        <position name="ctrl_joint1" joint="joint_1" kp="1" ctrlrange="-45 0" ctrllimited="true"/>
+        <position name="ctrl_joint2" joint="joint_2" kp="1" ctrlrange="-45 0" ctrllimited="true"/>
+        <position name="ctrl_joint4" joint="joint_4" kp="1" ctrlrange="-45 0" ctrllimited="true"/>
+    </actuator>
+    <equality>
+        <weld body1="connector1_2" body2="connector1_6"  solref="0.02 1" solimp="0.95 0.99 0.001"/>
+        <weld body1="connector2_2" body2="connector2_4"  solref="0.02 1" solimp="0.95 0.99 0.001"/>
+        <weld body1="connector3_2" body2="connector1_9"  solref="0.02 1" solimp="0.95 0.99 0.001"/>
+    </equality>
+
+
+
+For connections, look up the json file by loading it and getting connector between modules
+based on the connector number, get the body name of the connector and add a weld between them.
+based on connector, assign current module  mesh="connectorA" and connecttor of the next module mesh="connectorB"
+also connection happens only when one connector is A and the other is B.
+assign mesh="connectorC" to the remaining connector of the module which is not connected to any other module.
+based on where another module is connected, the angle of the next module connected would change.
+pick a base module as module_1 and compute the pos and quat of all other modules connected to it. 
+The pos and quat of modules connected are computed with respect to base module
+
+ignore the _ properries in the json and load it as 
+# ----------------------------
+# Load JSON
+# ----------------------------
+with open("beetle_graph.json", "r") as f:
+    data = json.load(f)
+
+# ----------------------------
+# Create Directed Graph
+# ----------------------------
+G = nx.DiGraph()
+
+for node in data["nodes"]:
+    G.add_node(
+        node["id"],
+        module_type=node["module_type"],
+        hinge_angle=node["hinge_angle"],
+        pos=node["_pos"]
+    )
+
+for edge in data["edges"]:
+    G.add_edge(
+        edge["source"],
+        edge["target"],
+        connector1=edge["connector1"],
+        connector2=edge["connector2"]
+    )
+
+
+Graph info:
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "module_type": "non-foldable",
+      "connectors": {
+        "1": "module_2",
+        "2": null,
+        "3": null
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        65.08180909440055,
+        37.57499999999999
+      ],
+      "_angle": 90,
+      "_type": "inner",
+      "_line_states": [
+        0,
+        0,
+        0
+      ],
+      "id": "module_1"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": "module_1",
+        "2": "module_3",
+        "3": "module_4"
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        65.08180909440054,
+        -37.57500000000003
+      ],
+      "_angle": 390,
+      "_type": "inner",
+      "_line_states": [
+        0,
+        1,
+        0
+      ],
+      "id": "module_2"
+    },
+    {
+      "module_type": "valley fold",
+      "connectors": {
+        "1": null,
+        "2": null,
+        "3": "module_2"
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        130.16361818880108,
+        -75.15000000000006
+      ],
+      "_angle": 570,
+      "_type": "outer",
+      "_line_states": [
+        0,
+        0,
+        2
+      ],
+      "id": "module_3"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": null,
+        "2": "module_2",
+        "3": null
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        -8.526512829121202e-14,
+        -75.14999999999992
+      ],
+      "_angle": 570,
+      "_type": "outer",
+      "_line_states": [
+        1,
+        0,
+        0
+      ],
+      "id": "module_4"
+    }
+  ],
+  "edges": [
+    {
+      "connector1": 1,
+      "connector2": 1,
+      "source": "module_1",
+      "target": "module_2"
+    },
+    {
+      "connector1": 2,
+      "connector2": 3,
+      "source": "module_2",
+      "target": "module_3"
+    },
+    {
+      "connector1": 3,
+      "connector2": 2,
+      "source": "module_2",
+      "target": "module_4"
+    }
+  ]
+}
+
+
+sample xml placeholder:
+<?xml version="1.0" ?>
+<mujoco model="FusionExportAssembly">
+    <compiler meshdir="../meshes" autolimits="false"/>
+    <size nconmax="500" njmax="1500" nstack="100000"/>
+    <option timestep="0.01" viscosity="0.0009" integrator="implicitfast">
+        <flag contact="enable"/>
+    </option>
+    <asset>
+        <mesh name="bodyBase" file="BodyFoldedSide1.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="bodyLink" file="BodyFoldedSide2.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="bodyRigid" file="Body.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="connectorA" file="SGA.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="connectorB" file="SGB.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="connectorC" file="SGX.stl" scale="0.001 0.001 0.001"/>
+        <material name="silver" specular="1" shininess="0.8" rgba="0.85 0.85 0.9 1"/>
+        <mesh name="Magnet" file="Magnet.stl" scale="1 1 1" inertia="shell"/>
+        <material name="submerged_glass" rgba="0.6 0.8 0.9 0.4" shininess="0.9" specular="1"/>
+    </asset>
+    <worldbody>
+        <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 1" dir="0 0 -1"/>
+        <geom name="wet_glass_floor" 
+          type="plane" 
+          size="1 1 0.1" 
+          material="submerged_glass" 
+          friction="0.25 0.005 0.0001" 
+          solimp="0.9 0.95 0.001 0.5 2" 
+          solref="0.01 1" 
+          condim="3"/>
+
+    </worldbody>
+
+</mujoco>

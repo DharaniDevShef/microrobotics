@@ -109,7 +109,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
     CONN1_ROT = 180
     CONN2_ROT = 120
     CONN3_ROT = -120
-    PARENT_CHILD_DIS = 0.0089  # meters
+    PARENT_CHILD_DIS = 0.0085  # meters
 
     PARENT_CONNECTOR_REL_OFFSETS = {
         1: np.array([PARENT_CHILD_DIS * np.sin(np.radians(180 - CONN1_ROT)),
@@ -120,25 +120,17 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
                      PARENT_CHILD_DIS * np.cos(np.radians(CONN3_ROT)), 0.0]),
     }
     PARENT_CONNECTOR_ROTATIONS = {
-        1: get_rotation_z(np.radians(CONN1_ROT)),
-        2: get_rotation_z(np.radians(CONN2_ROT + 60)),
-        3: get_rotation_z(np.radians(CONN3_ROT - 60)),
+        1: get_rotation_z(np.radians(0)),
+        2: get_rotation_z(np.radians(-CONN2_ROT)),
+        3: get_rotation_z(np.radians(-CONN3_ROT)),
     }
 
-    # PARENT_CONNECTOR_ROTATIONS = {
-    #     1: get_rotation_z(np.radians(CONN1_ROT + 180)),
-    #     2: get_rotation_z(np.radians(CONN2_ROT + 60 - 120)),
-    #     3: get_rotation_z(np.radians(CONN3_ROT - 60 + 120)),
-    # }
+    CHILD_CONNECTOR_ROTATIONS = {
+        1: get_rotation_z(np.radians(180)),
+        2: get_rotation_z(np.radians(60)),
+        3: get_rotation_z(np.radians(-60)),
+    }
 
-    CONNECTOR_Z_OFFSET = abs(float(CONN_POSITIONS[1].split()[2]))
-    VALLEY_FLIP_Z_ADJUSTMENT = 2 * CONNECTOR_Z_OFFSET
-
-    R_VALLEY_FLIP = np.array([
-        [1.0,  0.0,  0.0],
-        [0.0, -1.0,  0.0],
-        [0.0,  0.0, -1.0],
-    ])
 
     FOLDABLE_TYPES = ("Mountain fold", "valley fold")
 
@@ -162,25 +154,29 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
         info = edge_info(current, nbr)
         cur_type = G.nodes[current].get("module_type", "non-foldable")
         nbr_type = G.nodes[nbr].get("module_type", "non-foldable")
+
         if info["u"] == current:
-            attach_slot = info["s_u"]
-            base_offset = PARENT_CONNECTOR_REL_OFFSETS[attach_slot].copy()
-            if nbr_type == "valley fold":
-                base_offset[2] = -VALLEY_FLIP_Z_ADJUSTMENT
-            elif cur_type == "valley fold":
-                base_offset[2] = VALLEY_FLIP_Z_ADJUSTMENT
-            local_R = PARENT_CONNECTOR_ROTATIONS[attach_slot]
-            local_pos = base_offset
+            parent_slot = info["s_u"]
+            child_slot = info["s_v"]
         else:
-            attach_slot = info["s_v"]
-            base_offset = PARENT_CONNECTOR_REL_OFFSETS[attach_slot].copy()
-            if cur_type == "valley fold":
-                base_offset[2] = -VALLEY_FLIP_Z_ADJUSTMENT
-            elif nbr_type == "valley fold":
-                base_offset[2] = VALLEY_FLIP_Z_ADJUSTMENT
-            local_R = PARENT_CONNECTOR_ROTATIONS[attach_slot].T
-            local_pos = -(local_R @ base_offset)
-        return local_pos, local_R, attach_slot
+            parent_slot = info["s_v"]
+            child_slot = info["s_u"]
+
+        # 1. Transform from parent center to parent's connector slot
+        R_p_conn = PARENT_CONNECTOR_ROTATIONS[parent_slot]
+        pos_p_conn = PARENT_CONNECTOR_REL_OFFSETS[parent_slot].copy()
+
+        # # 2. Transform from child's connector slot back to child center
+        R_c_conn = CHILD_CONNECTOR_ROTATIONS[child_slot]
+        pos_c_conn = np.zeros(3)
+
+        # 3. Combine rotations and positions (accounting for slot-to-slot mating)
+        # R_rel = R_parent_slot @ R_child_slot.T
+        local_R = R_p_conn @ R_c_conn.T
+        local_pos = pos_p_conn - (local_R @ pos_c_conn)
+
+
+        return local_pos, local_R, parent_slot
 
     # -------------------------------------------------------------
     # 4. forced_parent_of (global, over every edge)
@@ -214,9 +210,6 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
 
                 local_pos, local_R, attach_slot = edge_local_transform(current, nbr)
 
-                if cur_type == "valley fold":
-                    local_pos = R_VALLEY_FLIP.T @ local_pos
-                    local_R = R_VALLEY_FLIP.T @ local_R
 
                 local_quat = matrix_to_quaternion(local_R)
                 tree_edges[current].append({"child": nbr, "attach_slot": attach_slot})
@@ -293,8 +286,8 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
         </body>
         <body name="bodyLink_{module_id}" pos="0 0 0" quat="1 0 0 0">
             <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-            <joint name="joint_{module_id}" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true" armature="0.001" damping="0"/>
-            <geom name="joint_marker_bodyLink_{module_id}" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+            <joint name="joint_{module_id}" type="hinge" axis="1 0 0" pos="0 0.001 {joint_z}" range="{joint_range}" limited="true" armature="0.001" damping="0.8"/>
+            <geom name="joint_marker_bodyLink_{module_id}" type="cylinder" size="0.0002 0.008" pos="0 0.001 {joint_z}" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
             <geom name="geom_bodyLink_{module_id}" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 {trans_val}" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
             <body name="connector1_{module_id}" pos="{connector1_pos}" quat="{connector1_quat}">
                 <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
@@ -377,8 +370,6 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
         m_type = G.nodes[node_id]["module_type"]
 
         c1_idx, c2_idx, c3_idx = 1, 2, 3
-        if m_type == "valley fold":
-            c2_idx, c3_idx = 3, 2
 
         c1_pos, c1_quat = CONN_POSITIONS[c1_idx], CONN_QUATS[c1_idx]
         c2_pos, c2_quat = CONN_POSITIONS[c2_idx], CONN_QUATS[c2_idx]
@@ -388,12 +379,9 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
         c2_mesh = connector_assignments[node_id][2]
         c3_mesh = connector_assignments[node_id][3]
 
-        if m_type == "Mountain fold":
-            m_quat = "1 0 0 0"
-        elif m_type == "valley fold":
-            m_quat = "0 1 0 0"
-        else:
-            m_quat = "1 0.000000 0.000000 0.000000"
+        m_quat = "1 0 0 0"
+        joint_z = "0.0005" if m_type == "valley fold" else "-0.0055"
+        joint_range = "0 90" if m_type == "valley fold" else "-90 0"
 
         if is_root:
             g_pos, g_R = global_pose.get(node_id, (np.zeros(3), np.eye(3)))
@@ -413,7 +401,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
             connector1_pos=c1_pos, connector1_quat=c1_quat, connector1_mesh=c1_mesh,
             connector2_pos=c2_pos, connector2_quat=c2_quat, connector2_mesh=c2_mesh,
             connector3_pos=c3_pos, connector3_quat=c3_quat, connector3_mesh=c3_mesh,
-            trans_val=TRANSPARENCY
+            trans_val=TRANSPARENCY, joint_z=joint_z, joint_range=joint_range
         )
         element = ET.fromstring(body_xml)
 
@@ -470,8 +458,12 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
             ET.SubElement(contact_elem, "exclude", body1=module_ids[i], body2=module_ids[j])
 
     for idx, num_id in enumerate(fold_joints, start=1):
-        ET.SubElement(actuator_elem, "position", name=f"ctrl_joint{idx}", joint=f"joint_{num_id}",
-                      kp="1", ctrlrange="-45 0", ctrllimited="true")
+        if G.nodes[f"module_{num_id}"]["module_type"] == "valley fold":
+            ET.SubElement(actuator_elem, "position", name=f"ctrl_joint{idx}", joint=f"joint_{num_id}",
+                          kp="1", ctrlrange="0 90", ctrllimited="true")
+        else:
+            ET.SubElement(actuator_elem, "position", name=f"ctrl_joint{idx}", joint=f"joint_{num_id}",
+                          kp="1", ctrlrange="-90 0", ctrllimited="true")
 
     xml_str = ET.tostring(root, encoding="utf-8")
     pretty_xml = minidom.parseString(xml_str).toprettyxml(indent="    ")
@@ -491,6 +483,6 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
 
 
 if __name__ == "__main__":
-    json_path = sys.argv[1] if len(sys.argv) > 1 else "../graphs/star.json"
+    json_path = sys.argv[1] if len(sys.argv) > 1 else "../graphs/beetle_horn.json"
     out_path = sys.argv[2] if len(sys.argv) > 2 else "../models/assembly.xml"
     build_assembly(json_path, out_path)

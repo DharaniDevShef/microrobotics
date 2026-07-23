@@ -341,7 +341,13 @@ class AssemblyGrid(QWidget):
                 painter.setPen(line_pen)
                 painter.drawLine(p1, p2)
 
-            # Draw Dynamic edge label numbers inside the body next to their edge
+            # Draw the module number clearly at the center of each module body
+            painter.setPen(QPen(QColor(20, 20, 20)))
+            painter.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+            module_number = key.replace("module_", "")
+            painter.drawText(int(x - 10), int(y + 6), module_number)
+
+            # Draw connector labels distinctly around the module body
             edges = self.get_edge_segments(x, y, self.radius, info['angle'])
             port_map = self.get_connector_mapping(info['line_states'])
             # Invert mapping to find physical segment matching each connector label

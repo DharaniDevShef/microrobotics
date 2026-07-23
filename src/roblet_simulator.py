@@ -126,6 +126,61 @@ def find_module_labels(model):
 
     return module_labels
 
+def set_angle_to_joint(model, data, target_angle):
+    """
+    Sets the control input for all actuators to the specified target angle in degrees.
+    If the target angle is outside the actuator's control range, it raises a ValueError.
+    """
+
+    if not model.nu > 0:
+        return
+
+    for i in range(model.nu):
+        lo, hi = model.actuator_ctrlrange[i]
+
+        if lo <= target_angle <= hi:
+            data.ctrl[i] = target_angle
+        elif lo <= -target_angle <= hi:
+            data.ctrl[i] = -target_angle
+        else:
+            raise ValueError(
+                f"Neither ±{target_angle} is within actuator {i} range [{lo}, {hi}]"
+            )
+
+
+def dynamic_text_rendering(viewer, data, module_labels):
+    """
+    Dynamically renders text labels for each module body in the simulation.
+    """
+    # Reset custom user scene geoms at the start of each frame
+    viewer.user_scn.ngeom = 0
+
+    for body_id, label_text in module_labels.items():
+        # Fetch position of the module body
+        pos = data.xpos[body_id].copy()
+
+        # Height offset: 0.0003 m (0.3 mm) so the label floats clearly above the module
+        pos[2] += 0.0003
+
+        # Fetch reference to current visual geom slot
+        geom = viewer.user_scn.geoms[viewer.user_scn.ngeom]
+
+        # Call mjv_initGeom using positional arguments
+        mujoco.mjv_initGeom(
+            geom,
+            mujoco.mjtGeom.mjGEOM_LABEL,
+            np.array([0.005, 0.005, 0.005], dtype=np.float64),
+            pos.astype(np.float64),
+            np.eye(3).flatten().astype(np.float64),
+            np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32),  # White label text
+        )
+
+        # Assign label string (displays "1", "2", "3", etc.)
+        display_tag = label_text.split("_")[-1]
+        geom.label = display_tag
+
+        viewer.user_scn.ngeom += 1
+
 
 def main():
     """Load the MuJoCo model, initialize magnets, and run the simulation."""
@@ -149,7 +204,7 @@ def main():
     module_labels = find_module_labels(model)
 
     # Register callback
-    # mujoco.set_mjcb_control(magnetic_field_callback)
+    mujoco.set_mjcb_control(magnetic_field_callback)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         viewer.cam.distance = 0.5  # zoom
@@ -158,41 +213,12 @@ def main():
 
         while viewer.is_running():
             step_start = time.time()
-            # if model.nu > 0:
-            #     # Set control inputs to -10 for all actuators (if any)
-            #     data.ctrl[:] = -10
+            set_angle_to_joint(model, data, target_angle=10)
 
             mujoco.mj_step(model, data)
 
-            # DYNAMIC TEXT RENDERING
-            # Reset custom user scene geoms at the start of each frame
-            viewer.user_scn.ngeom = 0
-
-            for body_id, label_text in module_labels.items():
-                # Fetch position of the module body
-                pos = data.xpos[body_id].copy()
-
-                # Height offset: 0.0003 m (0.3 mm) so the label floats clearly above the module
-                pos[2] += 0.0003
-
-                # Fetch reference to current visual geom slot
-                geom = viewer.user_scn.geoms[viewer.user_scn.ngeom]
-
-                # Call mjv_initGeom using positional arguments
-                mujoco.mjv_initGeom(
-                    geom,
-                    mujoco.mjtGeom.mjGEOM_LABEL,
-                    np.array([0.005, 0.005, 0.005], dtype=np.float64),
-                    pos.astype(np.float64),
-                    np.eye(3).flatten().astype(np.float64),
-                    np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32),  # White label text
-                )
-
-                # Assign label string (displays "1", "2", "3", etc.)
-                display_tag = label_text.split("_")[-1]
-                geom.label = display_tag
-
-                viewer.user_scn.ngeom += 1
+            # Render dynamic text labels for each module
+            #dynamic_text_rendering(viewer, data, module_labels)
 
             viewer.sync()
 

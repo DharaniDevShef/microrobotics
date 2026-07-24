@@ -2,11 +2,22 @@ import sys
 import math
 import json
 import collections
+from pathlib import Path
 import networkx as nx
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox)
+                             QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox,
+                             QTabWidget)
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF, QFont
 from PyQt6.QtCore import Qt, QPointF
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+
+try:
+    from . import graph_visualizer
+    from .xml_generator import build_assembly
+except ImportError:  # pragma: no cover - direct script execution fallback
+    import graph_visualizer
+    from xml_generator import build_assembly
 
 class AssemblyGrid(QWidget):
     def __init__(self, parent=None):
@@ -502,10 +513,37 @@ class AssemblyGrid(QWidget):
         self.notify_graph_update()
 
 
+class GraphPreviewWidget(QWidget):
+    def __init__(self, source_canvas, parent=None):
+        super().__init__(parent)
+        self.source_canvas = source_canvas
+        self.figure = Figure(figsize=(6, 6))
+        self.canvas = FigureCanvas(self.figure)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.canvas)
+        self.refresh_graph()
+
+    def refresh_graph(self):
+        self.figure.clear()
+        graph = self.source_canvas.get_networkx_graph()
+        graph_visualizer.draw_graph_to_figure(graph, self.figure)
+        self.canvas.draw_idle()
+
+
+def save_json(graph_text, path="../graphs/assembly_graph.json"):
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(graph_text)
+    return path
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Pattern Generator")
+        self.script_dir = Path(__file__).resolve().parent
+        self.default_graph_path = (self.script_dir / ".." / "graphs" / "assembly_graph.json").resolve()
+        self.default_xml_path = (self.script_dir / ".." / "models" / "assembly.xml").resolve()
         
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
@@ -515,9 +553,15 @@ class MainWindow(QMainWindow):
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setStyleSheet("font-size: 12px; font-weight: bold; color: #333; margin: 4px;")
         layout.addWidget(self.label)
-        
+
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs)
+
+        editor_tab = QWidget()
+        editor_layout = QVBoxLayout(editor_tab)
         self.grid_canvas = AssemblyGrid()
-        layout.addWidget(self.grid_canvas)
+        self.grid_canvas.on_graph_update = self.refresh_graph_view
+        editor_layout.addWidget(self.grid_canvas)
 
         btn_layout = QHBoxLayout()
         self.clear_btn = QPushButton("Clear Canvas")
@@ -537,14 +581,34 @@ class MainWindow(QMainWindow):
         self.load_btn.clicked.connect(self.load_graph_from_file)
         btn_layout.addWidget(self.load_btn)
 
-        layout.addLayout(btn_layout)
+        self.save_xml_btn = QPushButton("Save XML")
+        self.save_xml_btn.clicked.connect(self.save_graph_and_build_xml)
+        btn_layout.addWidget(self.save_xml_btn)
+
+        editor_layout.addLayout(btn_layout)
+        self.tabs.addTab(editor_tab, "Pattern Editor")
+
+        self.graph_view = GraphPreviewWidget(self.grid_canvas)
+        self.tabs.addTab(self.graph_view, "Graph View")
+
+    def refresh_graph_view(self, _=None):
+        if hasattr(self, "graph_view"):
+            self.graph_view.refresh_graph()
 
     def save_graph_to_file(self):
         graph_json = self.grid_canvas.get_graph_text()
         path, _ = QFileDialog.getSaveFileName(self, "Save Graph", "graph.json", "JSON Files (*.json);;All Files (*)")
         if path:
-            with open(path, 'w', encoding='utf-8') as file:
-                file.write(graph_json)
+            save_json(graph_json, path)
+
+    def save_graph_and_build_xml(self):
+        graph_json = self.grid_canvas.get_graph_text()
+        save_json(graph_json, str(self.default_graph_path))
+        try:
+            build_assembly(str(self.default_graph_path), str(self.default_xml_path))
+            QMessageBox.information(self, "Export Complete", f"Saved graph to {self.default_graph_path}\nSaved XML to {self.default_xml_path}")
+        except Exception as exc:
+            QMessageBox.warning(self, "Export Failed", f"Could not build XML:\n{exc}")
 
     def load_graph_from_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "Load Graph", "", "JSON Files (*.json);;All Files (*)")

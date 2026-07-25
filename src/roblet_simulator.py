@@ -23,7 +23,7 @@ M_MOMENT = 6.5e-3
 TORQUE_MULTIPLIER = 1.0
 # Time taken to reach full torque
 TORQUE_RAMP_TIME = 10  # seconds
-FREQUENCY = 1  # Hz
+FREQUENCY = 6.25  # Hz
 
 
 def magnetic_field_callback(model, data):
@@ -42,21 +42,29 @@ def magnetic_field_callback(model, data):
     ramp_factor = ramp_progress * ramp_progress * (3 - 2 * ramp_progress)
     effective_torque_multiplier = TORQUE_MULTIPLIER * ramp_factor
 
-    # Oscillating magnetic field settings
-    total_cycle_time = 1.0 / FREQUENCY
-    time_in_cycle = data.time % total_cycle_time
 
     # The magnetic field is controlled to roll forward to -50◦in 0.9 s,
     # and then backward to 50◦in 0.1 s, allowing the robot to
     # slowly tilt down and quickly tilt up to perform the stick-slip motion
 
-    # Change from (-50 + 100*alpha)to (50 - 100*alpha)
-    if time_in_cycle < 0.9:
-        alpha = time_in_cycle / 0.9
-        theta = np.radians(-50.0 + (100.0 * alpha))
-    else:
-        alpha = (time_in_cycle - 0.9) / 0.1
+
+    # Oscillating magnetic field settings
+    total_cycle_time = 1.0 / FREQUENCY
+    time_in_cycle = data.time % total_cycle_time
+
+    # 90% slow phase, 10% fast phase
+    t_slow = 0.9 * total_cycle_time
+
+    if time_in_cycle < t_slow:
+        # Phase 1: Slow sweep (0% to 90% of cycle)
+        alpha = time_in_cycle / t_slow
+        # Tilted backward (+50 deg) to forward (-50 deg)
         theta = np.radians(50.0 - (100.0 * alpha))
+    else:
+        # Phase 2: Fast snap-back (90% to 100% of cycle)
+        alpha = (time_in_cycle - t_slow) / (total_cycle_time - t_slow)
+        # Tilted forward (-50 deg) back to backward (+50 deg)
+        theta = np.radians(-50.0 + (100.0 * alpha))
 
     # Magnetic field in XZ plane
     b_vector = np.array([np.cos(theta), 0.0, np.sin(theta)]) * B_INTENSITY
@@ -126,25 +134,31 @@ def find_module_labels(model):
 
     return module_labels
 
-def set_angle_to_joint(model, data, target_angle):
-    """
-    Sets the control input for all actuators to the specified target angle in degrees.
-    If the target angle is outside the actuator's control range, it raises a ValueError.
-    """
 
-    if not model.nu > 0:
+def set_angle_to_joint(model, data, target_angle_deg):
+    """Sets actuator position targets.
+
+    Automatically handles positive (Valley) and negative (Mountain) range limits.
+    """
+    if model.nu == 0:
         return
+
+    target_rad = np.radians(abs(target_angle_deg))
 
     for i in range(model.nu):
         lo, hi = model.actuator_ctrlrange[i]
 
-        if lo <= target_angle <= hi:
-            data.ctrl[i] = target_angle
-        elif lo <= -target_angle <= hi:
-            data.ctrl[i] = -target_angle
+        # Target falls inside positive range (Valley fold)
+        if lo >= 0 and lo <= target_rad <= hi:
+            data.ctrl[i] = target_rad
+        # Target falls inside negative range (Mountain fold)
+        elif hi <= 0 and lo <= -target_rad <= hi:
+            data.ctrl[i] = -target_rad
         else:
+            lo_deg, hi_deg = np.degrees(lo), np.degrees(hi)
             raise ValueError(
-                f"Neither ±{target_angle} is within actuator {i} range [{lo}, {hi}]"
+                f"Target {target_angle_deg}° (or -{target_angle_deg}°) is out "
+                f"of bounds for actuator {i} range [{lo_deg:.1f}°, {hi_deg:.1f}°]"
             )
 
 
@@ -213,7 +227,7 @@ def main():
 
         while viewer.is_running():
             step_start = time.time()
-            set_angle_to_joint(model, data, target_angle=10)
+            set_angle_to_joint(model, data, target_angle_deg=45)
 
             mujoco.mj_step(model, data)
 

@@ -1,30 +1,6 @@
 """
 Generic MuJoCo assembly builder for foldable-module graphs.
 
-Fix vs. the original script: the original placed EVERY root body (every
-independently-freejointed module, i.e. every module that isn't reachable
-as someone's forced child) at world origin with an identity quaternion.
-That's fine when a graph resolves to a single tree (one root), but as soon
-as forced-parent constraints split a single physically-connected graph into
-several kinematic trees (which happens whenever an "outer" fold module's
-slot-1 forces it to be the parent of its ring neighbour), every one of
-those trees now starts stacked on top of the others at (0,0,0). The hinge
-folding still "works" because that's pure local parent->child nesting, but
-the overall shape is wrong until/unless the weld equality constraints drag
-things apart during simulation - and starting from total overlap they
-usually settle into a collapsed tangle instead of the intended shape.
-
-The fix: compute a GLOBAL pose for every node by walking the full graph
-(tree edges AND loop-closing edges) once per connected component, using the
-same per-edge local-transform math already used to build the kinematic
-tree. Each root body is then spawned at its true assembled position/
-orientation instead of at the origin. The freejoints are untouched (still
-free during simulation) - this only changes the *initial* qpos so the
-structure starts already assembled instead of overlapping.
-
-Works for any graph: single tree (flower), multi-root single component
-(beetle), or multiple disconnected assemblies (each component gets its own
-placement, offset from the others so they don't spawn on top of each other).
 """
 import json
 import sys
@@ -273,7 +249,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
     <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
     <body name="bodyBase_{module_id}" pos="0.000000000 0.000000000 0.000000000" quat="{module_quat}">
         <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
-        <geom name="geom_bodyBase_{module_id}" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 {trans_val}" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
+        <geom name="geom_bodyBase_{module_id}" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 {trans_val}" />
         <body name="connector2_{module_id}" pos="{connector2_pos}" quat="{connector2_quat}">
             <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
             <geom name="geom_connector2_{module_id}" type="mesh" mesh="{connector2_mesh}" rgba="0 0 0 {trans_val}"/>
@@ -286,9 +262,9 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
         </body>
         <body name="bodyLink_{module_id}" pos="0 0 0" quat="1 0 0 0">
             <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-            <joint name="joint_{module_id}" type="hinge" axis="1 0 0" pos="0 0.001 {joint_z}" range="{joint_range}" limited="true" armature="0.001" damping="0.8"/>
+            <joint name="joint_{module_id}" type="hinge" axis="1 0 0" pos="0 0.001 {joint_z}" range="{joint_range}" limited="true" armature="0.001" damping="0"/>
             <geom name="joint_marker_bodyLink_{module_id}" type="cylinder" size="0.0002 0.008" pos="0 0.001 {joint_z}" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-            <geom name="geom_bodyLink_{module_id}" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 {trans_val}" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
+            <geom name="geom_bodyLink_{module_id}" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 {trans_val}" />
             <body name="connector1_{module_id}" pos="{connector1_pos}" quat="{connector1_quat}">
                 <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
                 <geom name="geom_connector1_{module_id}" type="mesh" mesh="{connector1_mesh}" rgba="1 1 1 {trans_val}"/>
@@ -305,7 +281,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
     <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
     <body name="bodyRigid_{module_id}" pos="0.000000000 0.000000000 0.000000000" quat="{module_quat}">
         <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
-        <geom name="geom_bodyRigid_{module_id}" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 {trans_val}" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
+        <geom name="geom_bodyRigid_{module_id}" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 {trans_val}" />
         <body name="connector1_{module_id}" pos="{connector1_pos}" quat="{connector1_quat}">
             <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
             <geom name="geom_connector1_{module_id}" type="mesh" mesh="{connector1_mesh}" rgba="1 1 1 {trans_val}"/>
@@ -329,7 +305,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
 <mujoco model="FusionExportAssembly">
     <compiler meshdir="{meshdir}" autolimits="false"/>
     <size nconmax="500" njmax="1500" nstack="100000"/>
-    <option timestep="0.01" viscosity="0.0009" integrator="implicitfast">
+    <option timestep="0.01" integrator="implicitfast">
         <flag contact="enable"/>
     </option>
     <asset>
@@ -341,12 +317,12 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
         <mesh name="connectorC" file="SGX.stl" scale="0.001 0.001 0.001"/>
         <material name="silver" specular="1" shininess="0.8" rgba="0.85 0.85 0.9 1"/>
         <mesh name="Magnet" file="Magnet.stl" scale="1 1 1" inertia="shell"/>
-        <material name="submerged_glass" rgba="0.6 0.8 0.9 0.4" shininess="0.9" specular="1"/>
+        <material name="glass" rgba="0.6 0.8 0.9 0.4" shininess="0.9" specular="1"/>
     </asset>
     <worldbody>
         <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 1" dir="0 0 -1"/>
-        <geom name="wet_glass_floor" type="plane" size="1 1 0.1" material="submerged_glass"
-              friction="0.25 0.005 0.0001" solimp="0.9 0.95 0.001 0.5 2" solref="0.01 1" condim="3"/>
+        <geom name="glass_floor" type="plane" size="1 1 0.1" material="glass"
+            friction="0.4 0.005 0.0001" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1" condim="3"/>
     </worldbody>
 </mujoco>
 """
@@ -460,10 +436,10 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
     for idx, num_id in enumerate(fold_joints, start=1):
         if G.nodes[f"module_{num_id}"]["module_type"] == "valley fold":
             ET.SubElement(actuator_elem, "position", name=f"ctrl_joint{idx}", joint=f"joint_{num_id}",
-                          kp="1", ctrlrange="0 90", ctrllimited="true")
+                          kp="1", ctrlrange="0 1.5708", ctrllimited="true")
         else:
             ET.SubElement(actuator_elem, "position", name=f"ctrl_joint{idx}", joint=f"joint_{num_id}",
-                          kp="1", ctrlrange="-90 0", ctrllimited="true")
+                          kp="1", ctrlrange="-1.5708 0", ctrllimited="true")
 
     xml_str = ET.tostring(root, encoding="utf-8")
     pretty_xml = minidom.parseString(xml_str).toprettyxml(indent="    ")
@@ -483,6 +459,6 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes"):
 
 
 if __name__ == "__main__":
-    json_path = sys.argv[1] if len(sys.argv) > 1 else "../graphs/beetle_horn.json"
+    json_path = sys.argv[1] if len(sys.argv) > 1 else "../graphs/beetle.json"
     out_path = sys.argv[2] if len(sys.argv) > 2 else "../models/assembly.xml"
     build_assembly(json_path, out_path)

@@ -2,7 +2,7 @@
 <mujoco model="FusionExportAssembly">
     <compiler meshdir="../meshes" autolimits="false"/>
     <size nconmax="500" njmax="1500" nstack="100000"/>
-    <option timestep="0.01" viscosity="0.0009" integrator="implicitfast">
+    <option timestep="0.01" integrator="implicitfast">
         <flag contact="enable"/>
     </option>
     <asset>
@@ -14,168 +14,262 @@
         <mesh name="connectorC" file="SGX.stl" scale="0.001 0.001 0.001"/>
         <material name="silver" specular="1" shininess="0.8" rgba="0.85 0.85 0.9 1"/>
         <mesh name="Magnet" file="Magnet.stl" scale="1 1 1" inertia="shell"/>
-        <material name="submerged_glass" rgba="0.6 0.8 0.9 0.4" shininess="0.9" specular="1"/>
+        <material name="glass" rgba="0.6 0.8 0.9 0.4" shininess="0.9" specular="1"/>
     </asset>
     <worldbody>
         <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 1" dir="0 0 -1"/>
-        <geom name="wet_glass_floor" type="plane" size="1 1 0.1" material="submerged_glass" friction="0.25 0.005 0.0001" solimp="0.9 0.95 0.001 0.5 2" solref="0.01 1" condim="3"/>
+        <geom name="glass_floor" type="plane" size="1 1 0.1" material="glass" friction="0.4 0.005 0.0001" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1" condim="3"/>
         <body name="module_1" pos="0.000000000 0.000000000 0.000000000" quat="1.000000000 0.000000000 0.000000000 0.000000000">
             <freejoint name="free_module_1"/>
             <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
-            <body name="bodyRigid_1" pos="0.000000000 0.000000000 0.000000000" quat="1 0.000000 0.000000 0.000000">
+            <body name="bodyRigid_1" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
                 <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
-                <geom name="geom_bodyRigid_1" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
+                <geom name="geom_bodyRigid_1" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 1"/>
                 <body name="connector1_1" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
-                    <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
-                    <geom name="geom_connector1_1" type="mesh" mesh="connectorA" rgba="1 1 1 1"/>
+                    <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
+                    <geom name="geom_connector1_1" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
                     <geom name="magnet_connector1_1" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
                 </body>
                 <body name="connector2_1" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
-                    <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
+                    <inertial pos="0.000000 0.000000 0.001213" mass="0.00010412" diaginertia="3.492157e-10 3.492157e-10 3.003616e-10"/>
                     <geom name="geom_connector2_1" type="mesh" mesh="connectorA" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_1" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
                 </body>
                 <body name="connector3_1" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
-                    <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
-                    <geom name="geom_connector3_1" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1"/>
+                    <inertial pos="0.000000 0.000000 0.001213" mass="0.00010412" diaginertia="3.492157e-10 3.492157e-10 3.003616e-10"/>
+                    <geom name="geom_connector3_1" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_1" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
                 </body>
-                <body name="module_3" pos="0.007707626 -0.004450000 0.000000000" quat="0.500000000 0.000000000 0.000000000 0.866025404">
-                    <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
-                    <body name="bodyBase_3" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
-                        <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
-                        <geom name="geom_bodyBase_3" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
-                        <body name="connector2_3" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
-                            <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                            <geom name="geom_connector2_3" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
-                            <geom name="magnet_connector2_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                        </body>
-                        <body name="connector3_3" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
-                            <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                            <geom name="geom_connector3_3" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
-                            <geom name="magnet_connector3_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                        </body>
-                        <body name="bodyLink_3" pos="0 0 0" quat="1 0 0 0">
-                            <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                            <joint name="joint_3" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true" armature="0.001" damping="0"/>
-                            <geom name="joint_marker_bodyLink_3" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                            <geom name="geom_bodyLink_3" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
-                            <body name="connector1_3" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
-                                <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
-                                <geom name="geom_connector1_3" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
-                                <geom name="magnet_connector1_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                            </body>
-                        </body>
-                        <body name="module_5" pos="-0.007707626 -0.004450000 0.000000000" quat="0.866025404 0.000000000 0.000000000 0.500000000">
-                            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
-                            <body name="bodyBase_5" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
-                                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
-                                <geom name="geom_bodyBase_5" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
-                                <body name="connector2_5" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
-                                    <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                                    <geom name="geom_connector2_5" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
-                                    <geom name="magnet_connector2_5" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                                </body>
-                                <body name="connector3_5" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
-                                    <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                                    <geom name="geom_connector3_5" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
-                                    <geom name="magnet_connector3_5" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                                </body>
-                                <body name="bodyLink_5" pos="0 0 0" quat="1 0 0 0">
-                                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                                    <joint name="joint_5" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true" armature="0.001" damping="0"/>
-                                    <geom name="joint_marker_bodyLink_5" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                                    <geom name="geom_bodyLink_5" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
-                                    <body name="connector1_5" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
-                                        <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
-                                        <geom name="geom_connector1_5" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
-                                        <geom name="magnet_connector1_5" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                                    </body>
-                                </body>
-                                <body name="module_6" pos="-0.007707626 -0.004450000 -0.005000000" quat="0.866025404 0.000000000 0.000000000 0.500000000">
-                                    <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
-                                    <body name="bodyBase_6" pos="0.000000000 0.000000000 0.000000000" quat="0 1 0 0">
-                                        <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
-                                        <geom name="geom_bodyBase_6" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
-                                        <body name="connector2_6" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
-                                            <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                                            <geom name="geom_connector2_6" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
-                                            <geom name="magnet_connector2_6" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                                        </body>
-                                        <body name="connector3_6" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
-                                            <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                                            <geom name="geom_connector3_6" type="mesh" mesh="connectorB" rgba="0.2 0.2 0.8 1"/>
-                                            <geom name="magnet_connector3_6" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                                        </body>
-                                        <body name="bodyLink_6" pos="0 0 0" quat="1 0 0 0">
-                                            <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                                            <joint name="joint_6" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true" armature="0.001" damping="0"/>
-                                            <geom name="joint_marker_bodyLink_6" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                                            <geom name="geom_bodyLink_6" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
-                                            <body name="connector1_6" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
-                                                <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
-                                                <geom name="geom_connector1_6" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
-                                                <geom name="magnet_connector1_6" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                                            </body>
-                                        </body>
-                                    </body>
-                                </body>
-                            </body>
-                        </body>
+            </body>
+        </body>
+        <body name="module_2" pos="0.007361216 -0.004250000 0.000000000" quat="0.866025404 0.000000000 0.000000000 0.500000000">
+            <freejoint name="free_module_2"/>
+            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_2" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
+                <geom name="geom_bodyBase_2" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_2" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector2_2" type="mesh" mesh="connectorA" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_2" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="connector3_2" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector3_2" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_2" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="bodyLink_2" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_2" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 0" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="joint_marker_bodyLink_2" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_bodyLink_2" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_2" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
+                        <geom name="geom_connector1_2" type="mesh" mesh="connectorB" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_2" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
                     </body>
                 </body>
-                <body name="module_2" pos="0.000000000 0.008900000 0.000000000" quat="0.000000000 0.000000000 0.000000000 1.000000000">
-                    <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
-                    <body name="bodyBase_2" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
-                        <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
-                        <geom name="geom_bodyBase_2" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
-                        <body name="connector2_2" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
-                            <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                            <geom name="geom_connector2_2" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
-                            <geom name="magnet_connector2_2" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                        </body>
-                        <body name="connector3_2" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
-                            <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                            <geom name="geom_connector3_2" type="mesh" mesh="connectorB" rgba="0.2 0.2 0.8 1"/>
-                            <geom name="magnet_connector3_2" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                        </body>
-                        <body name="bodyLink_2" pos="0 0 0" quat="1 0 0 0">
-                            <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                            <joint name="joint_2" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true" armature="0.001" damping="0"/>
-                            <geom name="joint_marker_bodyLink_2" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                            <geom name="geom_bodyLink_2" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
-                            <body name="connector1_2" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
-                                <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
-                                <geom name="geom_connector1_2" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
-                                <geom name="magnet_connector1_2" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                            </body>
-                        </body>
-                        <body name="module_4" pos="0.007707626 0.004450000 -0.000000000" quat="0.500000000 0.000000000 0.000000000 -0.866025404">
-                            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
-                            <body name="bodyBase_4" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
-                                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
-                                <geom name="geom_bodyBase_4" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
-                                <body name="connector2_4" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
-                                    <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                                    <geom name="geom_connector2_4" type="mesh" mesh="connectorA" rgba="0 0 0 1"/>
-                                    <geom name="magnet_connector2_4" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                                </body>
-                                <body name="connector3_4" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
-                                    <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
-                                    <geom name="geom_connector3_4" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
-                                    <geom name="magnet_connector3_4" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                                </body>
-                                <body name="bodyLink_4" pos="0 0 0" quat="1 0 0 0">
-                                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-                                    <joint name="joint_4" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-45 0" limited="true" armature="0.001" damping="0"/>
-                                    <geom name="joint_marker_bodyLink_4" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
-                                    <geom name="geom_bodyLink_4" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" fluidshape="ellipsoid" density="1200" fluidcoef="0.6 0.25 1.5 1.0 1.0"/>
-                                    <body name="connector1_4" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
-                                        <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
-                                        <geom name="geom_connector1_4" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
-                                        <geom name="magnet_connector1_4" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
-                                    </body>
-                                </body>
-                            </body>
-                        </body>
+            </body>
+        </body>
+        <body name="module_3" pos="-0.007361216 -0.004250000 0.000000000" quat="0.866025404 0.000000000 0.000000000 -0.500000000">
+            <freejoint name="free_module_3"/>
+            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_3" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
+                <geom name="geom_bodyBase_3" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_3" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector2_3" type="mesh" mesh="connectorC" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="connector3_3" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector3_3" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="bodyLink_3" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_3" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="0 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="joint_marker_bodyLink_3" type="cylinder" size="0.0002 0.008" pos="0 0.001 0.0005" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_bodyLink_3" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_3" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
+                        <geom name="geom_connector1_3" type="mesh" mesh="connectorB" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_4" pos="0.007361216 -0.012750000 0.000000000" quat="0.500000000 0.000000000 0.000000000 0.866025404">
+            <freejoint name="free_module_4"/>
+            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_4" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
+                <geom name="geom_bodyBase_4" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_4" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector2_4" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_4" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="connector3_4" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector3_4" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_4" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="bodyLink_4" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_4" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 0" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="joint_marker_bodyLink_4" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_bodyLink_4" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_4" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
+                        <geom name="geom_connector1_4" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_4" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_5" pos="0.014722432 0.000000000 0.000000000" quat="1.000000000 0.000000000 0.000000000 0.000000000">
+            <freejoint name="free_module_5"/>
+            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_5" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
+                <geom name="geom_bodyBase_5" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_5" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector2_5" type="mesh" mesh="connectorA" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_5" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="connector3_5" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector3_5" type="mesh" mesh="connectorB" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_5" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="bodyLink_5" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_5" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 0" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="joint_marker_bodyLink_5" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_bodyLink_5" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_5" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
+                        <geom name="geom_connector1_5" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_5" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_6" pos="-0.014722432 0.000000000 0.000000000" quat="1.000000000 0.000000000 0.000000000 -0.000000000">
+            <freejoint name="free_module_6"/>
+            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_6" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
+                <geom name="geom_bodyBase_6" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_6" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector2_6" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_6" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="connector3_6" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector3_6" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_6" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="bodyLink_6" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_6" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="0 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="joint_marker_bodyLink_6" type="cylinder" size="0.0002 0.008" pos="0 0.001 0.0005" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_bodyLink_6" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_6" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
+                        <geom name="geom_connector1_6" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_6" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_7" pos="0.022083648 -0.004250000 0.000000000" quat="0.866025404 0.000000000 0.000000000 -0.500000000">
+            <freejoint name="free_module_7"/>
+            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_7" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
+                <geom name="geom_bodyBase_7" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_7" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector2_7" type="mesh" mesh="connectorC" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_7" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="connector3_7" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector3_7" type="mesh" mesh="connectorB" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_7" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="bodyLink_7" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_7" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 0" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="joint_marker_bodyLink_7" type="cylinder" size="0.0002 0.008" pos="0 0.001 -0.0055" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_bodyLink_7" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_7" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
+                        <geom name="geom_connector1_7" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_7" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_8" pos="-0.022083648 -0.004250000 0.000000000" quat="0.866025404 0.000000000 0.000000000 0.500000000">
+            <freejoint name="free_module_8"/>
+            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_8" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
+                <geom name="geom_bodyBase_8" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_8" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector2_8" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_8" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="connector3_8" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector3_8" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_8" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="bodyLink_8" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_8" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="0 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="joint_marker_bodyLink_8" type="cylinder" size="0.0002 0.008" pos="0 0.001 0.0005" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_bodyLink_8" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_8" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
+                        <geom name="geom_connector1_8" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_8" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_9" pos="-0.022083648 -0.012750000 0.000000000" quat="0.500000000 0.000000000 0.000000000 0.866025404">
+            <freejoint name="free_module_9"/>
+            <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_9" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
+                <geom name="geom_bodyBase_9" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_9" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector2_9" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_9" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="connector3_9" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+                    <geom name="geom_connector3_9" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_9" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                </body>
+                <body name="bodyLink_9" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+                    <joint name="joint_9" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="0 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="joint_marker_bodyLink_9" type="cylinder" size="0.0002 0.008" pos="0 0.001 0.0005" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+                    <geom name="geom_bodyLink_9" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_9" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
+                        <geom name="geom_connector1_9" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_9" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
                     </body>
                 </body>
             </body>
@@ -185,56 +279,917 @@
         <exclude body1="bodyRigid_1" body2="connector1_1"/>
         <exclude body1="bodyRigid_1" body2="connector2_1"/>
         <exclude body1="bodyRigid_1" body2="connector3_1"/>
-        <exclude body1="bodyBase_3" body2="bodyLink_3"/>
-        <exclude body1="bodyLink_3" body2="connector1_3"/>
-        <exclude body1="bodyBase_3" body2="connector2_3"/>
-        <exclude body1="bodyBase_3" body2="connector3_3"/>
-        <exclude body1="bodyBase_5" body2="bodyLink_5"/>
-        <exclude body1="bodyLink_5" body2="connector1_5"/>
-        <exclude body1="bodyBase_5" body2="connector2_5"/>
-        <exclude body1="bodyBase_5" body2="connector3_5"/>
-        <exclude body1="bodyBase_4" body2="bodyLink_4"/>
-        <exclude body1="bodyLink_4" body2="connector1_4"/>
-        <exclude body1="bodyBase_4" body2="connector2_4"/>
-        <exclude body1="bodyBase_4" body2="connector3_4"/>
         <exclude body1="bodyBase_2" body2="bodyLink_2"/>
         <exclude body1="bodyLink_2" body2="connector1_2"/>
         <exclude body1="bodyBase_2" body2="connector2_2"/>
         <exclude body1="bodyBase_2" body2="connector3_2"/>
+        <exclude body1="bodyBase_4" body2="bodyLink_4"/>
+        <exclude body1="bodyLink_4" body2="connector1_4"/>
+        <exclude body1="bodyBase_4" body2="connector2_4"/>
+        <exclude body1="bodyBase_4" body2="connector3_4"/>
+        <exclude body1="bodyBase_5" body2="bodyLink_5"/>
+        <exclude body1="bodyLink_5" body2="connector1_5"/>
+        <exclude body1="bodyBase_5" body2="connector2_5"/>
+        <exclude body1="bodyBase_5" body2="connector3_5"/>
+        <exclude body1="bodyBase_7" body2="bodyLink_7"/>
+        <exclude body1="bodyLink_7" body2="connector1_7"/>
+        <exclude body1="bodyBase_7" body2="connector2_7"/>
+        <exclude body1="bodyBase_7" body2="connector3_7"/>
+        <exclude body1="bodyBase_3" body2="bodyLink_3"/>
+        <exclude body1="bodyLink_3" body2="connector1_3"/>
+        <exclude body1="bodyBase_3" body2="connector2_3"/>
+        <exclude body1="bodyBase_3" body2="connector3_3"/>
         <exclude body1="bodyBase_6" body2="bodyLink_6"/>
         <exclude body1="bodyLink_6" body2="connector1_6"/>
         <exclude body1="bodyBase_6" body2="connector2_6"/>
         <exclude body1="bodyBase_6" body2="connector3_6"/>
-        <exclude body1="connector2_1" body2="connector2_3"/>
+        <exclude body1="bodyBase_8" body2="bodyLink_8"/>
+        <exclude body1="bodyLink_8" body2="connector1_8"/>
+        <exclude body1="bodyBase_8" body2="connector2_8"/>
+        <exclude body1="bodyBase_8" body2="connector3_8"/>
+        <exclude body1="bodyBase_9" body2="bodyLink_9"/>
+        <exclude body1="bodyLink_9" body2="connector1_9"/>
+        <exclude body1="bodyBase_9" body2="connector2_9"/>
+        <exclude body1="bodyBase_9" body2="connector3_9"/>
+        <exclude body1="bodyRigid_1" body2="bodyBase_2"/>
+        <exclude body1="bodyRigid_1" body2="bodyLink_2"/>
+        <exclude body1="bodyRigid_1" body2="connector1_2"/>
+        <exclude body1="bodyRigid_1" body2="connector2_2"/>
+        <exclude body1="bodyRigid_1" body2="connector3_2"/>
+        <exclude body1="connector1_1" body2="bodyBase_2"/>
+        <exclude body1="connector1_1" body2="bodyLink_2"/>
+        <exclude body1="connector1_1" body2="connector1_2"/>
+        <exclude body1="connector1_1" body2="connector2_2"/>
         <exclude body1="connector1_1" body2="connector3_2"/>
+        <exclude body1="connector2_1" body2="bodyBase_2"/>
+        <exclude body1="connector2_1" body2="bodyLink_2"/>
+        <exclude body1="connector2_1" body2="connector1_2"/>
+        <exclude body1="connector2_1" body2="connector2_2"/>
+        <exclude body1="connector2_1" body2="connector3_2"/>
+        <exclude body1="connector3_1" body2="bodyBase_2"/>
+        <exclude body1="connector3_1" body2="bodyLink_2"/>
+        <exclude body1="connector3_1" body2="connector1_2"/>
+        <exclude body1="connector3_1" body2="connector2_2"/>
+        <exclude body1="connector3_1" body2="connector3_2"/>
+        <exclude body1="bodyRigid_1" body2="bodyBase_3"/>
+        <exclude body1="bodyRigid_1" body2="bodyLink_3"/>
+        <exclude body1="bodyRigid_1" body2="connector1_3"/>
+        <exclude body1="bodyRigid_1" body2="connector2_3"/>
+        <exclude body1="bodyRigid_1" body2="connector3_3"/>
+        <exclude body1="connector1_1" body2="bodyBase_3"/>
+        <exclude body1="connector1_1" body2="bodyLink_3"/>
+        <exclude body1="connector1_1" body2="connector1_3"/>
+        <exclude body1="connector1_1" body2="connector2_3"/>
+        <exclude body1="connector1_1" body2="connector3_3"/>
+        <exclude body1="connector2_1" body2="bodyBase_3"/>
+        <exclude body1="connector2_1" body2="bodyLink_3"/>
+        <exclude body1="connector2_1" body2="connector1_3"/>
+        <exclude body1="connector2_1" body2="connector2_3"/>
+        <exclude body1="connector2_1" body2="connector3_3"/>
+        <exclude body1="connector3_1" body2="bodyBase_3"/>
+        <exclude body1="connector3_1" body2="bodyLink_3"/>
+        <exclude body1="connector3_1" body2="connector1_3"/>
+        <exclude body1="connector3_1" body2="connector2_3"/>
+        <exclude body1="connector3_1" body2="connector3_3"/>
+        <exclude body1="bodyRigid_1" body2="bodyBase_4"/>
+        <exclude body1="bodyRigid_1" body2="bodyLink_4"/>
+        <exclude body1="bodyRigid_1" body2="connector1_4"/>
+        <exclude body1="bodyRigid_1" body2="connector2_4"/>
+        <exclude body1="bodyRigid_1" body2="connector3_4"/>
+        <exclude body1="connector1_1" body2="bodyBase_4"/>
+        <exclude body1="connector1_1" body2="bodyLink_4"/>
+        <exclude body1="connector1_1" body2="connector1_4"/>
+        <exclude body1="connector1_1" body2="connector2_4"/>
+        <exclude body1="connector1_1" body2="connector3_4"/>
+        <exclude body1="connector2_1" body2="bodyBase_4"/>
+        <exclude body1="connector2_1" body2="bodyLink_4"/>
+        <exclude body1="connector2_1" body2="connector1_4"/>
+        <exclude body1="connector2_1" body2="connector2_4"/>
+        <exclude body1="connector2_1" body2="connector3_4"/>
+        <exclude body1="connector3_1" body2="bodyBase_4"/>
+        <exclude body1="connector3_1" body2="bodyLink_4"/>
+        <exclude body1="connector3_1" body2="connector1_4"/>
+        <exclude body1="connector3_1" body2="connector2_4"/>
+        <exclude body1="connector3_1" body2="connector3_4"/>
+        <exclude body1="bodyRigid_1" body2="bodyBase_5"/>
+        <exclude body1="bodyRigid_1" body2="bodyLink_5"/>
+        <exclude body1="bodyRigid_1" body2="connector1_5"/>
+        <exclude body1="bodyRigid_1" body2="connector2_5"/>
+        <exclude body1="bodyRigid_1" body2="connector3_5"/>
+        <exclude body1="connector1_1" body2="bodyBase_5"/>
+        <exclude body1="connector1_1" body2="bodyLink_5"/>
+        <exclude body1="connector1_1" body2="connector1_5"/>
+        <exclude body1="connector1_1" body2="connector2_5"/>
+        <exclude body1="connector1_1" body2="connector3_5"/>
+        <exclude body1="connector2_1" body2="bodyBase_5"/>
+        <exclude body1="connector2_1" body2="bodyLink_5"/>
+        <exclude body1="connector2_1" body2="connector1_5"/>
+        <exclude body1="connector2_1" body2="connector2_5"/>
+        <exclude body1="connector2_1" body2="connector3_5"/>
+        <exclude body1="connector3_1" body2="bodyBase_5"/>
+        <exclude body1="connector3_1" body2="bodyLink_5"/>
+        <exclude body1="connector3_1" body2="connector1_5"/>
+        <exclude body1="connector3_1" body2="connector2_5"/>
+        <exclude body1="connector3_1" body2="connector3_5"/>
+        <exclude body1="bodyRigid_1" body2="bodyBase_6"/>
+        <exclude body1="bodyRigid_1" body2="bodyLink_6"/>
+        <exclude body1="bodyRigid_1" body2="connector1_6"/>
+        <exclude body1="bodyRigid_1" body2="connector2_6"/>
+        <exclude body1="bodyRigid_1" body2="connector3_6"/>
+        <exclude body1="connector1_1" body2="bodyBase_6"/>
+        <exclude body1="connector1_1" body2="bodyLink_6"/>
+        <exclude body1="connector1_1" body2="connector1_6"/>
+        <exclude body1="connector1_1" body2="connector2_6"/>
+        <exclude body1="connector1_1" body2="connector3_6"/>
+        <exclude body1="connector2_1" body2="bodyBase_6"/>
+        <exclude body1="connector2_1" body2="bodyLink_6"/>
+        <exclude body1="connector2_1" body2="connector1_6"/>
+        <exclude body1="connector2_1" body2="connector2_6"/>
+        <exclude body1="connector2_1" body2="connector3_6"/>
+        <exclude body1="connector3_1" body2="bodyBase_6"/>
+        <exclude body1="connector3_1" body2="bodyLink_6"/>
+        <exclude body1="connector3_1" body2="connector1_6"/>
+        <exclude body1="connector3_1" body2="connector2_6"/>
+        <exclude body1="connector3_1" body2="connector3_6"/>
+        <exclude body1="bodyRigid_1" body2="bodyBase_7"/>
+        <exclude body1="bodyRigid_1" body2="bodyLink_7"/>
+        <exclude body1="bodyRigid_1" body2="connector1_7"/>
+        <exclude body1="bodyRigid_1" body2="connector2_7"/>
+        <exclude body1="bodyRigid_1" body2="connector3_7"/>
+        <exclude body1="connector1_1" body2="bodyBase_7"/>
+        <exclude body1="connector1_1" body2="bodyLink_7"/>
+        <exclude body1="connector1_1" body2="connector1_7"/>
+        <exclude body1="connector1_1" body2="connector2_7"/>
+        <exclude body1="connector1_1" body2="connector3_7"/>
+        <exclude body1="connector2_1" body2="bodyBase_7"/>
+        <exclude body1="connector2_1" body2="bodyLink_7"/>
+        <exclude body1="connector2_1" body2="connector1_7"/>
+        <exclude body1="connector2_1" body2="connector2_7"/>
+        <exclude body1="connector2_1" body2="connector3_7"/>
+        <exclude body1="connector3_1" body2="bodyBase_7"/>
+        <exclude body1="connector3_1" body2="bodyLink_7"/>
+        <exclude body1="connector3_1" body2="connector1_7"/>
+        <exclude body1="connector3_1" body2="connector2_7"/>
+        <exclude body1="connector3_1" body2="connector3_7"/>
+        <exclude body1="bodyRigid_1" body2="bodyBase_8"/>
+        <exclude body1="bodyRigid_1" body2="bodyLink_8"/>
+        <exclude body1="bodyRigid_1" body2="connector1_8"/>
+        <exclude body1="bodyRigid_1" body2="connector2_8"/>
+        <exclude body1="bodyRigid_1" body2="connector3_8"/>
+        <exclude body1="connector1_1" body2="bodyBase_8"/>
+        <exclude body1="connector1_1" body2="bodyLink_8"/>
+        <exclude body1="connector1_1" body2="connector1_8"/>
+        <exclude body1="connector1_1" body2="connector2_8"/>
+        <exclude body1="connector1_1" body2="connector3_8"/>
+        <exclude body1="connector2_1" body2="bodyBase_8"/>
+        <exclude body1="connector2_1" body2="bodyLink_8"/>
+        <exclude body1="connector2_1" body2="connector1_8"/>
+        <exclude body1="connector2_1" body2="connector2_8"/>
+        <exclude body1="connector2_1" body2="connector3_8"/>
+        <exclude body1="connector3_1" body2="bodyBase_8"/>
+        <exclude body1="connector3_1" body2="bodyLink_8"/>
+        <exclude body1="connector3_1" body2="connector1_8"/>
+        <exclude body1="connector3_1" body2="connector2_8"/>
+        <exclude body1="connector3_1" body2="connector3_8"/>
+        <exclude body1="bodyRigid_1" body2="bodyBase_9"/>
+        <exclude body1="bodyRigid_1" body2="bodyLink_9"/>
+        <exclude body1="bodyRigid_1" body2="connector1_9"/>
+        <exclude body1="bodyRigid_1" body2="connector2_9"/>
+        <exclude body1="bodyRigid_1" body2="connector3_9"/>
+        <exclude body1="connector1_1" body2="bodyBase_9"/>
+        <exclude body1="connector1_1" body2="bodyLink_9"/>
+        <exclude body1="connector1_1" body2="connector1_9"/>
+        <exclude body1="connector1_1" body2="connector2_9"/>
+        <exclude body1="connector1_1" body2="connector3_9"/>
+        <exclude body1="connector2_1" body2="bodyBase_9"/>
+        <exclude body1="connector2_1" body2="bodyLink_9"/>
+        <exclude body1="connector2_1" body2="connector1_9"/>
+        <exclude body1="connector2_1" body2="connector2_9"/>
+        <exclude body1="connector2_1" body2="connector3_9"/>
+        <exclude body1="connector3_1" body2="bodyBase_9"/>
+        <exclude body1="connector3_1" body2="bodyLink_9"/>
+        <exclude body1="connector3_1" body2="connector1_9"/>
+        <exclude body1="connector3_1" body2="connector2_9"/>
+        <exclude body1="connector3_1" body2="connector3_9"/>
+        <exclude body1="bodyBase_2" body2="bodyBase_3"/>
+        <exclude body1="bodyBase_2" body2="bodyLink_3"/>
+        <exclude body1="bodyBase_2" body2="connector1_3"/>
+        <exclude body1="bodyBase_2" body2="connector2_3"/>
+        <exclude body1="bodyBase_2" body2="connector3_3"/>
+        <exclude body1="bodyLink_2" body2="bodyBase_3"/>
+        <exclude body1="bodyLink_2" body2="bodyLink_3"/>
+        <exclude body1="bodyLink_2" body2="connector1_3"/>
+        <exclude body1="bodyLink_2" body2="connector2_3"/>
+        <exclude body1="bodyLink_2" body2="connector3_3"/>
+        <exclude body1="connector1_2" body2="bodyBase_3"/>
+        <exclude body1="connector1_2" body2="bodyLink_3"/>
+        <exclude body1="connector1_2" body2="connector1_3"/>
+        <exclude body1="connector1_2" body2="connector2_3"/>
+        <exclude body1="connector1_2" body2="connector3_3"/>
+        <exclude body1="connector2_2" body2="bodyBase_3"/>
+        <exclude body1="connector2_2" body2="bodyLink_3"/>
+        <exclude body1="connector2_2" body2="connector1_3"/>
+        <exclude body1="connector2_2" body2="connector2_3"/>
+        <exclude body1="connector2_2" body2="connector3_3"/>
+        <exclude body1="connector3_2" body2="bodyBase_3"/>
+        <exclude body1="connector3_2" body2="bodyLink_3"/>
+        <exclude body1="connector3_2" body2="connector1_3"/>
+        <exclude body1="connector3_2" body2="connector2_3"/>
+        <exclude body1="connector3_2" body2="connector3_3"/>
+        <exclude body1="bodyBase_2" body2="bodyBase_4"/>
+        <exclude body1="bodyBase_2" body2="bodyLink_4"/>
+        <exclude body1="bodyBase_2" body2="connector1_4"/>
+        <exclude body1="bodyBase_2" body2="connector2_4"/>
+        <exclude body1="bodyBase_2" body2="connector3_4"/>
+        <exclude body1="bodyLink_2" body2="bodyBase_4"/>
+        <exclude body1="bodyLink_2" body2="bodyLink_4"/>
+        <exclude body1="bodyLink_2" body2="connector1_4"/>
+        <exclude body1="bodyLink_2" body2="connector2_4"/>
+        <exclude body1="bodyLink_2" body2="connector3_4"/>
+        <exclude body1="connector1_2" body2="bodyBase_4"/>
+        <exclude body1="connector1_2" body2="bodyLink_4"/>
+        <exclude body1="connector1_2" body2="connector1_4"/>
+        <exclude body1="connector1_2" body2="connector2_4"/>
+        <exclude body1="connector1_2" body2="connector3_4"/>
+        <exclude body1="connector2_2" body2="bodyBase_4"/>
+        <exclude body1="connector2_2" body2="bodyLink_4"/>
+        <exclude body1="connector2_2" body2="connector1_4"/>
+        <exclude body1="connector2_2" body2="connector2_4"/>
+        <exclude body1="connector2_2" body2="connector3_4"/>
+        <exclude body1="connector3_2" body2="bodyBase_4"/>
+        <exclude body1="connector3_2" body2="bodyLink_4"/>
+        <exclude body1="connector3_2" body2="connector1_4"/>
+        <exclude body1="connector3_2" body2="connector2_4"/>
+        <exclude body1="connector3_2" body2="connector3_4"/>
+        <exclude body1="bodyBase_2" body2="bodyBase_5"/>
+        <exclude body1="bodyBase_2" body2="bodyLink_5"/>
+        <exclude body1="bodyBase_2" body2="connector1_5"/>
+        <exclude body1="bodyBase_2" body2="connector2_5"/>
+        <exclude body1="bodyBase_2" body2="connector3_5"/>
+        <exclude body1="bodyLink_2" body2="bodyBase_5"/>
+        <exclude body1="bodyLink_2" body2="bodyLink_5"/>
+        <exclude body1="bodyLink_2" body2="connector1_5"/>
+        <exclude body1="bodyLink_2" body2="connector2_5"/>
+        <exclude body1="bodyLink_2" body2="connector3_5"/>
+        <exclude body1="connector1_2" body2="bodyBase_5"/>
+        <exclude body1="connector1_2" body2="bodyLink_5"/>
+        <exclude body1="connector1_2" body2="connector1_5"/>
+        <exclude body1="connector1_2" body2="connector2_5"/>
+        <exclude body1="connector1_2" body2="connector3_5"/>
+        <exclude body1="connector2_2" body2="bodyBase_5"/>
+        <exclude body1="connector2_2" body2="bodyLink_5"/>
+        <exclude body1="connector2_2" body2="connector1_5"/>
+        <exclude body1="connector2_2" body2="connector2_5"/>
+        <exclude body1="connector2_2" body2="connector3_5"/>
+        <exclude body1="connector3_2" body2="bodyBase_5"/>
+        <exclude body1="connector3_2" body2="bodyLink_5"/>
+        <exclude body1="connector3_2" body2="connector1_5"/>
+        <exclude body1="connector3_2" body2="connector2_5"/>
+        <exclude body1="connector3_2" body2="connector3_5"/>
+        <exclude body1="bodyBase_2" body2="bodyBase_6"/>
+        <exclude body1="bodyBase_2" body2="bodyLink_6"/>
+        <exclude body1="bodyBase_2" body2="connector1_6"/>
+        <exclude body1="bodyBase_2" body2="connector2_6"/>
+        <exclude body1="bodyBase_2" body2="connector3_6"/>
+        <exclude body1="bodyLink_2" body2="bodyBase_6"/>
+        <exclude body1="bodyLink_2" body2="bodyLink_6"/>
+        <exclude body1="bodyLink_2" body2="connector1_6"/>
+        <exclude body1="bodyLink_2" body2="connector2_6"/>
+        <exclude body1="bodyLink_2" body2="connector3_6"/>
+        <exclude body1="connector1_2" body2="bodyBase_6"/>
+        <exclude body1="connector1_2" body2="bodyLink_6"/>
+        <exclude body1="connector1_2" body2="connector1_6"/>
+        <exclude body1="connector1_2" body2="connector2_6"/>
+        <exclude body1="connector1_2" body2="connector3_6"/>
+        <exclude body1="connector2_2" body2="bodyBase_6"/>
+        <exclude body1="connector2_2" body2="bodyLink_6"/>
+        <exclude body1="connector2_2" body2="connector1_6"/>
+        <exclude body1="connector2_2" body2="connector2_6"/>
+        <exclude body1="connector2_2" body2="connector3_6"/>
+        <exclude body1="connector3_2" body2="bodyBase_6"/>
+        <exclude body1="connector3_2" body2="bodyLink_6"/>
+        <exclude body1="connector3_2" body2="connector1_6"/>
+        <exclude body1="connector3_2" body2="connector2_6"/>
+        <exclude body1="connector3_2" body2="connector3_6"/>
+        <exclude body1="bodyBase_2" body2="bodyBase_7"/>
+        <exclude body1="bodyBase_2" body2="bodyLink_7"/>
+        <exclude body1="bodyBase_2" body2="connector1_7"/>
+        <exclude body1="bodyBase_2" body2="connector2_7"/>
+        <exclude body1="bodyBase_2" body2="connector3_7"/>
+        <exclude body1="bodyLink_2" body2="bodyBase_7"/>
+        <exclude body1="bodyLink_2" body2="bodyLink_7"/>
+        <exclude body1="bodyLink_2" body2="connector1_7"/>
+        <exclude body1="bodyLink_2" body2="connector2_7"/>
+        <exclude body1="bodyLink_2" body2="connector3_7"/>
+        <exclude body1="connector1_2" body2="bodyBase_7"/>
+        <exclude body1="connector1_2" body2="bodyLink_7"/>
+        <exclude body1="connector1_2" body2="connector1_7"/>
+        <exclude body1="connector1_2" body2="connector2_7"/>
+        <exclude body1="connector1_2" body2="connector3_7"/>
+        <exclude body1="connector2_2" body2="bodyBase_7"/>
+        <exclude body1="connector2_2" body2="bodyLink_7"/>
+        <exclude body1="connector2_2" body2="connector1_7"/>
+        <exclude body1="connector2_2" body2="connector2_7"/>
+        <exclude body1="connector2_2" body2="connector3_7"/>
+        <exclude body1="connector3_2" body2="bodyBase_7"/>
+        <exclude body1="connector3_2" body2="bodyLink_7"/>
+        <exclude body1="connector3_2" body2="connector1_7"/>
+        <exclude body1="connector3_2" body2="connector2_7"/>
+        <exclude body1="connector3_2" body2="connector3_7"/>
+        <exclude body1="bodyBase_2" body2="bodyBase_8"/>
+        <exclude body1="bodyBase_2" body2="bodyLink_8"/>
+        <exclude body1="bodyBase_2" body2="connector1_8"/>
+        <exclude body1="bodyBase_2" body2="connector2_8"/>
+        <exclude body1="bodyBase_2" body2="connector3_8"/>
+        <exclude body1="bodyLink_2" body2="bodyBase_8"/>
+        <exclude body1="bodyLink_2" body2="bodyLink_8"/>
+        <exclude body1="bodyLink_2" body2="connector1_8"/>
+        <exclude body1="bodyLink_2" body2="connector2_8"/>
+        <exclude body1="bodyLink_2" body2="connector3_8"/>
+        <exclude body1="connector1_2" body2="bodyBase_8"/>
+        <exclude body1="connector1_2" body2="bodyLink_8"/>
+        <exclude body1="connector1_2" body2="connector1_8"/>
+        <exclude body1="connector1_2" body2="connector2_8"/>
+        <exclude body1="connector1_2" body2="connector3_8"/>
+        <exclude body1="connector2_2" body2="bodyBase_8"/>
+        <exclude body1="connector2_2" body2="bodyLink_8"/>
+        <exclude body1="connector2_2" body2="connector1_8"/>
+        <exclude body1="connector2_2" body2="connector2_8"/>
+        <exclude body1="connector2_2" body2="connector3_8"/>
+        <exclude body1="connector3_2" body2="bodyBase_8"/>
+        <exclude body1="connector3_2" body2="bodyLink_8"/>
+        <exclude body1="connector3_2" body2="connector1_8"/>
+        <exclude body1="connector3_2" body2="connector2_8"/>
+        <exclude body1="connector3_2" body2="connector3_8"/>
+        <exclude body1="bodyBase_2" body2="bodyBase_9"/>
+        <exclude body1="bodyBase_2" body2="bodyLink_9"/>
+        <exclude body1="bodyBase_2" body2="connector1_9"/>
+        <exclude body1="bodyBase_2" body2="connector2_9"/>
+        <exclude body1="bodyBase_2" body2="connector3_9"/>
+        <exclude body1="bodyLink_2" body2="bodyBase_9"/>
+        <exclude body1="bodyLink_2" body2="bodyLink_9"/>
+        <exclude body1="bodyLink_2" body2="connector1_9"/>
+        <exclude body1="bodyLink_2" body2="connector2_9"/>
+        <exclude body1="bodyLink_2" body2="connector3_9"/>
+        <exclude body1="connector1_2" body2="bodyBase_9"/>
+        <exclude body1="connector1_2" body2="bodyLink_9"/>
+        <exclude body1="connector1_2" body2="connector1_9"/>
+        <exclude body1="connector1_2" body2="connector2_9"/>
+        <exclude body1="connector1_2" body2="connector3_9"/>
+        <exclude body1="connector2_2" body2="bodyBase_9"/>
+        <exclude body1="connector2_2" body2="bodyLink_9"/>
+        <exclude body1="connector2_2" body2="connector1_9"/>
+        <exclude body1="connector2_2" body2="connector2_9"/>
+        <exclude body1="connector2_2" body2="connector3_9"/>
+        <exclude body1="connector3_2" body2="bodyBase_9"/>
+        <exclude body1="connector3_2" body2="bodyLink_9"/>
+        <exclude body1="connector3_2" body2="connector1_9"/>
+        <exclude body1="connector3_2" body2="connector2_9"/>
+        <exclude body1="connector3_2" body2="connector3_9"/>
+        <exclude body1="bodyBase_3" body2="bodyBase_4"/>
+        <exclude body1="bodyBase_3" body2="bodyLink_4"/>
+        <exclude body1="bodyBase_3" body2="connector1_4"/>
+        <exclude body1="bodyBase_3" body2="connector2_4"/>
+        <exclude body1="bodyBase_3" body2="connector3_4"/>
+        <exclude body1="bodyLink_3" body2="bodyBase_4"/>
+        <exclude body1="bodyLink_3" body2="bodyLink_4"/>
+        <exclude body1="bodyLink_3" body2="connector1_4"/>
+        <exclude body1="bodyLink_3" body2="connector2_4"/>
+        <exclude body1="bodyLink_3" body2="connector3_4"/>
+        <exclude body1="connector1_3" body2="bodyBase_4"/>
+        <exclude body1="connector1_3" body2="bodyLink_4"/>
+        <exclude body1="connector1_3" body2="connector1_4"/>
+        <exclude body1="connector1_3" body2="connector2_4"/>
+        <exclude body1="connector1_3" body2="connector3_4"/>
+        <exclude body1="connector2_3" body2="bodyBase_4"/>
+        <exclude body1="connector2_3" body2="bodyLink_4"/>
+        <exclude body1="connector2_3" body2="connector1_4"/>
+        <exclude body1="connector2_3" body2="connector2_4"/>
+        <exclude body1="connector2_3" body2="connector3_4"/>
+        <exclude body1="connector3_3" body2="bodyBase_4"/>
+        <exclude body1="connector3_3" body2="bodyLink_4"/>
+        <exclude body1="connector3_3" body2="connector1_4"/>
+        <exclude body1="connector3_3" body2="connector2_4"/>
+        <exclude body1="connector3_3" body2="connector3_4"/>
+        <exclude body1="bodyBase_3" body2="bodyBase_5"/>
+        <exclude body1="bodyBase_3" body2="bodyLink_5"/>
+        <exclude body1="bodyBase_3" body2="connector1_5"/>
+        <exclude body1="bodyBase_3" body2="connector2_5"/>
+        <exclude body1="bodyBase_3" body2="connector3_5"/>
+        <exclude body1="bodyLink_3" body2="bodyBase_5"/>
+        <exclude body1="bodyLink_3" body2="bodyLink_5"/>
+        <exclude body1="bodyLink_3" body2="connector1_5"/>
+        <exclude body1="bodyLink_3" body2="connector2_5"/>
+        <exclude body1="bodyLink_3" body2="connector3_5"/>
+        <exclude body1="connector1_3" body2="bodyBase_5"/>
+        <exclude body1="connector1_3" body2="bodyLink_5"/>
+        <exclude body1="connector1_3" body2="connector1_5"/>
+        <exclude body1="connector1_3" body2="connector2_5"/>
+        <exclude body1="connector1_3" body2="connector3_5"/>
+        <exclude body1="connector2_3" body2="bodyBase_5"/>
+        <exclude body1="connector2_3" body2="bodyLink_5"/>
+        <exclude body1="connector2_3" body2="connector1_5"/>
+        <exclude body1="connector2_3" body2="connector2_5"/>
+        <exclude body1="connector2_3" body2="connector3_5"/>
+        <exclude body1="connector3_3" body2="bodyBase_5"/>
+        <exclude body1="connector3_3" body2="bodyLink_5"/>
+        <exclude body1="connector3_3" body2="connector1_5"/>
         <exclude body1="connector3_3" body2="connector2_5"/>
-        <exclude body1="connector3_5" body2="connector2_6"/>
-        <exclude body1="connector3_4" body2="connector2_2"/>
+        <exclude body1="connector3_3" body2="connector3_5"/>
+        <exclude body1="bodyBase_3" body2="bodyBase_6"/>
+        <exclude body1="bodyBase_3" body2="bodyLink_6"/>
+        <exclude body1="bodyBase_3" body2="connector1_6"/>
+        <exclude body1="bodyBase_3" body2="connector2_6"/>
+        <exclude body1="bodyBase_3" body2="connector3_6"/>
+        <exclude body1="bodyLink_3" body2="bodyBase_6"/>
+        <exclude body1="bodyLink_3" body2="bodyLink_6"/>
+        <exclude body1="bodyLink_3" body2="connector1_6"/>
+        <exclude body1="bodyLink_3" body2="connector2_6"/>
+        <exclude body1="bodyLink_3" body2="connector3_6"/>
+        <exclude body1="connector1_3" body2="bodyBase_6"/>
+        <exclude body1="connector1_3" body2="bodyLink_6"/>
+        <exclude body1="connector1_3" body2="connector1_6"/>
+        <exclude body1="connector1_3" body2="connector2_6"/>
+        <exclude body1="connector1_3" body2="connector3_6"/>
+        <exclude body1="connector2_3" body2="bodyBase_6"/>
+        <exclude body1="connector2_3" body2="bodyLink_6"/>
+        <exclude body1="connector2_3" body2="connector1_6"/>
+        <exclude body1="connector2_3" body2="connector2_6"/>
+        <exclude body1="connector2_3" body2="connector3_6"/>
+        <exclude body1="connector3_3" body2="bodyBase_6"/>
+        <exclude body1="connector3_3" body2="bodyLink_6"/>
+        <exclude body1="connector3_3" body2="connector1_6"/>
+        <exclude body1="connector3_3" body2="connector2_6"/>
+        <exclude body1="connector3_3" body2="connector3_6"/>
+        <exclude body1="bodyBase_3" body2="bodyBase_7"/>
+        <exclude body1="bodyBase_3" body2="bodyLink_7"/>
+        <exclude body1="bodyBase_3" body2="connector1_7"/>
+        <exclude body1="bodyBase_3" body2="connector2_7"/>
+        <exclude body1="bodyBase_3" body2="connector3_7"/>
+        <exclude body1="bodyLink_3" body2="bodyBase_7"/>
+        <exclude body1="bodyLink_3" body2="bodyLink_7"/>
+        <exclude body1="bodyLink_3" body2="connector1_7"/>
+        <exclude body1="bodyLink_3" body2="connector2_7"/>
+        <exclude body1="bodyLink_3" body2="connector3_7"/>
+        <exclude body1="connector1_3" body2="bodyBase_7"/>
+        <exclude body1="connector1_3" body2="bodyLink_7"/>
+        <exclude body1="connector1_3" body2="connector1_7"/>
+        <exclude body1="connector1_3" body2="connector2_7"/>
+        <exclude body1="connector1_3" body2="connector3_7"/>
+        <exclude body1="connector2_3" body2="bodyBase_7"/>
+        <exclude body1="connector2_3" body2="bodyLink_7"/>
+        <exclude body1="connector2_3" body2="connector1_7"/>
+        <exclude body1="connector2_3" body2="connector2_7"/>
+        <exclude body1="connector2_3" body2="connector3_7"/>
+        <exclude body1="connector3_3" body2="bodyBase_7"/>
+        <exclude body1="connector3_3" body2="bodyLink_7"/>
+        <exclude body1="connector3_3" body2="connector1_7"/>
+        <exclude body1="connector3_3" body2="connector2_7"/>
+        <exclude body1="connector3_3" body2="connector3_7"/>
+        <exclude body1="bodyBase_3" body2="bodyBase_8"/>
+        <exclude body1="bodyBase_3" body2="bodyLink_8"/>
+        <exclude body1="bodyBase_3" body2="connector1_8"/>
+        <exclude body1="bodyBase_3" body2="connector2_8"/>
+        <exclude body1="bodyBase_3" body2="connector3_8"/>
+        <exclude body1="bodyLink_3" body2="bodyBase_8"/>
+        <exclude body1="bodyLink_3" body2="bodyLink_8"/>
+        <exclude body1="bodyLink_3" body2="connector1_8"/>
+        <exclude body1="bodyLink_3" body2="connector2_8"/>
+        <exclude body1="bodyLink_3" body2="connector3_8"/>
+        <exclude body1="connector1_3" body2="bodyBase_8"/>
+        <exclude body1="connector1_3" body2="bodyLink_8"/>
+        <exclude body1="connector1_3" body2="connector1_8"/>
+        <exclude body1="connector1_3" body2="connector2_8"/>
+        <exclude body1="connector1_3" body2="connector3_8"/>
+        <exclude body1="connector2_3" body2="bodyBase_8"/>
+        <exclude body1="connector2_3" body2="bodyLink_8"/>
+        <exclude body1="connector2_3" body2="connector1_8"/>
+        <exclude body1="connector2_3" body2="connector2_8"/>
+        <exclude body1="connector2_3" body2="connector3_8"/>
+        <exclude body1="connector3_3" body2="bodyBase_8"/>
+        <exclude body1="connector3_3" body2="bodyLink_8"/>
+        <exclude body1="connector3_3" body2="connector1_8"/>
+        <exclude body1="connector3_3" body2="connector2_8"/>
+        <exclude body1="connector3_3" body2="connector3_8"/>
+        <exclude body1="bodyBase_3" body2="bodyBase_9"/>
+        <exclude body1="bodyBase_3" body2="bodyLink_9"/>
+        <exclude body1="bodyBase_3" body2="connector1_9"/>
+        <exclude body1="bodyBase_3" body2="connector2_9"/>
+        <exclude body1="bodyBase_3" body2="connector3_9"/>
+        <exclude body1="bodyLink_3" body2="bodyBase_9"/>
+        <exclude body1="bodyLink_3" body2="bodyLink_9"/>
+        <exclude body1="bodyLink_3" body2="connector1_9"/>
+        <exclude body1="bodyLink_3" body2="connector2_9"/>
+        <exclude body1="bodyLink_3" body2="connector3_9"/>
+        <exclude body1="connector1_3" body2="bodyBase_9"/>
+        <exclude body1="connector1_3" body2="bodyLink_9"/>
+        <exclude body1="connector1_3" body2="connector1_9"/>
+        <exclude body1="connector1_3" body2="connector2_9"/>
+        <exclude body1="connector1_3" body2="connector3_9"/>
+        <exclude body1="connector2_3" body2="bodyBase_9"/>
+        <exclude body1="connector2_3" body2="bodyLink_9"/>
+        <exclude body1="connector2_3" body2="connector1_9"/>
+        <exclude body1="connector2_3" body2="connector2_9"/>
+        <exclude body1="connector2_3" body2="connector3_9"/>
+        <exclude body1="connector3_3" body2="bodyBase_9"/>
+        <exclude body1="connector3_3" body2="bodyLink_9"/>
+        <exclude body1="connector3_3" body2="connector1_9"/>
+        <exclude body1="connector3_3" body2="connector2_9"/>
+        <exclude body1="connector3_3" body2="connector3_9"/>
+        <exclude body1="bodyBase_4" body2="bodyBase_5"/>
+        <exclude body1="bodyBase_4" body2="bodyLink_5"/>
+        <exclude body1="bodyBase_4" body2="connector1_5"/>
+        <exclude body1="bodyBase_4" body2="connector2_5"/>
+        <exclude body1="bodyBase_4" body2="connector3_5"/>
+        <exclude body1="bodyLink_4" body2="bodyBase_5"/>
+        <exclude body1="bodyLink_4" body2="bodyLink_5"/>
+        <exclude body1="bodyLink_4" body2="connector1_5"/>
+        <exclude body1="bodyLink_4" body2="connector2_5"/>
+        <exclude body1="bodyLink_4" body2="connector3_5"/>
+        <exclude body1="connector1_4" body2="bodyBase_5"/>
+        <exclude body1="connector1_4" body2="bodyLink_5"/>
+        <exclude body1="connector1_4" body2="connector1_5"/>
+        <exclude body1="connector1_4" body2="connector2_5"/>
+        <exclude body1="connector1_4" body2="connector3_5"/>
+        <exclude body1="connector2_4" body2="bodyBase_5"/>
+        <exclude body1="connector2_4" body2="bodyLink_5"/>
+        <exclude body1="connector2_4" body2="connector1_5"/>
+        <exclude body1="connector2_4" body2="connector2_5"/>
+        <exclude body1="connector2_4" body2="connector3_5"/>
+        <exclude body1="connector3_4" body2="bodyBase_5"/>
+        <exclude body1="connector3_4" body2="bodyLink_5"/>
+        <exclude body1="connector3_4" body2="connector1_5"/>
+        <exclude body1="connector3_4" body2="connector2_5"/>
+        <exclude body1="connector3_4" body2="connector3_5"/>
+        <exclude body1="bodyBase_4" body2="bodyBase_6"/>
+        <exclude body1="bodyBase_4" body2="bodyLink_6"/>
+        <exclude body1="bodyBase_4" body2="connector1_6"/>
+        <exclude body1="bodyBase_4" body2="connector2_6"/>
+        <exclude body1="bodyBase_4" body2="connector3_6"/>
+        <exclude body1="bodyLink_4" body2="bodyBase_6"/>
+        <exclude body1="bodyLink_4" body2="bodyLink_6"/>
+        <exclude body1="bodyLink_4" body2="connector1_6"/>
+        <exclude body1="bodyLink_4" body2="connector2_6"/>
+        <exclude body1="bodyLink_4" body2="connector3_6"/>
+        <exclude body1="connector1_4" body2="bodyBase_6"/>
+        <exclude body1="connector1_4" body2="bodyLink_6"/>
+        <exclude body1="connector1_4" body2="connector1_6"/>
+        <exclude body1="connector1_4" body2="connector2_6"/>
+        <exclude body1="connector1_4" body2="connector3_6"/>
+        <exclude body1="connector2_4" body2="bodyBase_6"/>
+        <exclude body1="connector2_4" body2="bodyLink_6"/>
+        <exclude body1="connector2_4" body2="connector1_6"/>
+        <exclude body1="connector2_4" body2="connector2_6"/>
         <exclude body1="connector2_4" body2="connector3_6"/>
-        <exclude body1="module_1" body2="module_3"/>
-        <exclude body1="module_1" body2="module_5"/>
-        <exclude body1="module_1" body2="module_4"/>
-        <exclude body1="module_1" body2="module_2"/>
-        <exclude body1="module_1" body2="module_6"/>
-        <exclude body1="module_3" body2="module_5"/>
-        <exclude body1="module_3" body2="module_4"/>
-        <exclude body1="module_3" body2="module_2"/>
-        <exclude body1="module_3" body2="module_6"/>
-        <exclude body1="module_5" body2="module_4"/>
-        <exclude body1="module_5" body2="module_2"/>
-        <exclude body1="module_5" body2="module_6"/>
-        <exclude body1="module_4" body2="module_2"/>
-        <exclude body1="module_4" body2="module_6"/>
-        <exclude body1="module_2" body2="module_6"/>
+        <exclude body1="connector3_4" body2="bodyBase_6"/>
+        <exclude body1="connector3_4" body2="bodyLink_6"/>
+        <exclude body1="connector3_4" body2="connector1_6"/>
+        <exclude body1="connector3_4" body2="connector2_6"/>
+        <exclude body1="connector3_4" body2="connector3_6"/>
+        <exclude body1="bodyBase_4" body2="bodyBase_7"/>
+        <exclude body1="bodyBase_4" body2="bodyLink_7"/>
+        <exclude body1="bodyBase_4" body2="connector1_7"/>
+        <exclude body1="bodyBase_4" body2="connector2_7"/>
+        <exclude body1="bodyBase_4" body2="connector3_7"/>
+        <exclude body1="bodyLink_4" body2="bodyBase_7"/>
+        <exclude body1="bodyLink_4" body2="bodyLink_7"/>
+        <exclude body1="bodyLink_4" body2="connector1_7"/>
+        <exclude body1="bodyLink_4" body2="connector2_7"/>
+        <exclude body1="bodyLink_4" body2="connector3_7"/>
+        <exclude body1="connector1_4" body2="bodyBase_7"/>
+        <exclude body1="connector1_4" body2="bodyLink_7"/>
+        <exclude body1="connector1_4" body2="connector1_7"/>
+        <exclude body1="connector1_4" body2="connector2_7"/>
+        <exclude body1="connector1_4" body2="connector3_7"/>
+        <exclude body1="connector2_4" body2="bodyBase_7"/>
+        <exclude body1="connector2_4" body2="bodyLink_7"/>
+        <exclude body1="connector2_4" body2="connector1_7"/>
+        <exclude body1="connector2_4" body2="connector2_7"/>
+        <exclude body1="connector2_4" body2="connector3_7"/>
+        <exclude body1="connector3_4" body2="bodyBase_7"/>
+        <exclude body1="connector3_4" body2="bodyLink_7"/>
+        <exclude body1="connector3_4" body2="connector1_7"/>
+        <exclude body1="connector3_4" body2="connector2_7"/>
+        <exclude body1="connector3_4" body2="connector3_7"/>
+        <exclude body1="bodyBase_4" body2="bodyBase_8"/>
+        <exclude body1="bodyBase_4" body2="bodyLink_8"/>
+        <exclude body1="bodyBase_4" body2="connector1_8"/>
+        <exclude body1="bodyBase_4" body2="connector2_8"/>
+        <exclude body1="bodyBase_4" body2="connector3_8"/>
+        <exclude body1="bodyLink_4" body2="bodyBase_8"/>
+        <exclude body1="bodyLink_4" body2="bodyLink_8"/>
+        <exclude body1="bodyLink_4" body2="connector1_8"/>
+        <exclude body1="bodyLink_4" body2="connector2_8"/>
+        <exclude body1="bodyLink_4" body2="connector3_8"/>
+        <exclude body1="connector1_4" body2="bodyBase_8"/>
+        <exclude body1="connector1_4" body2="bodyLink_8"/>
+        <exclude body1="connector1_4" body2="connector1_8"/>
+        <exclude body1="connector1_4" body2="connector2_8"/>
+        <exclude body1="connector1_4" body2="connector3_8"/>
+        <exclude body1="connector2_4" body2="bodyBase_8"/>
+        <exclude body1="connector2_4" body2="bodyLink_8"/>
+        <exclude body1="connector2_4" body2="connector1_8"/>
+        <exclude body1="connector2_4" body2="connector2_8"/>
+        <exclude body1="connector2_4" body2="connector3_8"/>
+        <exclude body1="connector3_4" body2="bodyBase_8"/>
+        <exclude body1="connector3_4" body2="bodyLink_8"/>
+        <exclude body1="connector3_4" body2="connector1_8"/>
+        <exclude body1="connector3_4" body2="connector2_8"/>
+        <exclude body1="connector3_4" body2="connector3_8"/>
+        <exclude body1="bodyBase_4" body2="bodyBase_9"/>
+        <exclude body1="bodyBase_4" body2="bodyLink_9"/>
+        <exclude body1="bodyBase_4" body2="connector1_9"/>
+        <exclude body1="bodyBase_4" body2="connector2_9"/>
+        <exclude body1="bodyBase_4" body2="connector3_9"/>
+        <exclude body1="bodyLink_4" body2="bodyBase_9"/>
+        <exclude body1="bodyLink_4" body2="bodyLink_9"/>
+        <exclude body1="bodyLink_4" body2="connector1_9"/>
+        <exclude body1="bodyLink_4" body2="connector2_9"/>
+        <exclude body1="bodyLink_4" body2="connector3_9"/>
+        <exclude body1="connector1_4" body2="bodyBase_9"/>
+        <exclude body1="connector1_4" body2="bodyLink_9"/>
+        <exclude body1="connector1_4" body2="connector1_9"/>
+        <exclude body1="connector1_4" body2="connector2_9"/>
+        <exclude body1="connector1_4" body2="connector3_9"/>
+        <exclude body1="connector2_4" body2="bodyBase_9"/>
+        <exclude body1="connector2_4" body2="bodyLink_9"/>
+        <exclude body1="connector2_4" body2="connector1_9"/>
+        <exclude body1="connector2_4" body2="connector2_9"/>
+        <exclude body1="connector2_4" body2="connector3_9"/>
+        <exclude body1="connector3_4" body2="bodyBase_9"/>
+        <exclude body1="connector3_4" body2="bodyLink_9"/>
+        <exclude body1="connector3_4" body2="connector1_9"/>
+        <exclude body1="connector3_4" body2="connector2_9"/>
+        <exclude body1="connector3_4" body2="connector3_9"/>
+        <exclude body1="bodyBase_5" body2="bodyBase_6"/>
+        <exclude body1="bodyBase_5" body2="bodyLink_6"/>
+        <exclude body1="bodyBase_5" body2="connector1_6"/>
+        <exclude body1="bodyBase_5" body2="connector2_6"/>
+        <exclude body1="bodyBase_5" body2="connector3_6"/>
+        <exclude body1="bodyLink_5" body2="bodyBase_6"/>
+        <exclude body1="bodyLink_5" body2="bodyLink_6"/>
+        <exclude body1="bodyLink_5" body2="connector1_6"/>
+        <exclude body1="bodyLink_5" body2="connector2_6"/>
+        <exclude body1="bodyLink_5" body2="connector3_6"/>
+        <exclude body1="connector1_5" body2="bodyBase_6"/>
+        <exclude body1="connector1_5" body2="bodyLink_6"/>
+        <exclude body1="connector1_5" body2="connector1_6"/>
+        <exclude body1="connector1_5" body2="connector2_6"/>
+        <exclude body1="connector1_5" body2="connector3_6"/>
+        <exclude body1="connector2_5" body2="bodyBase_6"/>
+        <exclude body1="connector2_5" body2="bodyLink_6"/>
+        <exclude body1="connector2_5" body2="connector1_6"/>
+        <exclude body1="connector2_5" body2="connector2_6"/>
+        <exclude body1="connector2_5" body2="connector3_6"/>
+        <exclude body1="connector3_5" body2="bodyBase_6"/>
+        <exclude body1="connector3_5" body2="bodyLink_6"/>
+        <exclude body1="connector3_5" body2="connector1_6"/>
+        <exclude body1="connector3_5" body2="connector2_6"/>
+        <exclude body1="connector3_5" body2="connector3_6"/>
+        <exclude body1="bodyBase_5" body2="bodyBase_7"/>
+        <exclude body1="bodyBase_5" body2="bodyLink_7"/>
+        <exclude body1="bodyBase_5" body2="connector1_7"/>
+        <exclude body1="bodyBase_5" body2="connector2_7"/>
+        <exclude body1="bodyBase_5" body2="connector3_7"/>
+        <exclude body1="bodyLink_5" body2="bodyBase_7"/>
+        <exclude body1="bodyLink_5" body2="bodyLink_7"/>
+        <exclude body1="bodyLink_5" body2="connector1_7"/>
+        <exclude body1="bodyLink_5" body2="connector2_7"/>
+        <exclude body1="bodyLink_5" body2="connector3_7"/>
+        <exclude body1="connector1_5" body2="bodyBase_7"/>
+        <exclude body1="connector1_5" body2="bodyLink_7"/>
+        <exclude body1="connector1_5" body2="connector1_7"/>
+        <exclude body1="connector1_5" body2="connector2_7"/>
+        <exclude body1="connector1_5" body2="connector3_7"/>
+        <exclude body1="connector2_5" body2="bodyBase_7"/>
+        <exclude body1="connector2_5" body2="bodyLink_7"/>
+        <exclude body1="connector2_5" body2="connector1_7"/>
+        <exclude body1="connector2_5" body2="connector2_7"/>
+        <exclude body1="connector2_5" body2="connector3_7"/>
+        <exclude body1="connector3_5" body2="bodyBase_7"/>
+        <exclude body1="connector3_5" body2="bodyLink_7"/>
+        <exclude body1="connector3_5" body2="connector1_7"/>
+        <exclude body1="connector3_5" body2="connector2_7"/>
+        <exclude body1="connector3_5" body2="connector3_7"/>
+        <exclude body1="bodyBase_5" body2="bodyBase_8"/>
+        <exclude body1="bodyBase_5" body2="bodyLink_8"/>
+        <exclude body1="bodyBase_5" body2="connector1_8"/>
+        <exclude body1="bodyBase_5" body2="connector2_8"/>
+        <exclude body1="bodyBase_5" body2="connector3_8"/>
+        <exclude body1="bodyLink_5" body2="bodyBase_8"/>
+        <exclude body1="bodyLink_5" body2="bodyLink_8"/>
+        <exclude body1="bodyLink_5" body2="connector1_8"/>
+        <exclude body1="bodyLink_5" body2="connector2_8"/>
+        <exclude body1="bodyLink_5" body2="connector3_8"/>
+        <exclude body1="connector1_5" body2="bodyBase_8"/>
+        <exclude body1="connector1_5" body2="bodyLink_8"/>
+        <exclude body1="connector1_5" body2="connector1_8"/>
+        <exclude body1="connector1_5" body2="connector2_8"/>
+        <exclude body1="connector1_5" body2="connector3_8"/>
+        <exclude body1="connector2_5" body2="bodyBase_8"/>
+        <exclude body1="connector2_5" body2="bodyLink_8"/>
+        <exclude body1="connector2_5" body2="connector1_8"/>
+        <exclude body1="connector2_5" body2="connector2_8"/>
+        <exclude body1="connector2_5" body2="connector3_8"/>
+        <exclude body1="connector3_5" body2="bodyBase_8"/>
+        <exclude body1="connector3_5" body2="bodyLink_8"/>
+        <exclude body1="connector3_5" body2="connector1_8"/>
+        <exclude body1="connector3_5" body2="connector2_8"/>
+        <exclude body1="connector3_5" body2="connector3_8"/>
+        <exclude body1="bodyBase_5" body2="bodyBase_9"/>
+        <exclude body1="bodyBase_5" body2="bodyLink_9"/>
+        <exclude body1="bodyBase_5" body2="connector1_9"/>
+        <exclude body1="bodyBase_5" body2="connector2_9"/>
+        <exclude body1="bodyBase_5" body2="connector3_9"/>
+        <exclude body1="bodyLink_5" body2="bodyBase_9"/>
+        <exclude body1="bodyLink_5" body2="bodyLink_9"/>
+        <exclude body1="bodyLink_5" body2="connector1_9"/>
+        <exclude body1="bodyLink_5" body2="connector2_9"/>
+        <exclude body1="bodyLink_5" body2="connector3_9"/>
+        <exclude body1="connector1_5" body2="bodyBase_9"/>
+        <exclude body1="connector1_5" body2="bodyLink_9"/>
+        <exclude body1="connector1_5" body2="connector1_9"/>
+        <exclude body1="connector1_5" body2="connector2_9"/>
+        <exclude body1="connector1_5" body2="connector3_9"/>
+        <exclude body1="connector2_5" body2="bodyBase_9"/>
+        <exclude body1="connector2_5" body2="bodyLink_9"/>
+        <exclude body1="connector2_5" body2="connector1_9"/>
+        <exclude body1="connector2_5" body2="connector2_9"/>
+        <exclude body1="connector2_5" body2="connector3_9"/>
+        <exclude body1="connector3_5" body2="bodyBase_9"/>
+        <exclude body1="connector3_5" body2="bodyLink_9"/>
+        <exclude body1="connector3_5" body2="connector1_9"/>
+        <exclude body1="connector3_5" body2="connector2_9"/>
+        <exclude body1="connector3_5" body2="connector3_9"/>
+        <exclude body1="bodyBase_6" body2="bodyBase_7"/>
+        <exclude body1="bodyBase_6" body2="bodyLink_7"/>
+        <exclude body1="bodyBase_6" body2="connector1_7"/>
+        <exclude body1="bodyBase_6" body2="connector2_7"/>
+        <exclude body1="bodyBase_6" body2="connector3_7"/>
+        <exclude body1="bodyLink_6" body2="bodyBase_7"/>
+        <exclude body1="bodyLink_6" body2="bodyLink_7"/>
+        <exclude body1="bodyLink_6" body2="connector1_7"/>
+        <exclude body1="bodyLink_6" body2="connector2_7"/>
+        <exclude body1="bodyLink_6" body2="connector3_7"/>
+        <exclude body1="connector1_6" body2="bodyBase_7"/>
+        <exclude body1="connector1_6" body2="bodyLink_7"/>
+        <exclude body1="connector1_6" body2="connector1_7"/>
+        <exclude body1="connector1_6" body2="connector2_7"/>
+        <exclude body1="connector1_6" body2="connector3_7"/>
+        <exclude body1="connector2_6" body2="bodyBase_7"/>
+        <exclude body1="connector2_6" body2="bodyLink_7"/>
+        <exclude body1="connector2_6" body2="connector1_7"/>
+        <exclude body1="connector2_6" body2="connector2_7"/>
+        <exclude body1="connector2_6" body2="connector3_7"/>
+        <exclude body1="connector3_6" body2="bodyBase_7"/>
+        <exclude body1="connector3_6" body2="bodyLink_7"/>
+        <exclude body1="connector3_6" body2="connector1_7"/>
+        <exclude body1="connector3_6" body2="connector2_7"/>
+        <exclude body1="connector3_6" body2="connector3_7"/>
+        <exclude body1="bodyBase_6" body2="bodyBase_8"/>
+        <exclude body1="bodyBase_6" body2="bodyLink_8"/>
+        <exclude body1="bodyBase_6" body2="connector1_8"/>
+        <exclude body1="bodyBase_6" body2="connector2_8"/>
+        <exclude body1="bodyBase_6" body2="connector3_8"/>
+        <exclude body1="bodyLink_6" body2="bodyBase_8"/>
+        <exclude body1="bodyLink_6" body2="bodyLink_8"/>
+        <exclude body1="bodyLink_6" body2="connector1_8"/>
+        <exclude body1="bodyLink_6" body2="connector2_8"/>
+        <exclude body1="bodyLink_6" body2="connector3_8"/>
+        <exclude body1="connector1_6" body2="bodyBase_8"/>
+        <exclude body1="connector1_6" body2="bodyLink_8"/>
+        <exclude body1="connector1_6" body2="connector1_8"/>
+        <exclude body1="connector1_6" body2="connector2_8"/>
+        <exclude body1="connector1_6" body2="connector3_8"/>
+        <exclude body1="connector2_6" body2="bodyBase_8"/>
+        <exclude body1="connector2_6" body2="bodyLink_8"/>
+        <exclude body1="connector2_6" body2="connector1_8"/>
+        <exclude body1="connector2_6" body2="connector2_8"/>
+        <exclude body1="connector2_6" body2="connector3_8"/>
+        <exclude body1="connector3_6" body2="bodyBase_8"/>
+        <exclude body1="connector3_6" body2="bodyLink_8"/>
+        <exclude body1="connector3_6" body2="connector1_8"/>
+        <exclude body1="connector3_6" body2="connector2_8"/>
+        <exclude body1="connector3_6" body2="connector3_8"/>
+        <exclude body1="bodyBase_6" body2="bodyBase_9"/>
+        <exclude body1="bodyBase_6" body2="bodyLink_9"/>
+        <exclude body1="bodyBase_6" body2="connector1_9"/>
+        <exclude body1="bodyBase_6" body2="connector2_9"/>
+        <exclude body1="bodyBase_6" body2="connector3_9"/>
+        <exclude body1="bodyLink_6" body2="bodyBase_9"/>
+        <exclude body1="bodyLink_6" body2="bodyLink_9"/>
+        <exclude body1="bodyLink_6" body2="connector1_9"/>
+        <exclude body1="bodyLink_6" body2="connector2_9"/>
+        <exclude body1="bodyLink_6" body2="connector3_9"/>
+        <exclude body1="connector1_6" body2="bodyBase_9"/>
+        <exclude body1="connector1_6" body2="bodyLink_9"/>
+        <exclude body1="connector1_6" body2="connector1_9"/>
+        <exclude body1="connector1_6" body2="connector2_9"/>
+        <exclude body1="connector1_6" body2="connector3_9"/>
+        <exclude body1="connector2_6" body2="bodyBase_9"/>
+        <exclude body1="connector2_6" body2="bodyLink_9"/>
+        <exclude body1="connector2_6" body2="connector1_9"/>
+        <exclude body1="connector2_6" body2="connector2_9"/>
+        <exclude body1="connector2_6" body2="connector3_9"/>
+        <exclude body1="connector3_6" body2="bodyBase_9"/>
+        <exclude body1="connector3_6" body2="bodyLink_9"/>
+        <exclude body1="connector3_6" body2="connector1_9"/>
+        <exclude body1="connector3_6" body2="connector2_9"/>
+        <exclude body1="connector3_6" body2="connector3_9"/>
+        <exclude body1="bodyBase_7" body2="bodyBase_8"/>
+        <exclude body1="bodyBase_7" body2="bodyLink_8"/>
+        <exclude body1="bodyBase_7" body2="connector1_8"/>
+        <exclude body1="bodyBase_7" body2="connector2_8"/>
+        <exclude body1="bodyBase_7" body2="connector3_8"/>
+        <exclude body1="bodyLink_7" body2="bodyBase_8"/>
+        <exclude body1="bodyLink_7" body2="bodyLink_8"/>
+        <exclude body1="bodyLink_7" body2="connector1_8"/>
+        <exclude body1="bodyLink_7" body2="connector2_8"/>
+        <exclude body1="bodyLink_7" body2="connector3_8"/>
+        <exclude body1="connector1_7" body2="bodyBase_8"/>
+        <exclude body1="connector1_7" body2="bodyLink_8"/>
+        <exclude body1="connector1_7" body2="connector1_8"/>
+        <exclude body1="connector1_7" body2="connector2_8"/>
+        <exclude body1="connector1_7" body2="connector3_8"/>
+        <exclude body1="connector2_7" body2="bodyBase_8"/>
+        <exclude body1="connector2_7" body2="bodyLink_8"/>
+        <exclude body1="connector2_7" body2="connector1_8"/>
+        <exclude body1="connector2_7" body2="connector2_8"/>
+        <exclude body1="connector2_7" body2="connector3_8"/>
+        <exclude body1="connector3_7" body2="bodyBase_8"/>
+        <exclude body1="connector3_7" body2="bodyLink_8"/>
+        <exclude body1="connector3_7" body2="connector1_8"/>
+        <exclude body1="connector3_7" body2="connector2_8"/>
+        <exclude body1="connector3_7" body2="connector3_8"/>
+        <exclude body1="bodyBase_7" body2="bodyBase_9"/>
+        <exclude body1="bodyBase_7" body2="bodyLink_9"/>
+        <exclude body1="bodyBase_7" body2="connector1_9"/>
+        <exclude body1="bodyBase_7" body2="connector2_9"/>
+        <exclude body1="bodyBase_7" body2="connector3_9"/>
+        <exclude body1="bodyLink_7" body2="bodyBase_9"/>
+        <exclude body1="bodyLink_7" body2="bodyLink_9"/>
+        <exclude body1="bodyLink_7" body2="connector1_9"/>
+        <exclude body1="bodyLink_7" body2="connector2_9"/>
+        <exclude body1="bodyLink_7" body2="connector3_9"/>
+        <exclude body1="connector1_7" body2="bodyBase_9"/>
+        <exclude body1="connector1_7" body2="bodyLink_9"/>
+        <exclude body1="connector1_7" body2="connector1_9"/>
+        <exclude body1="connector1_7" body2="connector2_9"/>
+        <exclude body1="connector1_7" body2="connector3_9"/>
+        <exclude body1="connector2_7" body2="bodyBase_9"/>
+        <exclude body1="connector2_7" body2="bodyLink_9"/>
+        <exclude body1="connector2_7" body2="connector1_9"/>
+        <exclude body1="connector2_7" body2="connector2_9"/>
+        <exclude body1="connector2_7" body2="connector3_9"/>
+        <exclude body1="connector3_7" body2="bodyBase_9"/>
+        <exclude body1="connector3_7" body2="bodyLink_9"/>
+        <exclude body1="connector3_7" body2="connector1_9"/>
+        <exclude body1="connector3_7" body2="connector2_9"/>
+        <exclude body1="connector3_7" body2="connector3_9"/>
+        <exclude body1="bodyBase_8" body2="bodyBase_9"/>
+        <exclude body1="bodyBase_8" body2="bodyLink_9"/>
+        <exclude body1="bodyBase_8" body2="connector1_9"/>
+        <exclude body1="bodyBase_8" body2="connector2_9"/>
+        <exclude body1="bodyBase_8" body2="connector3_9"/>
+        <exclude body1="bodyLink_8" body2="bodyBase_9"/>
+        <exclude body1="bodyLink_8" body2="bodyLink_9"/>
+        <exclude body1="bodyLink_8" body2="connector1_9"/>
+        <exclude body1="bodyLink_8" body2="connector2_9"/>
+        <exclude body1="bodyLink_8" body2="connector3_9"/>
+        <exclude body1="connector1_8" body2="bodyBase_9"/>
+        <exclude body1="connector1_8" body2="bodyLink_9"/>
+        <exclude body1="connector1_8" body2="connector1_9"/>
+        <exclude body1="connector1_8" body2="connector2_9"/>
+        <exclude body1="connector1_8" body2="connector3_9"/>
+        <exclude body1="connector2_8" body2="bodyBase_9"/>
+        <exclude body1="connector2_8" body2="bodyLink_9"/>
+        <exclude body1="connector2_8" body2="connector1_9"/>
+        <exclude body1="connector2_8" body2="connector2_9"/>
+        <exclude body1="connector2_8" body2="connector3_9"/>
+        <exclude body1="connector3_8" body2="bodyBase_9"/>
+        <exclude body1="connector3_8" body2="bodyLink_9"/>
+        <exclude body1="connector3_8" body2="connector1_9"/>
+        <exclude body1="connector3_8" body2="connector2_9"/>
+        <exclude body1="connector3_8" body2="connector3_9"/>
     </contact>
     <equality>
-        <weld body1="connector2_4" body2="connector3_6" solref="0.002 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector2_1" body2="connector1_2" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector3_1" body2="connector1_3" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector3_2" body2="connector2_4" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector2_2" body2="connector3_5" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector2_5" body2="connector3_7" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector3_3" body2="connector2_6" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector3_6" body2="connector2_8" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector3_8" body2="connector2_9" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
     </equality>
     <actuator>
-        <position name="ctrl_joint1" joint="joint_2" kp="1" ctrlrange="-45 0" ctrllimited="true"/>
-        <position name="ctrl_joint2" joint="joint_3" kp="1" ctrlrange="-45 0" ctrllimited="true"/>
-        <position name="ctrl_joint3" joint="joint_4" kp="1" ctrlrange="-45 0" ctrllimited="true"/>
-        <position name="ctrl_joint4" joint="joint_5" kp="1" ctrlrange="-45 0" ctrllimited="true"/>
-        <position name="ctrl_joint5" joint="joint_6" kp="1" ctrlrange="-45 0" ctrllimited="true"/>
+        <position name="ctrl_joint1" joint="joint_2" kp="1" ctrlrange="-1.5707963267948966 0" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint2" joint="joint_3" kp="1" ctrlrange="0 1.5707963267948966" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint3" joint="joint_4" kp="1" ctrlrange="-1.5707963267948966 0" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint4" joint="joint_5" kp="1" ctrlrange="-1.5707963267948966 0" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint5" joint="joint_6" kp="1" ctrlrange="0 1.5707963267948966" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint6" joint="joint_7" kp="1" ctrlrange="-1.5707963267948966 0" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint7" joint="joint_8" kp="1" ctrlrange="0 1.5707963267948966" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint8" joint="joint_9" kp="1" ctrlrange="0 1.5707963267948966" ctrllimited="true" dampratio="1"/>
     </actuator>
 </mujoco>

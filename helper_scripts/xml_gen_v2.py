@@ -177,12 +177,12 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
         <geom name="geom_bodyBase_{module_id}" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 {trans_val}"/>
         <body name="connector2_{module_id}" pos="{connector2_pos}" quat="{connector2_quat}">
-            <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
+            <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
             <geom name="geom_connector2_{module_id}" type="mesh" mesh="{connector2_mesh}" rgba="0 0 0 {trans_val}"/>
             <geom name="magnet_connector2_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
         </body>
         <body name="connector3_{module_id}" pos="{connector3_pos}" quat="{connector3_quat}">
-            <inertial pos="0.000000 -0.000000 0.001102" mass="0.000037" diaginertia="1.661707e-10 1.661707e-10 1.944327e-10"/>
+            <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
             <geom name="geom_connector3_{module_id}" type="mesh" mesh="{connector3_mesh}" rgba="0.2 0.2 0.8 {trans_val}"/>
             <geom name="magnet_connector3_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
         </body>
@@ -192,7 +192,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
             <geom name="joint_marker_bodyLink_{module_id}" type="cylinder" size="0.0002 0.008" pos="0 0.001 {joint_z}" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
             <geom name="geom_bodyLink_{module_id}" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 {trans_val}"/>
             <body name="connector1_{module_id}" pos="{connector1_pos}" quat="{connector1_quat}">
-                <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
+                <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
                 <geom name="geom_connector1_{module_id}" type="mesh" mesh="{connector1_mesh}" rgba="1 1 1 {trans_val}"/>
                 <geom name="magnet_connector1_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
             </body>
@@ -209,17 +209,17 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
         <geom name="geom_bodyRigid_{module_id}" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 {trans_val}"/>
         <body name="connector1_{module_id}" pos="{connector1_pos}" quat="{connector1_quat}">
-            <inertial pos="-0.000000 -0.000000 0.001027" mass="0.000035" diaginertia="1.315291e-10 1.315224e-10 1.494471e-10"/>
+            <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
             <geom name="geom_connector1_{module_id}" type="mesh" mesh="{connector1_mesh}" rgba="1 1 1 {trans_val}"/>
             <geom name="magnet_connector1_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
         </body>
         <body name="connector2_{module_id}" pos="{connector2_pos}" quat="{connector2_quat}">
-            <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
+            <inertial pos="0.000000 0.000000 0.001213" mass="0.00010412" diaginertia="3.492157e-10 3.492157e-10 3.003616e-10"/>
             <geom name="geom_connector2_{module_id}" type="mesh" mesh="{connector2_mesh}" rgba="0 0 0 {trans_val}"/>
             <geom name="magnet_connector2_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
         </body>
         <body name="connector3_{module_id}" pos="{connector3_pos}" quat="{connector3_quat}">
-            <inertial pos="0.000000 0.000000 0.001471" mass="0.000057" diaginertia="3.133186e-10 3.133186e-10 2.768016e-10"/>
+            <inertial pos="0.000000 0.000000 0.001213" mass="0.00010412" diaginertia="3.492157e-10 3.492157e-10 3.003616e-10"/>
             <geom name="geom_connector3_{module_id}" type="mesh" mesh="{connector3_mesh}" rgba="0.2 0.2 0.8 {trans_val}"/>
             <geom name="magnet_connector3_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
         </body>

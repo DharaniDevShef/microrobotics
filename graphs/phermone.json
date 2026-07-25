@@ -1,0 +1,111 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "module_type": "non-foldable",
+      "connectors": {
+        "1": "module_4",
+        "2": "module_2",
+        "3": "module_3"
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        65.08180909440055,
+        37.57499999999999
+      ],
+      "_angle": 90,
+      "_type": "inner",
+      "_line_states": [
+        0,
+        0,
+        0
+      ],
+      "id": "module_1"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": "module_1",
+        "2": null,
+        "3": null
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        4.263256414560601e-14,
+        75.15000000000006
+      ],
+      "_angle": 270,
+      "_type": "outer",
+      "_line_states": [
+        0,
+        1,
+        0
+      ],
+      "id": "module_2"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": "module_1",
+        "2": null,
+        "3": null
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        130.16361818880108,
+        75.15000000000006
+      ],
+      "_angle": 270,
+      "_type": "outer",
+      "_line_states": [
+        1,
+        0,
+        0
+      ],
+      "id": "module_3"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": "module_1",
+        "2": null,
+        "3": null
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        65.08180909440055,
+        -37.575
+      ],
+      "_angle": 270,
+      "_type": "outer",
+      "_line_states": [
+        0,
+        0,
+        1
+      ],
+      "id": "module_4"
+    }
+  ],
+  "edges": [
+    {
+      "connector1": 2,
+      "connector2": 1,
+      "source": "module_1",
+      "target": "module_2"
+    },
+    {
+      "connector1": 3,
+      "connector2": 1,
+      "source": "module_1",
+      "target": "module_3"
+    },
+    {
+      "connector1": 1,
+      "connector2": 1,
+      "source": "module_1",
+      "target": "module_4"
+    }
+  ]
+}

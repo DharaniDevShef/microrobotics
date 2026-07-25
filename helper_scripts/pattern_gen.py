@@ -14,10 +14,10 @@ from matplotlib.figure import Figure
 
 try:
     from . import graph_visualizer
-    from .xml_generator import build_assembly
+    from .xml_gen_v2 import build_assembly
 except ImportError:  # pragma: no cover - direct script execution fallback
     import graph_visualizer
-    from xml_generator import build_assembly
+    from xml_gen_v2 import build_assembly
 
 class AssemblyGrid(QWidget):
     def __init__(self, parent=None):
@@ -597,12 +597,14 @@ class MainWindow(QMainWindow):
 
     def save_graph_to_file(self):
         graph_json = self.grid_canvas.get_graph_text()
-        path, _ = QFileDialog.getSaveFileName(self, "Save Graph", "graph.json", "JSON Files (*.json);;All Files (*)")
+        path, _ = QFileDialog.getSaveFileName(self, "Save Graph", "../graphs/graph.json", "JSON Files (*.json);;All Files (*)")
         if path:
             save_json(graph_json, path)
 
     def save_graph_and_build_xml(self):
         graph_json = self.grid_canvas.get_graph_text()
+        graph_data = json.loads(graph_json)
+        self.grid_canvas.load_graph_data(graph_data)
         save_json(graph_json, str(self.default_graph_path))
         try:
             build_assembly(str(self.default_graph_path), str(self.default_xml_path))
@@ -611,7 +613,12 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Export Failed", f"Could not build XML:\n{exc}")
 
     def load_graph_from_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Load Graph", "", "JSON Files (*.json);;All Files (*)")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Graph",
+            "../graphs",
+            "JSON Files (*.json);;All Files (*)",
+        )
         if not path:
             return
 

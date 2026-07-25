@@ -83,6 +83,7 @@ def draw_graph_to_figure(graph_or_data, figure=None, title="Roblet Morphology Gr
         pos,
         width=2,
         node_size=NODE_SIZE,      # Sync node size so arrows stop outside nodes
+        arrows=True,                # Enable arrows for directed edges
         arrowstyle="-|>",         # Sharp arrowhead style
         arrowsize=25,             # Enlarged size so it stands out
         min_target_margin=12,     # Offset margin from node border
@@ -119,15 +120,15 @@ def draw_graph_to_figure(graph_or_data, figure=None, title="Roblet Morphology Gr
         mpatches.Patch(color="#8A2BE2", label="Valley Fold"),
     ]
 
-    ax.legend(
-        handles=legend_patches,
-        loc="upper left",
-        title="Module Configuration",
-        framealpha=0.9,
-        fontsize=10,
-    )
+    # ax.legend(
+    #     handles=legend_patches,
+    #     loc="upper left",
+    #     title="Module Configuration",
+    #     framealpha=0.9,
+    #     fontsize=10,
+    # )
     ax.set_aspect("equal")
-    ax.set_title(title, fontsize=12, fontweight="bold")
+    # ax.set_title(title, fontsize=12, fontweight="bold")
     figure.tight_layout()
     return figure, ax
 

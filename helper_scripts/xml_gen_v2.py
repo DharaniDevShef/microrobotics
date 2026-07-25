@@ -50,7 +50,7 @@ def get_rotation_z(angle_rad):
 
 
 def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
-                    weld_solref="0.002 1", weld_solimp="0.99 0.999 0.0001"):
+                    weld_solref="0.01 1", weld_solimp="0.99 0.999 0.0001"):
     with open(graph_json_path, "r") as f:
         data = json.load(f)
 
@@ -188,7 +188,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         </body>
         <body name="bodyLink_{module_id}" pos="0 0 0" quat="1 0 0 0">
             <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
-            <joint name="joint_{module_id}" type="hinge" axis="1 0 0" pos="0 0.001 {joint_z}" range="{joint_range}" limited="true" armature="0.001" damping="0"/>
+            <joint name="joint_{module_id}" type="hinge" axis="1 0 0" pos="0 0.001 {joint_z}" range="{joint_range}" limited="true" armature="1e-04" damping="0"/>
             <geom name="joint_marker_bodyLink_{module_id}" type="cylinder" size="0.0002 0.008" pos="0 0.001 {joint_z}" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
             <geom name="geom_bodyLink_{module_id}" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 {trans_val}"/>
             <body name="connector1_{module_id}" pos="{connector1_pos}" quat="{connector1_quat}">
@@ -365,6 +365,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
                 kp="1",
                 ctrlrange=f"0 {np.pi/2}",   # 0 to +90°
                 ctrllimited="true",
+                dampratio="1"
             )
         else:
             ET.SubElement(
@@ -375,6 +376,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
                 kp="1",
                 ctrlrange=f"{-np.pi/2} 0",  # -90° to 0
                 ctrllimited="true",
+                dampratio="1"
             )
 
     xml_str = ET.tostring(root, encoding="utf-8")

@@ -1,8 +1,232 @@
-MAGNET - 2x2 mm cyclinder - neodymium magnet
+MAGNET - 2x2 mm cyclinder - neodymium magnet - 0.0471g
  A cylindrical neodymium magnet
 (2×2 mm, N42SH grade) is embedded in the center of the
 site with the N or S pole facing outward so that coupling
 is induced with a stronger magnetic field along the axial
 direction of the magnet.
 
+
+Module without magnet - weight - 450mg
+Module with 3 magnets - weight - 566mg
+
 Form clear resin v4.0 1.17g/cm3
+
+
+
+BodyFoldedSide1----------------------------------------------------------------------------
+Area	299.084 mm^2
+Density	0.001 g / mm^3
+Mass	0.105 g
+Volume	89.399 mm^3
+Physical Material	Generic
+Appearance	Default
+
+Bounding Box
+	Length 	 10.582 mm
+	Width 	 10.327 mm
+	Height 	 10.935 mm
+Center of Mass	-1.66 mm, -21.133 mm, -56.119 mm
+
+Moment of Inertia at Center of Mass   (g mm^2)
+	Ixx = 0.983
+	Ixy = 0.058
+	Ixz = -0.021
+	Iyx = 0.058
+	Iyy = 1.03
+	Iyz = -0.037
+	Izx = -0.021
+	Izy = -0.037
+	Izz = 0.96
+
+Moment of Inertia at Origin   (g mm^2)
+	Ixx = 377.109
+	Ixy = -3.611
+	Ixz = -9.762
+	Iyx = -3.611
+	Iyy = 330.73
+	Iyz = -124.087
+	Izx = -9.762
+	Izy = -124.087
+	Izz = 47.963
+
+
+BodyFoldedSide2----------------------------------------------------------------------------
+Area	210.939 mm^2
+Density	0.001 g / mm^3
+Mass	0.091 g
+Volume	77.91 mm^3
+Physical Material	Generic
+Appearance	Default
+
+Bounding Box
+	Length 	 9.279 mm
+	Width 	 8.927 mm
+	Height 	 10.727 mm
+Center of Mass	1.249 mm, -17.858 mm, -56.852 mm
+
+Moment of Inertia at Center of Mass   (g mm^2)
+	Ixx = 0.971
+	Ixy = 0.307
+	Ixz = 0.137
+	Iyx = 0.307
+	Iyy = 0.941
+	Iyz = -0.22
+	Izx = 0.137
+	Izy = -0.22
+	Izz = 0.764
+
+Moment of Inertia at Origin   (g mm^2)
+	Ixx = 324.669
+	Ixy = 2.341
+	Ixz = 6.61
+	Iyx = 2.341
+	Iyy = 295.71
+	Iyz = -92.767
+	Izx = 6.61
+	Izy = -92.767
+	Izz = 29.977
+
+
+Body-----------------------------------------------------------------------------
+Area	451.27 mm^2
+Density	0.001 g / mm^3
+Mass	0.196 g
+Volume	167.309 mm^3
+Physical Material	Generic
+Appearance	Default
+
+Bounding Box
+	Length 	 11.622 mm
+	Width 	 11.394 mm
+	Height 	 10.936 mm
+Center of Mass	-7.937 mm, -10.73 mm, -47.083 mm
+
+Moment of Inertia at Center of Mass   (g mm^2)
+	Ixx = 2.503
+	Ixy = -0.099
+	Ixz = 0.221
+	Iyx = -0.099
+	Iyy = 2.409
+	Iyz = -0.14
+	Izx = 0.221
+	Izy = -0.14
+	Izz = 2.658
+
+Moment of Inertia at Origin   (g mm^2)
+	Ixx = 458.983
+	Ixy = -16.771
+	Ixz = -72.932
+	Iyx = -16.771
+	Iyy = 448.682
+	Iyz = -99.037
+	Izx = -72.932
+	Izy = -99.037
+	Izz = 37.529
+
+SGX----------------------------------------------------------------------------
+Area	151.138 mm^2
+Density	0.001 g / mm^3
+Mass	0.067 g
+Volume	57.44 mm^3
+Physical Material	Generic
+Appearance	Default
+
+Bounding Box
+	Length 	 6.702 mm
+	Width 	 6.65 mm
+	Height 	 6.562 mm
+Center of Mass	-10.974 mm, -10.11 mm, -44.876 mm
+
+Moment of Inertia at Center of Mass   (g mm^2)
+	Ixx = 0.283
+	Ixy = -0.012
+	Ixz = -0.049
+	Iyx = -0.012
+	Iyy = 0.223
+	Iyz = 0.009
+	Izx = -0.049
+	Izy = 0.009
+	Izz = 0.26
+
+Moment of Inertia at Origin   (g mm^2)
+	Ixx = 142.493
+	Ixy = -7.468
+	Ixz = -33.146
+	Iyx = -7.468
+	Iyy = 143.658
+	Iyz = -30.481
+	Izx = -33.146
+	Izy = -30.481
+	Izz = 15.223
+
+SGA----------------------------------------------------------------------------
+Area	114.628 mm^2
+Density	0.001 g / mm^3
+Mass	0.041 g
+Volume	34.874 mm^3
+Physical Material	Generic
+Appearance	Default
+
+Bounding Box
+	Length 	 6.985 mm
+	Width 	 5.242 mm
+	Height 	 6.498 mm
+Center of Mass	0.167 mm, -24.202 mm, -59.073 mm
+
+Moment of Inertia at Center of Mass   (g mm^2)
+	Ixx = 0.112
+	Ixy = -0.006
+	Ixz = -0.003
+	Iyx = -0.006
+	Iyy = 0.16
+	Iyz = 0.026
+	Izx = -0.003
+	Izy = 0.026
+	Izz = 0.125
+
+Moment of Inertia at Origin   (g mm^2)
+	Ixx = 166.398
+	Ixy = 0.159
+	Ixz = 0.40
+	Iyx = 0.159
+	Iyy = 142.548
+	Iyz = -58.309
+	Izx = 0.40
+	Izy = -58.309
+	Izz = 24.026
+
+SGB----------------------------------------------------------------------------
+Area	128.756 mm^2
+Density	0.001 g / mm^3
+Mass	0.043 g
+Volume	37.174 mm^3
+Physical Material	Generic
+Appearance	Default
+
+Bounding Box
+	Length 	 6.314 mm
+	Width 	 6.65 mm
+	Height 	 6.255 mm
+Center of Mass	-9.315 mm, -32.689 mm, -56.164 mm
+
+Moment of Inertia at Center of Mass   (g mm^2)
+	Ixx = 0.193
+	Ixy = -0.01
+	Ixz = -0.041
+	Iyx = -0.01
+	Iyy = 0.143
+	Iyz = 0.008
+	Izx = -0.041
+	Izy = 0.008
+	Izz = 0.174
+
+Moment of Inertia at Origin   (g mm^2)
+	Ixx = 183.866
+	Ixy = -13.254
+	Ixz = -22.796
+	Iyx = -13.254
+	Iyy = 141.116
+	Iyz = -79.844
+	Izx = -22.796
+	Izy = -79.844
+	Izz = 50.423

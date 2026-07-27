@@ -49,6 +49,122 @@ def get_rotation_z(angle_rad):
     ])
 
 
+# ---------------------------------------------------------------------
+# 1.5 Physical properties -- sourced from doc/design_info.txt
+#     Fusion 360 mass-property exports ("Moment of Inertia at Center of
+#     Mass", g*mm^2) converted to SI (kg, kg*m^2). Body-local CoM offsets
+#     (`com`) are NOT derivable from design_info.txt -- it only lists
+#     assembly-global coordinates -- so the previously fitted body-local
+#     offsets are kept; only mass/inertia are refreshed from the doc.
+#     To update for a new design_info.txt revision, only this table and
+#     the MAGNET_* constants below need to change.
+# ---------------------------------------------------------------------
+G_TO_KG = 1e-3
+G_MM2_TO_KG_M2 = 1e-9  # 1 g*mm^2 = 1e-3 kg * (1e-3 m)^2
+
+
+def _inertia_tensor(ixx, iyy, izz, ixy, ixz, iyz):
+    """3x3 inertia tensor (kg*m^2) from a Fusion export (g*mm^2)."""
+    return np.array([
+        [ixx, ixy, ixz],
+        [ixy, iyy, iyz],
+        [ixz, iyz, izz],
+    ]) * G_MM2_TO_KG_M2
+
+
+# mesh name -> {mass_kg, com (body-local, m), inertia (3x3 kg*m^2 @ CoM)}
+PART_PROPERTIES = {
+    "bodyBase": dict(   # BodyFoldedSide1.stl
+        mass=0.105 * G_TO_KG,
+        com=np.array([-0.000000, -0.002067, -0.002280]),
+        inertia=_inertia_tensor(0.983, 1.030, 0.960, 0.058, -0.021, -0.037),
+    ),
+    "bodyLink": dict(   # BodyFoldedSide2.stl
+        mass=0.091 * G_TO_KG,
+        com=np.array([-0.000000, 0.002372, -0.002389]),
+        inertia=_inertia_tensor(0.971, 0.941, 0.764, 0.307, 0.137, -0.220),
+    ),
+    "bodyRigid": dict(  # Body.stl
+        mass=0.196 * G_TO_KG,
+        com=np.array([-0.000000, 0.000000, -0.002331]),
+        inertia=_inertia_tensor(2.503, 2.409, 2.658, -0.099, 0.221, -0.140),
+    ),
+    "connectorA": dict(  # SGA.stl
+        mass=0.041 * G_TO_KG,
+        inertia=_inertia_tensor(0.112, 0.160, 0.125, -0.006, -0.003, 0.026),
+    ),
+    "connectorB": dict(  # SGB.stl
+        mass=0.043 * G_TO_KG,
+        inertia=_inertia_tensor(0.193, 0.143, 0.174, -0.010, -0.041, 0.008),
+    ),
+    "connectorC": dict(  # SGX.stl
+        mass=0.067 * G_TO_KG,
+        inertia=_inertia_tensor(0.283, 0.223, 0.260, -0.012, -0.049, 0.009),
+    ),
+}
+
+# Body-local mounting offset (m) of a connector's own CoM along its local
+# Z axis, before the magnet is added. Connector meshes A/B/C are
+# similarly-sized magnetic-mate plugs at the same mounting transform, so
+# the offset depends on which site/parent they're welded to, not on which
+# mesh -- mass and inertia (which do vary by mesh) come from PART_PROPERTIES.
+CONNECTOR_MOUNT_OFFSET_Z = {
+    "site1": 0.001027,         # connector1 site (fold's bodyLink & rigid's bodyRigid)
+    "site23_fold": 0.001102,   # connector2/3 sites on a foldable module's bodyBase
+    "site23_rigid": 0.001471,  # connector2/3 sites on a non-foldable module's bodyRigid
+}
+
+# 2x2 mm cylindrical N42SH neodymium magnet, embedded at the center of
+# each connector site, axis along the connector's local Z (design_info.txt).
+MAGNET_MASS = 0.0471 * G_TO_KG           # kg
+MAGNET_RADIUS = 0.001                    # m
+MAGNET_HEIGHT = 0.002                    # m
+MAGNET_LOCAL_POS = np.array([0.0, 0.0, 0.0009])  # site-local, m
+MAGNET_INERTIA = np.diag([
+    (MAGNET_MASS / 12.0) * (3 * MAGNET_RADIUS ** 2 + MAGNET_HEIGHT ** 2),
+    (MAGNET_MASS / 12.0) * (3 * MAGNET_RADIUS ** 2 + MAGNET_HEIGHT ** 2),
+    0.5 * MAGNET_MASS * MAGNET_RADIUS ** 2,
+])
+
+
+def _combine_rigid_bodies(m1, com1, I1, m2, com2, I2):
+    """Merge two (mass, CoM, inertia-about-CoM) rigid parts into one,
+    via the generalized parallel-axis (Huygens-Steiner) theorem."""
+    m = m1 + m2
+    com = (m1 * com1 + m2 * com2) / m
+
+    def shifted(I, mi, ci):
+        d = ci - com
+        return I + mi * (np.dot(d, d) * np.eye(3) - np.outer(d, d))
+
+    return m, com, shifted(I1, m1, com1) + shifted(I2, m2, com2)
+
+
+def _inertial_xml(mass, com, inertia):
+    ixx, iyy, izz = inertia[0, 0], inertia[1, 1], inertia[2, 2]
+    ixy, ixz, iyz = inertia[0, 1], inertia[0, 2], inertia[1, 2]
+    return (f'<inertial pos="{com[0]:.6f} {com[1]:.6f} {com[2]:.6f}" '
+            f'mass="{mass:.8f}" '
+            f'fullinertia="{ixx:.6e} {iyy:.6e} {izz:.6e} {ixy:.6e} {ixz:.6e} {iyz:.6e}"/>')
+
+
+def body_inertial(part_name):
+    """<inertial> for a bare structural body (no embedded magnet)."""
+    part = PART_PROPERTIES[part_name]
+    return _inertial_xml(part["mass"], part["com"], part["inertia"])
+
+
+def connector_inertial(mesh_name, mount_site):
+    """<inertial> for a connector body = its mesh (A/B/C) + embedded magnet."""
+    part = PART_PROPERTIES[mesh_name]
+    com1 = np.array([0.0, 0.0, CONNECTOR_MOUNT_OFFSET_Z[mount_site]])
+    mass, com, inertia = _combine_rigid_bodies(
+        part["mass"], com1, part["inertia"],
+        MAGNET_MASS, MAGNET_LOCAL_POS, MAGNET_INERTIA,
+    )
+    return _inertial_xml(mass, com, inertia)
+
+
 def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
                     weld_solref="0.01 1", weld_solimp="0.99 0.999 0.0001"):
     with open(graph_json_path, "r") as f:
@@ -172,29 +288,29 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
     fold_body_tpl = """
 <body name="module_{module_id}" pos="{module_pos}" quat="{module_macro_quat}">
     <freejoint name="free_module_{module_id}"/>
-    <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+    <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
     <body name="bodyBase_{module_id}" pos="0.000000000 0.000000000 0.000000000" quat="{module_quat}">
-        <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.000089" diaginertia="1.651610e-09 1.384291e-09 1.198679e-09"/>
+        {bodyBase_inertial}
         <geom name="geom_bodyBase_{module_id}" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 {trans_val}"/>
         <body name="connector2_{module_id}" pos="{connector2_pos}" quat="{connector2_quat}">
-            <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+            {connector2_inertial}
             <geom name="geom_connector2_{module_id}" type="mesh" mesh="{connector2_mesh}" rgba="0 0 0 {trans_val}"/>
-            <geom name="magnet_connector2_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+            <geom name="magnet_connector2_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
         </body>
         <body name="connector3_{module_id}" pos="{connector3_pos}" quat="{connector3_quat}">
-            <inertial pos="0.000000 0.000000 0.000989" mass="0.00008412" diaginertia="1.945031e-10 1.945031e-10 2.179927e-10"/>
+            {connector3_inertial}
             <geom name="geom_connector3_{module_id}" type="mesh" mesh="{connector3_mesh}" rgba="0.2 0.2 0.8 {trans_val}"/>
-            <geom name="magnet_connector3_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+            <geom name="magnet_connector3_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
         </body>
         <body name="bodyLink_{module_id}" pos="0 0 0" quat="1 0 0 0">
-            <inertial pos="-0.000000 0.002372 -0.002389" mass="0.000078" diaginertia="1.262893e-09 1.530211e-09 1.260111e-09"/>
+            {bodyLink_inertial}
             <joint name="joint_{module_id}" type="hinge" axis="1 0 0" pos="0 0.001 {joint_z}" range="{joint_range}" limited="true" armature="1e-04" damping="0"/>
             <geom name="joint_marker_bodyLink_{module_id}" type="cylinder" size="0.0002 0.008" pos="0 0.001 {joint_z}" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
             <geom name="geom_bodyLink_{module_id}" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 {trans_val}"/>
             <body name="connector1_{module_id}" pos="{connector1_pos}" quat="{connector1_quat}">
-                <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
+                {connector1_inertial}
                 <geom name="geom_connector1_{module_id}" type="mesh" mesh="{connector1_mesh}" rgba="1 1 1 {trans_val}"/>
-                <geom name="magnet_connector1_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+                <geom name="magnet_connector1_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
             </body>
         </body>
     </body>
@@ -204,24 +320,24 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
     rigid_body_tpl = """
 <body name="module_{module_id}" pos="{module_pos}" quat="{module_macro_quat}">
     <freejoint name="free_module_{module_id}"/>
-    <inertial pos="0 0 0" mass="1e-05" diaginertia="1e-08 1e-08 1e-08"/>
+    <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
     <body name="bodyRigid_{module_id}" pos="0.000000000 0.000000000 0.000000000" quat="{module_quat}">
-        <inertial pos="-0.000000 0.000000 -0.002331" mass="0.000167" diaginertia="2.914502e-09 2.914502e-09 2.458790e-09"/>
+        {bodyRigid_inertial}
         <geom name="geom_bodyRigid_{module_id}" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 {trans_val}"/>
         <body name="connector1_{module_id}" pos="{connector1_pos}" quat="{connector1_quat}">
-            <inertial pos="0.000000 0.000000 0.000954" mass="0.00008212" diaginertia="1.593397e-10 1.593330e-10 1.730071e-10"/>
+            {connector1_inertial}
             <geom name="geom_connector1_{module_id}" type="mesh" mesh="{connector1_mesh}" rgba="1 1 1 {trans_val}"/>
-            <geom name="magnet_connector1_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+            <geom name="magnet_connector1_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
         </body>
         <body name="connector2_{module_id}" pos="{connector2_pos}" quat="{connector2_quat}">
-            <inertial pos="0.000000 0.000000 0.001213" mass="0.00010412" diaginertia="3.492157e-10 3.492157e-10 3.003616e-10"/>
+            {connector2_inertial}
             <geom name="geom_connector2_{module_id}" type="mesh" mesh="{connector2_mesh}" rgba="0 0 0 {trans_val}"/>
-            <geom name="magnet_connector2_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+            <geom name="magnet_connector2_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
         </body>
         <body name="connector3_{module_id}" pos="{connector3_pos}" quat="{connector3_quat}">
-            <inertial pos="0.000000 0.000000 0.001213" mass="0.00010412" diaginertia="3.492157e-10 3.492157e-10 3.003616e-10"/>
+            {connector3_inertial}
             <geom name="geom_connector3_{module_id}" type="mesh" mesh="{connector3_mesh}" rgba="0.2 0.2 0.8 {trans_val}"/>
-            <geom name="magnet_connector3_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009"/>
+            <geom name="magnet_connector3_{module_id}" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
         </body>
     </body>
 </body>
@@ -280,14 +396,23 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         module_pos = " ".join(f"{x:.9f}" for x in g_pos)
         module_macro_quat = " ".join(f"{x:.9f}" for x in matrix_to_quaternion(g_R))
 
-        tpl = rigid_body_tpl if m_type == "non-foldable" else fold_body_tpl
+        is_rigid = m_type == "non-foldable"
+        site23 = "site23_rigid" if is_rigid else "site23_fold"
+
+        tpl = rigid_body_tpl if is_rigid else fold_body_tpl
         body_xml = tpl.format(
             module_id=num_id, module_pos=module_pos, module_macro_quat=module_macro_quat,
             module_quat=m_quat,
             connector1_pos=c1_pos, connector1_quat=c1_quat, connector1_mesh=c1_mesh,
             connector2_pos=c2_pos, connector2_quat=c2_quat, connector2_mesh=c2_mesh,
             connector3_pos=c3_pos, connector3_quat=c3_quat, connector3_mesh=c3_mesh,
-            trans_val=TRANSPARENCY, joint_z=joint_z, joint_range=joint_range
+            trans_val=TRANSPARENCY, joint_z=joint_z, joint_range=joint_range,
+            bodyBase_inertial=body_inertial("bodyBase"),
+            bodyLink_inertial=body_inertial("bodyLink"),
+            bodyRigid_inertial=body_inertial("bodyRigid"),
+            connector1_inertial=connector_inertial(c1_mesh, "site1"),
+            connector2_inertial=connector_inertial(c2_mesh, site23),
+            connector3_inertial=connector_inertial(c3_mesh, site23),
         )
         return ET.fromstring(body_xml)
 

@@ -24,7 +24,7 @@ B_INTENSITY = 0.01  # 10 mT
 # 6.5 x 10^-3 Am^2 - 2mm x 2mm neodymium magnet cylinder (N42SH)
 M_MOMENT = 6.5e-3
 # Maximum torque multiplier
-TORQUE_MULTIPLIER = 1.0
+TORQUE_MULTIPLIER = 10
 # Time taken to reach full torque
 TORQUE_RAMP_TIME = 10  # seconds
 FREQUENCY = 6.25  # Hz
@@ -47,33 +47,22 @@ def magnetic_field_callback(model, data):
     effective_torque_multiplier = TORQUE_MULTIPLIER * ramp_factor
 
 
-    # The magnetic field is controlled to roll forward to -50◦in 0.9 s,
-    # and then backward to 50◦in 0.1 s, allowing the robot to
-    # slowly tilt down and quickly tilt up to perform the stick-slip motion
-
-
-    # Oscillating magnetic field settings
+    # Oscillating magnetic field along Z-axis (vertical) to induce walking motion.
+    # It flips sign along a single fixed vertical axis at frequency f:
+    #   Phase 1 (B = -z): torque pitches the robot forward about its front foot.
+    #   Phase 2/3 (B = +z): torque lifts the front foot, robot rotates about its
+    #   COM and lands back on its rear foot.
+    # Half-period = 1/(2f) per the paper's t1 = 1/(2f).
     total_cycle_time = 1.0 / FREQUENCY
+    half_cycle_time = total_cycle_time / 2.0
     time_in_cycle = data.time % total_cycle_time
 
-    # 90% slow phase, 10% fast phase
-    t_slow = 0.9 * total_cycle_time
+    b_z = -B_INTENSITY if time_in_cycle < half_cycle_time else B_INTENSITY
 
-    if time_in_cycle < t_slow:
-        # Phase 1: Slow sweep (0% to 90% of cycle)
-        alpha = time_in_cycle / t_slow
-        # Tilted backward (+50 deg) to forward (-50 deg)
-        theta = np.radians(50.0 - (100.0 * alpha))
-    else:
-        # Phase 2: Fast snap-back (90% to 100% of cycle)
-        alpha = (time_in_cycle - t_slow) / (total_cycle_time - t_slow)
-        # Tilted forward (-50 deg) back to backward (+50 deg)
-        theta = np.radians(-50.0 + (100.0 * alpha))
+    # Magnetic field along Z only
+    b_vector = np.array([0.0, 0.0, b_z])
 
-    # Magnetic field in XZ plane
-    b_vector = np.array([np.cos(theta), 0.0, np.sin(theta)]) * B_INTENSITY
-
-    step_total_torque = np.zeros(3)
+    step_total_torque = 0.0
 
     # Apply magnetic torque
     for parent_body_id, magnet_list in parent_body_magnet_map.items():
@@ -158,6 +147,83 @@ def set_angle_to_joint(model, data, target_angle_deg):
             )
 
 
+# Gravity, world frame (m/s^2). Must match <option gravity="..."/> in the
+# model (MuJoCo's default, unset in assembly.xml).
+GRAVITY_WORLD = np.array([0.0, 0.0, -9.81])
+
+# Rangefinder reading (m) below which a wall is considered "reached".
+WALL_STOP_DISTANCE = 200  # 200 mm
+
+
+class ImuOdometry:
+    """Dead-reckons horizontal velocity/distance from the on-body IMU
+    (accelerometer + gyro), the way a real bare IMU would - no ground-truth
+    position/velocity is read from the physics engine.
+
+    This will drift: gyro-integrated orientation and double-integrated
+    acceleration both accumulate discretization error every step, same as
+    on real hardware. That's expected, not a bug.
+    """
+
+    def __init__(self, model, data):
+        # Calibrate the initial orientation once at startup (equivalent to
+        # leveling/zeroing a real IMU before the run starts). Everything
+        # after this point is dead-reckoned from gyro/accelerometer only.
+        body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "bodyRigid_1")
+        self.quat = data.xquat[body_id].copy()
+        self.vel_world = np.zeros(3)
+        self.distance = 0.0
+
+    def step(self, model, data, dt):
+        gyro = data.sensor("imu_gyro").data
+        accel_local = data.sensor("imu_accel").data
+
+        # Orientation: integrate body-frame angular velocity.
+        mujoco.mju_quatIntegrate(self.quat, gyro, dt)
+
+        # Accelerometer reads specific force (true accel - gravity), so
+        # true world-frame accel = R(quat) @ accel_local + gravity.
+        accel_world = np.zeros(3)
+        mujoco.mju_rotVecQuat(accel_world, accel_local, self.quat)
+        accel_world += GRAVITY_WORLD
+
+        self.vel_world += accel_world * dt
+        # Horizontal speed only (ignore vertical bouncing from the gait).
+        self.distance += np.linalg.norm(self.vel_world[:2]) * dt
+
+    @property
+    def horizontal_speed(self):
+        return np.linalg.norm(self.vel_world[:2])
+
+
+# Wall geoms are tagged group=1 in the model (see xml_gen_v2.py) so this
+# raycast can be filtered to see ONLY them.
+_WALL_GEOMGROUP = np.zeros(6, dtype=np.uint8)
+_WALL_GEOMGROUP[1] = 1
+
+
+def distance_to_nearest_wall(model, data):
+    """Minimum of the 4 wall-facing rangefinder rays (m), or None if none of
+    them currently hit a wall.
+
+    Uses a manual, geom-group-filtered mj_ray() rather than a native
+    <rangefinder> sensor: the native sensor only excludes the ray site's own
+    body, so as module_1 pitches through the flip gait it would "see" the
+    floor or a neighboring welded module (only ~8mm away) as a hit. Filtering
+    to geom group 1 (the walls only) makes those false positives impossible.
+    """
+    geomid = np.zeros(1, dtype=np.int32)
+    readings = []
+    for wall_dir in ("north", "south", "east", "west"):
+        site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, f"rf_{wall_dir}")
+        pnt = data.site_xpos[site_id]
+        vec = data.site_xmat[site_id].reshape(3, 3)[:, 2]
+        dist = mujoco.mj_ray(model, data, pnt, vec, _WALL_GEOMGROUP, True, -1, geomid)
+        if dist >= 0:
+            readings.append(dist)
+    return min(readings) if readings else None
+
+
 def dynamic_text_rendering(viewer, data, module_labels):
     """
     Dynamically renders text labels for each module body in the simulation.
@@ -192,7 +258,7 @@ def dynamic_text_rendering(viewer, data, module_labels):
         viewer.user_scn.ngeom += 1
 
 
-def save_simulation_stats(model, module_labels, filename="simulation_stats.json"):
+def save_simulation_stats(model, avg_velocity, total_distance, module_labels, filename="simulation_stats.json"):
     """Calculates masses and average torque, then saves to a JSON file."""
     # Total mass of the whole model
     total_mass = float(mujoco.mj_getTotalmass(model))
@@ -212,9 +278,11 @@ def save_simulation_stats(model, module_labels, filename="simulation_stats.json"
 
     stats = {
         "total_mass_mg": round(total_mass * 1e6, 4),  # Convert to milligrams
-        "module_masses": module_masses,
-        "average_torque_Nm": round(avg_torque, 6),  # Convert to Newton-meters
+        "module_masses_mg": module_masses,
+        "average_torque_Nm": round(avg_torque, 4),  # Convert to Newton-meters
         "total_simulated_steps": len(torque_history),
+        "average_velocity_mmps": round(avg_velocity * 1000, 4),
+        "total_distance_mm": round(total_distance * 1000, 4),
     }
 
     with open(filename, "w", encoding="utf-8") as f:
@@ -222,9 +290,10 @@ def save_simulation_stats(model, module_labels, filename="simulation_stats.json"
 
     print(f"\nSaved simulation statistics to '{filename}':")
     print(f" - Total Mass: {total_mass * 1e6:.2f} mg")
-    print(f" - Average Torque: {avg_torque:.6e} N·m")
-    print(f" - Last Torque: {torque_history[-1]:.6e} N·m")
-
+    print(f" - Average Torque: {avg_torque:.2e} N·m")
+    print(f" - Last Torque: {torque_history[-1]:.2e} N·m")
+    print(f" - Average velocity: {avg_velocity * 1000:.2f} mm/s")
+    print(f" - Total Distance: {total_distance * 1000:.2f} mm")
 
 def main():
     """Load the MuJoCo model, initialize magnets, and run the simulation."""
@@ -250,40 +319,78 @@ def main():
     # Register callback
     mujoco.set_mjcb_control(magnetic_field_callback)
 
+    dt = model.opt.timestep
+
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        viewer.cam.distance = 0.5  # zoom
+        viewer.cam.distance = 0.25  # zoom
         viewer.cam.lookat[:] = [0, 0, 0]
         last_print = -1
+        last_print_time = 0.0
+        last_print_distance = 0.0
+        avg_velocity = 0.0
+        imu = ImuOdometry(model, data)
+        magnets_active = True
 
         while viewer.is_running():
             step_start = time.time()
             set_angle_to_joint(model, data, target_angle_deg=45)
 
             mujoco.mj_step(model, data)
+            imu.step(model, data, dt)
+
+            # Stop actuating once the assembly gets close to a wall, judged
+            # from the on-body rangefinders (not a ground-truth position
+            # check) - mirrors a real obstacle-avoidance cutoff.
+            if magnets_active:
+                wall_dist = distance_to_nearest_wall(model, data)
+                if wall_dist is not None:
+                    wall_dist *= 1000  # Convert to mm
+                if wall_dist is not None and wall_dist < WALL_STOP_DISTANCE:
+                    mujoco.set_mjcb_control(None)
+                    # xfrc_applied is a persistent array, not reset by
+                    # unregistering the callback - without this the last
+                    # applied torque would keep acting on every future step.
+                    data.xfrc_applied.fill(0)
+                    magnets_active = False
+                    print(f"Time: {data.time:.2f}s | Wall reached ({wall_dist} mm) - magnetic field stopped.")
 
             # Render dynamic text labels for each module
             #dynamic_text_rendering(viewer, data, module_labels)
 
             viewer.sync()
 
-            # Print torque ramp progress every second
+            # Print torque ramp progress and body velocity every second
             current_second = int(data.time)
-            if current_second != last_print:
+            if current_second != last_print and magnets_active :
                 last_print = current_second
                 ramp = min(data.time / TORQUE_RAMP_TIME, 1.0)
                 if ramp < 1.0:
                     print(
                         f"Time: {data.time:.2f}s | Torque ramp: {int(ramp*100)}%"
                     )
+                else:
+                    # Average velocity over the interval smooths out the
+                    # flip-and-land gait's within-cycle velocity spikes,
+                    # unlike the instantaneous sample which lands at a
+                    # different, arbitrary phase of the gait each second.
+                    elapsed = data.time - last_print_time
+                    avg_velocity = (imu.distance - last_print_distance) / elapsed
+                    last_print_time = data.time
+                    last_print_distance = imu.distance
+                    print(
+                        f"Velocity: {imu.horizontal_speed * 1000:.2f} mm/s (instant) | "
+                        f"{avg_velocity * 1000:.2f} mm/s (avg over last {elapsed:.2f}s) | "
+                        f"Distance travelled: {imu.distance * 1000:.2f} mm"
+                    )
 
-            # Maintain real-time speed
-            time_until_next_step = model.opt.timestep - (time.time() - step_start)
+            # Maintain real-time velocity
+            time_until_next_step = dt - (time.time() - step_start)
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
 
     # Unregister callback and save JSON data on exit
     mujoco.set_mjcb_control(None)
-    save_simulation_stats(model, module_labels, filename="../output/simulation_stats.json")
+    save_simulation_stats(model, avg_velocity, imu.distance, module_labels, filename="../output/simulation_stats.json")
 
 
 if __name__ == "__main__":

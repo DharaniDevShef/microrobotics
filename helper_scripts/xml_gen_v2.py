@@ -305,7 +305,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         <body name="bodyLink_{module_id}" pos="0 0 0" quat="1 0 0 0">
             {bodyLink_inertial}
             <joint name="joint_{module_id}" type="hinge" axis="1 0 0" pos="0 0.001 {joint_z}" range="{joint_range}" limited="true" armature="1e-04" damping="0"/>
-            <geom name="joint_marker_bodyLink_{module_id}" type="cylinder" size="0.0002 0.008" pos="0 0.001 {joint_z}" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/>
+            <!-- <geom name="joint_marker_bodyLink_{module_id}" type="cylinder" size="0.0002 0.008" pos="0 0.001 {joint_z}" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/> -->
             <geom name="geom_bodyLink_{module_id}" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 {trans_val}"/>
             <body name="connector1_{module_id}" pos="{connector1_pos}" quat="{connector1_quat}">
                 {connector1_inertial}
@@ -365,6 +365,14 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 1" dir="0 0 -1"/>
         <geom name="glass_floor" type="plane" size="1 1 0.1" material="glass"
             friction="0.4 0.005 0.0001" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1" condim="3"/>
+        <!-- Floor Boundaries / Perimeter Walls -->
+        <!-- group="1": lets the wall-rangefinder raycast (mj_ray with
+             geomgroup filtering, see roblet_simulator.py) see ONLY these 4
+             geoms, ignoring the floor and the robot's own nearby modules. -->
+        <geom name="wall_north" type="box" pos="0 1.0 0.1" size="1.05 0.02 0.1" group="1"/>
+        <geom name="wall_south" type="box" pos="0 -1.0 0.1" size="1.05 0.02 0.1" group="1"/>
+        <geom name="wall_east"  type="box" pos="1.0 0 0.1" size="0.02 1.05 0.1" group="1"/>
+        <geom name="wall_west"  type="box" pos="-1.0 0 0.1" size="0.02 1.05 0.1" group="1"/>
     </worldbody>
 </mujoco>
 """
@@ -414,7 +422,25 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
             connector2_inertial=connector_inertial(c2_mesh, site23),
             connector3_inertial=connector_inertial(c3_mesh, site23),
         )
-        return ET.fromstring(body_xml)
+        elem = ET.fromstring(body_xml)
+
+        # module_1 doubles as the control/sensor module: mount the IMU
+        # (accelerometer + gyro) and 4 wall-facing rangefinders on it.
+        # Rangefinders cast along their site's local +Z axis, so each site's
+        # quat rotates +Z to point at the wall it's named after.
+        if num_id == "1":
+            main_body = elem.find(f"body[@name='bodyRigid_{num_id}']")
+            ET.SubElement(main_body, "site", name="imu_site", pos="0 0 0.001", quat="1 0 0 0")
+            ET.SubElement(main_body, "site", name="rf_east", pos="0 0 0.001",
+                          quat="0.70710678 0 0.70710678 0")
+            ET.SubElement(main_body, "site", name="rf_west", pos="0 0 0.001",
+                          quat="0.70710678 0 -0.70710678 0")
+            ET.SubElement(main_body, "site", name="rf_north", pos="0 0 0.001",
+                          quat="0.70710678 -0.70710678 0 0")
+            ET.SubElement(main_body, "site", name="rf_south", pos="0 0 0.001",
+                          quat="0.70710678 0.70710678 0 0")
+
+        return elem
 
     root = ET.fromstring(base_xml_skeleton)
     worldbody = root.find("worldbody")
@@ -503,6 +529,20 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
                 ctrllimited="true",
                 dampratio="1"
             )
+
+    # -------------------------------------------------------------
+    # 9. Sensors: IMU (accelerometer + gyro), mounted on module_1's imu_site
+    #    (see build_module_element above). The 4 rf_* sites are also defined
+    #    there, but wall distance is computed via a manual, group-filtered
+    #    mj_ray() call in roblet_simulator.py rather than a native
+    #    <rangefinder> sensor -- the native sensor only excludes the site's
+    #    own body from the raycast, so as the module pitches through the
+    #    flip gait it would "see" the floor and neighboring welded modules
+    #    (only ~8mm away) as if they were the wall.
+    # -------------------------------------------------------------
+    sensor_elem = ET.SubElement(root, "sensor")
+    ET.SubElement(sensor_elem, "accelerometer", name="imu_accel", site="imu_site")
+    ET.SubElement(sensor_elem, "gyro", name="imu_gyro", site="imu_site")
 
     xml_str = ET.tostring(root, encoding="utf-8")
     pretty_xml = minidom.parseString(xml_str).toprettyxml(indent="    ")

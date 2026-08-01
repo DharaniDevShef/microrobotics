@@ -8,26 +8,16 @@ def load_graph_json(graph_json_path):
     with open(graph_json_path, "r", encoding="utf-8") as handle:
         data = json.load(handle)
 
-    G = nx.DiGraph()
-    for node in data["nodes"]:
-        node_id = node["id"].split("_")[-1]  # Extract numeric part (e.g., "1")
-        G.add_node(
-            node_id,
-            module_type=node["module_type"],
-            hinge_angle=node["hinge_angle"],
-            pos=node.get("_pos", (0.0, 0.0))
+    # nx.node_link_graph carries every node/edge attribute through verbatim
+    # (module_type, _pos, connectors, depth, parent, type_id, ...), so this
+    # stays in sync automatically as the schema gains fields for GNN/graph
+    # transformer/pymoo use, instead of hand-listing keys here.
+    G = nx.node_link_graph(data, edges="edges")
+    if not G.is_directed():
+        raise ValueError(
+            f"{graph_json_path} is an undirected graph; re-save it with the "
+            "updated Pattern Generator to get module_1-rooted hierarchy edges."
         )
-
-    for edge in data["edges"]:
-        source_id = str(edge["source"]).split("_")[-1]
-        target_id = str(edge["target"]).split("_")[-1]
-        G.add_edge(
-            source_id,
-            target_id,
-            connector1=edge["connector1"],
-            connector2=edge["connector2"]
-        )
-
     return G
 
 
@@ -35,7 +25,7 @@ def draw_graph_to_figure(graph_or_data, figure=None, title="Roblet Morphology Gr
     if isinstance(graph_or_data, str):
         G = load_graph_json(graph_or_data)
     elif isinstance(graph_or_data, dict):
-        G = nx.node_link_graph(graph_or_data)
+        G = nx.node_link_graph(graph_or_data, edges="edges")
     else:
         G = graph_or_data.copy()
 
@@ -139,4 +129,4 @@ def show_graph(graph_json_path):
 
 
 if __name__ == "__main__":
-    show_graph("../graphs/star.json")
+    show_graph("../graphs/assembly_graph.json")

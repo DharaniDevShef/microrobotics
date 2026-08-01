@@ -1,5 +1,5 @@
 {
-  "directed": false,
+  "directed": true,
   "multigraph": false,
   "graph": {},
   "nodes": [
@@ -22,6 +22,9 @@
         0,
         0
       ],
+      "depth": 0,
+      "parent": null,
+      "type_id": 0,
       "id": "module_1"
     },
     {
@@ -43,6 +46,9 @@
         1,
         0
       ],
+      "depth": 1,
+      "parent": "module_1",
+      "type_id": 1,
       "id": "module_2"
     },
     {
@@ -64,6 +70,9 @@
         0,
         0
       ],
+      "depth": 1,
+      "parent": "module_1",
+      "type_id": 1,
       "id": "module_3"
     },
     {
@@ -85,6 +94,9 @@
         0,
         1
       ],
+      "depth": 1,
+      "parent": "module_1",
+      "type_id": 1,
       "id": "module_4"
     }
   ],

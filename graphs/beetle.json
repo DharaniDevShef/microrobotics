@@ -1,5 +1,5 @@
 {
-  "directed": false,
+  "directed": true,
   "multigraph": false,
   "graph": {},
   "nodes": [
@@ -22,7 +22,34 @@
         0,
         0
       ],
+      "depth": 0,
+      "parent": null,
+      "type_id": 0,
       "id": "module_1"
+    },
+    {
+      "module_type": "non-foldable",
+      "connectors": {
+        "1": "module_6",
+        "2": "module_1",
+        "3": "module_5"
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        65.08180909440054,
+        -37.57500000000003
+      ],
+      "_angle": 390,
+      "_type": "inner",
+      "_line_states": [
+        0,
+        0,
+        0
+      ],
+      "depth": 1,
+      "parent": "module_1",
+      "type_id": 0,
+      "id": "module_2"
     },
     {
       "module_type": "valley fold",
@@ -43,6 +70,9 @@
         0,
         0
       ],
+      "depth": 1,
+      "parent": "module_1",
+      "type_id": 2,
       "id": "module_3"
     },
     {
@@ -64,154 +94,10 @@
         0,
         0
       ],
+      "depth": 1,
+      "parent": "module_1",
+      "type_id": 0,
       "id": "module_4"
-    },
-    {
-      "module_type": "non-foldable",
-      "connectors": {
-        "1": "module_4",
-        "2": "module_10",
-        "3": "module_11"
-      },
-      "hinge_angle": 0,
-      "_pos": [
-        -65.08180909440055,
-        37.57499999999999
-      ],
-      "_angle": 210,
-      "_type": "inner",
-      "_line_states": [
-        0,
-        0,
-        0
-      ],
-      "id": "module_8"
-    },
-    {
-      "module_type": "Mountain fold",
-      "connectors": {
-        "1": "module_8",
-        "2": null,
-        "3": null
-      },
-      "hinge_angle": 0,
-      "_pos": [
-        -130.1636181888011,
-        75.14999999999998
-      ],
-      "_angle": 390,
-      "_type": "outer",
-      "_line_states": [
-        1,
-        0,
-        0
-      ],
-      "id": "module_11"
-    },
-    {
-      "module_type": "non-foldable",
-      "connectors": {
-        "1": "module_8",
-        "2": "module_6",
-        "3": null
-      },
-      "hinge_angle": 0,
-      "_pos": [
-        -65.08180909440055,
-        -37.575
-      ],
-      "_angle": 270,
-      "_type": "inner",
-      "_line_states": [
-        0,
-        0,
-        0
-      ],
-      "id": "module_10"
-    },
-    {
-      "module_type": "non-foldable",
-      "connectors": {
-        "1": "module_10",
-        "2": "module_2",
-        "3": "module_9"
-      },
-      "hinge_angle": 0,
-      "_pos": [
-        -1.3804831043388536e-14,
-        -75.14999999999999
-      ],
-      "_angle": 330,
-      "_type": "inner",
-      "_line_states": [
-        0,
-        0,
-        0
-      ],
-      "id": "module_6"
-    },
-    {
-      "module_type": "Mountain fold",
-      "connectors": {
-        "1": "module_6",
-        "2": null,
-        "3": null
-      },
-      "hinge_angle": 0,
-      "_pos": [
-        -2.7609662086777072e-14,
-        -150.29999999999998
-      ],
-      "_angle": 510,
-      "_type": "outer",
-      "_line_states": [
-        1,
-        0,
-        0
-      ],
-      "id": "module_9"
-    },
-    {
-      "module_type": "non-foldable",
-      "connectors": {
-        "1": "module_6",
-        "2": "module_1",
-        "3": "module_5"
-      },
-      "hinge_angle": 0,
-      "_pos": [
-        65.08180909440054,
-        -37.57500000000003
-      ],
-      "_angle": 390,
-      "_type": "inner",
-      "_line_states": [
-        0,
-        0,
-        0
-      ],
-      "id": "module_2"
-    },
-    {
-      "module_type": "Mountain fold",
-      "connectors": {
-        "1": "module_4",
-        "2": null,
-        "3": null
-      },
-      "hinge_angle": 0,
-      "_pos": [
-        9.203220695592358e-15,
-        150.29999999999998
-      ],
-      "_angle": 330,
-      "_type": "outer",
-      "_line_states": [
-        1,
-        0,
-        0
-      ],
-      "id": "module_7"
     },
     {
       "module_type": "Mountain fold",
@@ -232,7 +118,154 @@
         0,
         0
       ],
+      "depth": 2,
+      "parent": "module_2",
+      "type_id": 1,
       "id": "module_5"
+    },
+    {
+      "module_type": "non-foldable",
+      "connectors": {
+        "1": "module_9",
+        "2": "module_2",
+        "3": "module_10"
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        -1.3804831043388536e-14,
+        -75.14999999999999
+      ],
+      "_angle": 330,
+      "_type": "inner",
+      "_line_states": [
+        0,
+        0,
+        0
+      ],
+      "depth": 2,
+      "parent": "module_2",
+      "type_id": 0,
+      "id": "module_6"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": "module_4",
+        "2": null,
+        "3": null
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        9.203220695592358e-15,
+        150.29999999999998
+      ],
+      "_angle": 330,
+      "_type": "outer",
+      "_line_states": [
+        1,
+        0,
+        0
+      ],
+      "depth": 2,
+      "parent": "module_4",
+      "type_id": 1,
+      "id": "module_7"
+    },
+    {
+      "module_type": "non-foldable",
+      "connectors": {
+        "1": "module_4",
+        "2": "module_9",
+        "3": "module_11"
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        -65.08180909440055,
+        37.57499999999999
+      ],
+      "_angle": 210,
+      "_type": "inner",
+      "_line_states": [
+        0,
+        0,
+        0
+      ],
+      "depth": 2,
+      "parent": "module_4",
+      "type_id": 0,
+      "id": "module_8"
+    },
+    {
+      "module_type": "non-foldable",
+      "connectors": {
+        "1": "module_8",
+        "2": "module_6",
+        "3": null
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        -65.08180909440055,
+        -37.575
+      ],
+      "_angle": 270,
+      "_type": "inner",
+      "_line_states": [
+        0,
+        0,
+        0
+      ],
+      "depth": 3,
+      "parent": "module_6",
+      "type_id": 0,
+      "id": "module_9"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": "module_6",
+        "2": null,
+        "3": null
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        -2.7609662086777072e-14,
+        -150.29999999999998
+      ],
+      "_angle": 510,
+      "_type": "outer",
+      "_line_states": [
+        1,
+        0,
+        0
+      ],
+      "depth": 3,
+      "parent": "module_6",
+      "type_id": 1,
+      "id": "module_10"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": "module_8",
+        "2": null,
+        "3": null
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        -130.1636181888011,
+        75.14999999999998
+      ],
+      "_angle": 390,
+      "_type": "outer",
+      "_line_states": [
+        1,
+        0,
+        0
+      ],
+      "depth": 3,
+      "parent": "module_8",
+      "type_id": 1,
+      "id": "module_11"
     }
   ],
   "edges": [
@@ -255,6 +288,18 @@
       "target": "module_2"
     },
     {
+      "connector1": 1,
+      "connector2": 2,
+      "source": "module_2",
+      "target": "module_6"
+    },
+    {
+      "connector1": 3,
+      "connector2": 1,
+      "source": "module_2",
+      "target": "module_5"
+    },
+    {
       "connector1": 2,
       "connector2": 1,
       "source": "module_4",
@@ -267,6 +312,18 @@
       "target": "module_7"
     },
     {
+      "connector1": 1,
+      "connector2": 2,
+      "source": "module_6",
+      "target": "module_9"
+    },
+    {
+      "connector1": 3,
+      "connector2": 1,
+      "source": "module_6",
+      "target": "module_10"
+    },
+    {
       "connector1": 3,
       "connector2": 1,
       "source": "module_8",
@@ -276,31 +333,7 @@
       "connector1": 2,
       "connector2": 1,
       "source": "module_8",
-      "target": "module_10"
-    },
-    {
-      "connector1": 2,
-      "connector2": 1,
-      "source": "module_10",
-      "target": "module_6"
-    },
-    {
-      "connector1": 3,
-      "connector2": 1,
-      "source": "module_6",
       "target": "module_9"
-    },
-    {
-      "connector1": 2,
-      "connector2": 1,
-      "source": "module_6",
-      "target": "module_2"
-    },
-    {
-      "connector1": 3,
-      "connector2": 1,
-      "source": "module_2",
-      "target": "module_5"
     }
   ]
 }

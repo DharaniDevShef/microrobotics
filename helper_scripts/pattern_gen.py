@@ -101,8 +101,23 @@ class AssemblyGrid(QWidget):
     # =====================================================
     # NetworkX Integration (Save / Load Core with BFS Renaming)
     # =====================================================
-    def get_networkx_graph(self) -> nx.Graph:
-        """Constructs a clean, simplified NetworkX Graph with tree-sorted naming."""
+
+    # Numeric encoding of module_type, kept alongside the human-readable
+    # string so the saved JSON can be fed straight into ML tooling
+    # (torch_geometric.utils.from_networkx, DGL, pymoo decision vectors, ...)
+    # without a separate string->id lookup step.
+    MODULE_TYPE_IDS = {"non-foldable": 0, "Mountain fold": 1, "valley fold": 2}
+
+    def get_networkx_graph(self) -> nx.DiGraph:
+        """Constructs a directed NetworkX DiGraph with tree-sorted naming.
+
+        Edges are oriented outward from module_1 (BFS parent -> child), so
+        the saved graph is a rooted hierarchy rather than an arbitrary
+        undirected mating map. Every non-root node also carries explicit
+        `parent`/`depth` attributes describing that same hierarchy, which
+        downstream consumers (GNNs, graph transformers, pymoo encodings)
+        can use directly instead of re-deriving it via BFS.
+        """
         raw_G = nx.Graph()
         
         # 1. Add active modules as temporary nodes
@@ -170,15 +185,22 @@ class AssemblyGrid(QWidget):
                         raw_G.nodes[u]["connectors"][connector_u] = v
                         raw_G.nodes[v]["connectors"][connector_v] = u
 
-        # 3. Perform BFS traversal from module_1 to rename modules sequentially based on tree distance
+        # 3. Perform BFS traversal from module_1 to rename modules sequentially
+        # based on tree distance, and simultaneously record each node's
+        # hierarchy depth/parent -- this same BFS order also fixes the
+        # direction of every edge in the final directed graph (step 4).
         ordered_nodes = []
+        depth = {}
+        parent = {}
         visited = set()
-        
+
         # Start BFS from the base root node
         start_node = "module_1"
         if start_node in raw_G:
             queue = collections.deque([start_node])
             visited.add(start_node)
+            depth[start_node] = 0
+            parent[start_node] = None
             while queue:
                 curr = queue.popleft()
                 ordered_nodes.append(curr)
@@ -187,35 +209,61 @@ class AssemblyGrid(QWidget):
                 for n in neighbors:
                     if n not in visited:
                         visited.add(n)
+                        depth[n] = depth[curr] + 1
+                        parent[n] = curr
                         queue.append(n)
-                        
-        # Append any remaining disconnected nodes (if any exist)
+
+        # Any remaining disconnected nodes become additional hierarchy roots
         for node in raw_G.nodes():
             if node not in visited:
+                depth[node] = 0
+                parent[node] = None
                 ordered_nodes.append(node)
-                
+                visited.add(node)
+
         # Build systematic rename map starting from module_1
-        mapping = {old_name: f"module_{idx+1}" for idx, old_name in enumerate(ordered_nodes)}
-        
-        # Relabel graph nodes
-        G = nx.relabel_nodes(raw_G, mapping)
-        
-        # Re-key nested internal connector references to align with new names
-        for node in G.nodes():
-            conns = G.nodes[node]["connectors"]
-            updated_conns = {c_idx: (mapping[nbr] if nbr in mapping else nbr) for c_idx, nbr in conns.items()}
-            G.nodes[node]["connectors"] = updated_conns
+        mapping = {old_name: f"module_{idx + 1}" for idx, old_name in enumerate(ordered_nodes)}
+        # BFS visit order, keyed by the *original* node name -- used below to
+        # decide which end of a mating edge is upstream (closer to module_1).
+        order_index = {old_name: idx for idx, old_name in enumerate(ordered_nodes)}
+
+        # 4. Build the final directed graph. Every node gets renamed and
+        # annotated with its hierarchy position; every mating edge points
+        # from whichever endpoint the module_1 BFS reached first to the one
+        # it reached later, so tree edges become parent->child and any
+        # ring-closing edges still point consistently "outward".
+        G = nx.DiGraph()
+        for old_name in ordered_nodes:
+            new_name = mapping[old_name]
+            attrs = dict(raw_G.nodes[old_name])
+            conns = attrs.get("connectors", {})
+            attrs["connectors"] = {
+                c_idx: (mapping[nbr] if nbr in mapping else nbr) for c_idx, nbr in conns.items()
+            }
+            attrs["depth"] = depth[old_name]
+            attrs["parent"] = mapping[parent[old_name]] if parent[old_name] is not None else None
+            attrs["type_id"] = self.MODULE_TYPE_IDS.get(attrs.get("module_type"), 0)
+            G.add_node(new_name, **attrs)
+
+        for u, v, edata in raw_G.edges(data=True):
+            if order_index[u] < order_index[v]:
+                src, dst = u, v
+                conn_src, conn_dst = edata["connector1"], edata["connector2"]
+            else:
+                src, dst = v, u
+                conn_src, conn_dst = edata["connector2"], edata["connector1"]
+            G.add_edge(mapping[src], mapping[dst], connector1=conn_src, connector2=conn_dst)
 
         return G
 
     def get_graph_text(self) -> str:
         G = self.get_networkx_graph()
-        data = nx.node_link_data(G)
+        data = nx.node_link_data(G, edges="edges")
         return json.dumps(data, indent=2)
 
     def load_graph_data(self, graph_data: dict):
         """Reconstructs the interactive PyQt6 canvas elements from NetworkX graph data."""
-        G = nx.node_link_graph(graph_data)
+        G = nx.node_link_graph(graph_data, edges="edges")
         self.modules.clear()
         
         for node, attrs in G.nodes(data=True):

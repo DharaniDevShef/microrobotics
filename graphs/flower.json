@@ -1,5 +1,5 @@
 {
-  "directed": false,
+  "directed": true,
   "multigraph": false,
   "graph": {},
   "nodes": [
@@ -22,70 +22,10 @@
         0,
         0
       ],
+      "depth": 0,
+      "parent": null,
+      "type_id": 0,
       "id": "module_1"
-    },
-    {
-      "module_type": "Mountain fold",
-      "connectors": {
-        "1": null,
-        "2": "module_1",
-        "3": "module_5"
-      },
-      "hinge_angle": 0,
-      "_pos": [
-        4.601610347796179e-15,
-        75.14999999999999
-      ],
-      "_angle": 150,
-      "_type": "inner",
-      "_line_states": [
-        1,
-        0,
-        0
-      ],
-      "id": "module_3"
-    },
-    {
-      "module_type": "Mountain fold",
-      "connectors": {
-        "1": null,
-        "2": "module_3",
-        "3": "module_6"
-      },
-      "hinge_angle": 0,
-      "_pos": [
-        -65.08180909440055,
-        37.57499999999999
-      ],
-      "_angle": 210,
-      "_type": "inner",
-      "_line_states": [
-        1,
-        0,
-        0
-      ],
-      "id": "module_5"
-    },
-    {
-      "module_type": "Mountain fold",
-      "connectors": {
-        "1": null,
-        "2": "module_6",
-        "3": "module_2"
-      },
-      "hinge_angle": 0,
-      "_pos": [
-        -1.3804831043388536e-14,
-        -75.14999999999999
-      ],
-      "_angle": 330,
-      "_type": "inner",
-      "_line_states": [
-        1,
-        0,
-        0
-      ],
-      "id": "module_4"
     },
     {
       "module_type": "Mountain fold",
@@ -106,7 +46,82 @@
         0,
         0
       ],
+      "depth": 1,
+      "parent": "module_1",
+      "type_id": 1,
       "id": "module_2"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": null,
+        "2": "module_1",
+        "3": "module_5"
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        4.601610347796179e-15,
+        75.14999999999999
+      ],
+      "_angle": 150,
+      "_type": "inner",
+      "_line_states": [
+        1,
+        0,
+        0
+      ],
+      "depth": 1,
+      "parent": "module_1",
+      "type_id": 1,
+      "id": "module_3"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": null,
+        "2": "module_6",
+        "3": "module_2"
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        -1.3804831043388536e-14,
+        -75.14999999999999
+      ],
+      "_angle": 330,
+      "_type": "inner",
+      "_line_states": [
+        1,
+        0,
+        0
+      ],
+      "depth": 2,
+      "parent": "module_2",
+      "type_id": 1,
+      "id": "module_4"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": null,
+        "2": "module_3",
+        "3": "module_6"
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        -65.08180909440055,
+        37.57499999999999
+      ],
+      "_angle": 210,
+      "_type": "inner",
+      "_line_states": [
+        1,
+        0,
+        0
+      ],
+      "depth": 2,
+      "parent": "module_3",
+      "type_id": 1,
+      "id": "module_5"
     },
     {
       "module_type": "valley fold",
@@ -127,6 +142,9 @@
         0,
         2
       ],
+      "depth": 3,
+      "parent": "module_4",
+      "type_id": 2,
       "id": "module_6"
     }
   ],
@@ -144,27 +162,27 @@
       "target": "module_2"
     },
     {
+      "connector1": 2,
+      "connector2": 3,
+      "source": "module_2",
+      "target": "module_4"
+    },
+    {
       "connector1": 3,
       "connector2": 2,
       "source": "module_3",
       "target": "module_5"
     },
     {
-      "connector1": 3,
-      "connector2": 2,
-      "source": "module_5",
+      "connector1": 2,
+      "connector2": 3,
+      "source": "module_4",
       "target": "module_6"
     },
     {
       "connector1": 3,
       "connector2": 2,
-      "source": "module_4",
-      "target": "module_2"
-    },
-    {
-      "connector1": 2,
-      "connector2": 3,
-      "source": "module_4",
+      "source": "module_5",
       "target": "module_6"
     }
   ]

@@ -170,13 +170,17 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
     with open(graph_json_path, "r") as f:
         data = json.load(f)
 
-    G = nx.DiGraph()
-    for node in data["nodes"]:
-        G.add_node(node["id"], module_type=node["module_type"],
-                   hinge_angle=node["hinge_angle"], pos=node.get("_pos"))
-    for edge in data["edges"]:
-        G.add_edge(edge["source"], edge["target"],
-                   connector1=edge["connector1"], connector2=edge["connector2"])
+    # nx.node_link_graph carries every node/edge attribute through verbatim
+    # (module_type, connectors, depth, parent, type_id, ...), so this stays
+    # in sync automatically as the schema gains fields for GNN/graph
+    # transformer/pymoo use, instead of hand-listing keys here.
+    G = nx.node_link_graph(data, edges="edges")
+    if not G.is_directed():
+        raise ValueError(
+            f"{graph_json_path} is an undirected graph; re-save it with the "
+            "updated Pattern Generator so edges follow the module_1 hierarchy "
+            "(needed to know which connector mesh -- A or B -- each side gets)."
+        )
 
     # -------------------------------------------------------------
     # 2. Structural Constants & Connector-Mesh Assignments

@@ -1,5 +1,5 @@
 {
-  "directed": false,
+  "directed": true,
   "multigraph": false,
   "graph": {},
   "nodes": [
@@ -22,6 +22,9 @@
         0,
         0
       ],
+      "depth": 0,
+      "parent": null,
+      "type_id": 1,
       "id": "module_1"
     },
     {
@@ -43,6 +46,9 @@
         0,
         0
       ],
+      "depth": 1,
+      "parent": "module_1",
+      "type_id": 2,
       "id": "module_2"
     },
     {
@@ -64,7 +70,34 @@
         0,
         0
       ],
+      "depth": 1,
+      "parent": "module_1",
+      "type_id": 2,
       "id": "module_3"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": null,
+        "2": null,
+        "3": "module_2"
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        130.16361818880108,
+        -75.15000000000008
+      ],
+      "_angle": 450,
+      "_type": "outer",
+      "_line_states": [
+        1,
+        0,
+        0
+      ],
+      "depth": 2,
+      "parent": "module_2",
+      "type_id": 1,
+      "id": "module_4"
     },
     {
       "module_type": "Mountain fold",
@@ -85,6 +118,9 @@
         0,
         0
       ],
+      "depth": 2,
+      "parent": "module_3",
+      "type_id": 1,
       "id": "module_5"
     },
     {
@@ -106,49 +142,10 @@
         0,
         0
       ],
+      "depth": 3,
+      "parent": "module_5",
+      "type_id": 2,
       "id": "module_6"
-    },
-    {
-      "module_type": "Mountain fold",
-      "connectors": {
-        "1": null,
-        "2": null,
-        "3": "module_2"
-      },
-      "hinge_angle": 0,
-      "_pos": [
-        130.16361818880108,
-        -75.15000000000008
-      ],
-      "_angle": 450,
-      "_type": "outer",
-      "_line_states": [
-        1,
-        0,
-        0
-      ],
-      "id": "module_4"
-    },
-    {
-      "module_type": "valley fold",
-      "connectors": {
-        "1": null,
-        "2": null,
-        "3": "module_7"
-      },
-      "hinge_angle": 0,
-      "_pos": [
-        -130.16361818880108,
-        300.6
-      ],
-      "_angle": 990,
-      "_type": "outer",
-      "_line_states": [
-        2,
-        0,
-        0
-      ],
-      "id": "module_8"
     },
     {
       "module_type": "Mountain fold",
@@ -169,7 +166,34 @@
         0,
         0
       ],
+      "depth": 4,
+      "parent": "module_6",
+      "type_id": 1,
       "id": "module_7"
+    },
+    {
+      "module_type": "valley fold",
+      "connectors": {
+        "1": null,
+        "2": null,
+        "3": "module_7"
+      },
+      "hinge_angle": 0,
+      "_pos": [
+        -130.16361818880108,
+        300.6
+      ],
+      "_angle": 990,
+      "_type": "outer",
+      "_line_states": [
+        2,
+        0,
+        0
+      ],
+      "depth": 5,
+      "parent": "module_7",
+      "type_id": 2,
+      "id": "module_8"
     }
   ],
   "edges": [
@@ -212,8 +236,8 @@
     {
       "connector1": 3,
       "connector2": 3,
-      "source": "module_8",
-      "target": "module_7"
+      "source": "module_7",
+      "target": "module_8"
     }
   ]
 }

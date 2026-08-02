@@ -44,7 +44,6 @@
                     <geom name="geom_connector3_1" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
                     <geom name="magnet_connector3_1" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
                 </body>
-                <site name="imu_site" pos="0 0 0.001" quat="1 0 0 0"/>
                 <site name="rf_east" pos="0 0 0.001" quat="0.70710678 0 0.70710678 0"/>
                 <site name="rf_west" pos="0 0 0.001" quat="0.70710678 0 -0.70710678 0"/>
                 <site name="rf_north" pos="0 0 0.001" quat="0.70710678 -0.70710678 0 0"/>
@@ -2360,8 +2359,4 @@
         <position name="ctrl_joint11" joint="joint_12" kp="1" ctrlrange="0 1.5707963267948966" ctrllimited="true" dampratio="1"/>
         <position name="ctrl_joint12" joint="joint_13" kp="1" ctrlrange="0 1.5707963267948966" ctrllimited="true" dampratio="1"/>
     </actuator>
-    <sensor>
-        <accelerometer name="imu_accel" site="imu_site"/>
-        <gyro name="imu_gyro" site="imu_site"/>
-    </sensor>
 </mujoco>

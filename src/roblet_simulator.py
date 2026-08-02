@@ -29,6 +29,14 @@ TORQUE_MULTIPLIER = 10
 TORQUE_RAMP_TIME = 10  # seconds
 FREQUENCY = 6.25  # Hz
 
+# Rangefinder reading (m) below which a wall is considered "reached".
+WALL_STOP_DISTANCE = 200  # 200 mm
+
+# Wall geoms are tagged group=1 in the model (see xml_gen_v2.py) so this
+# raycast can be filtered to see ONLY them.
+_WALL_GEOMGROUP = np.zeros(6, dtype=np.uint8)
+_WALL_GEOMGROUP[1] = 1
+
 
 def magnetic_field_callback(model, data):
     """
@@ -147,61 +155,6 @@ def set_angle_to_joint(model, data, target_angle_deg):
             )
 
 
-# Gravity, world frame (m/s^2). Must match <option gravity="..."/> in the
-# model (MuJoCo's default, unset in assembly.xml).
-GRAVITY_WORLD = np.array([0.0, 0.0, -9.81])
-
-# Rangefinder reading (m) below which a wall is considered "reached".
-WALL_STOP_DISTANCE = 200  # 200 mm
-
-
-class ImuOdometry:
-    """Dead-reckons horizontal velocity/distance from the on-body IMU
-    (accelerometer + gyro), the way a real bare IMU would - no ground-truth
-    position/velocity is read from the physics engine.
-
-    This will drift: gyro-integrated orientation and double-integrated
-    acceleration both accumulate discretization error every step, same as
-    on real hardware. That's expected, not a bug.
-    """
-
-    def __init__(self, model, data):
-        # Calibrate the initial orientation once at startup (equivalent to
-        # leveling/zeroing a real IMU before the run starts). Everything
-        # after this point is dead-reckoned from gyro/accelerometer only.
-        body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "bodyRigid_1")
-        self.quat = data.xquat[body_id].copy()
-        self.vel_world = np.zeros(3)
-        self.distance = 0.0
-
-    def step(self, model, data, dt):
-        gyro = data.sensor("imu_gyro").data
-        accel_local = data.sensor("imu_accel").data
-
-        # Orientation: integrate body-frame angular velocity.
-        mujoco.mju_quatIntegrate(self.quat, gyro, dt)
-
-        # Accelerometer reads specific force (true accel - gravity), so
-        # true world-frame accel = R(quat) @ accel_local + gravity.
-        accel_world = np.zeros(3)
-        mujoco.mju_rotVecQuat(accel_world, accel_local, self.quat)
-        accel_world += GRAVITY_WORLD
-
-        self.vel_world += accel_world * dt
-        # Horizontal speed only (ignore vertical bouncing from the gait).
-        self.distance += np.linalg.norm(self.vel_world[:2]) * dt
-
-    @property
-    def horizontal_speed(self):
-        return np.linalg.norm(self.vel_world[:2])
-
-
-# Wall geoms are tagged group=1 in the model (see xml_gen_v2.py) so this
-# raycast can be filtered to see ONLY them.
-_WALL_GEOMGROUP = np.zeros(6, dtype=np.uint8)
-_WALL_GEOMGROUP[1] = 1
-
-
 def distance_to_nearest_wall(model, data):
     """Minimum of the 4 wall-facing rangefinder rays (m), or None if none of
     them currently hit a wall.
@@ -222,6 +175,21 @@ def distance_to_nearest_wall(model, data):
         if dist >= 0:
             readings.append(dist)
     return min(readings) if readings else None
+
+
+def get_com_position(data):
+    """World-frame center of mass position of the whole model (m)."""
+    return data.subtree_com[0].copy()
+
+
+def get_com_velocity(data):
+    """World-frame linear velocity of the whole model's center of mass (m/s).
+
+    subtree_linvel is not populated by mj_step on its own - it requires an
+    explicit mj_subtreeVel(model, data) call each step (unless a
+    subtreelinvel sensor is defined in the XML).
+    """
+    return data.subtree_linvel[0].copy()
 
 
 def dynamic_text_rendering(viewer, data, module_labels):
@@ -325,10 +293,13 @@ def main():
         viewer.cam.distance = 0.25  # zoom
         viewer.cam.lookat[:] = [0, 0, 0]
         last_print = -1
-        last_print_time = 0.0
-        last_print_distance = 0.0
         avg_velocity = 0.0
-        imu = ImuOdometry(model, data)
+        initial_com = None
+        displacement = 0.0
+        # Displacement captured the instant the torque ramp finishes, so the
+        # ramp's slow-moving first TORQUE_RAMP_TIME seconds can be excluded
+        # from the average velocity below.
+        steady_state_displacement = None
         magnets_active = True
 
         while viewer.is_running():
@@ -336,7 +307,29 @@ def main():
             set_angle_to_joint(model, data, target_angle_deg=45)
 
             mujoco.mj_step(model, data)
-            imu.step(model, data, dt)
+            mujoco.mj_subtreeVel(model, data)
+
+            # Ground-truth morphology performance metrics, tracked from the
+            # whole-model subtree COM (body 0 = worldbody subtree = everything).
+            # Gated on magnets_active so these freeze at the wall-stop instant
+            # instead of draining toward 0 during whatever idle time passes
+            # in the viewer after locomotion has actually ended.
+            if magnets_active:
+                com = get_com_position(data)
+                if initial_com is None:
+                    initial_com = com.copy()
+
+                displacement = float(np.linalg.norm(com - initial_com))
+
+                # Average velocity is calculated from the displacement after the torque ramp finishes.
+                if steady_state_displacement is None and data.time >= TORQUE_RAMP_TIME:
+                    steady_state_displacement = displacement
+                if steady_state_displacement is not None:
+                    steady_elapsed = data.time - TORQUE_RAMP_TIME
+                    avg_velocity = (
+                        (displacement - steady_state_displacement) / steady_elapsed
+                        if steady_elapsed > 0 else 0.0
+                    )
 
             # Stop actuating once the assembly gets close to a wall, judged
             # from the on-body rangefinders (not a ground-truth position
@@ -352,7 +345,7 @@ def main():
                     # applied torque would keep acting on every future step.
                     data.xfrc_applied.fill(0)
                     magnets_active = False
-                    print(f"Time: {data.time:.2f}s | Wall reached ({wall_dist} mm) - magnetic field stopped.")
+                    print(f"Time: {data.time:.2f}s | Wall reached ({int(wall_dist)}) mm) - magnetic field stopped.")
 
             # Render dynamic text labels for each module
             #dynamic_text_rendering(viewer, data, module_labels)
@@ -369,18 +362,9 @@ def main():
                         f"Time: {data.time:.2f}s | Torque ramp: {int(ramp*100)}%"
                     )
                 else:
-                    # Average velocity over the interval smooths out the
-                    # flip-and-land gait's within-cycle velocity spikes,
-                    # unlike the instantaneous sample which lands at a
-                    # different, arbitrary phase of the gait each second.
-                    elapsed = data.time - last_print_time
-                    avg_velocity = (imu.distance - last_print_distance) / elapsed
-                    last_print_time = data.time
-                    last_print_distance = imu.distance
                     print(
-                        f"Velocity: {imu.horizontal_speed * 1000:.2f} mm/s (instant) | "
-                        f"{avg_velocity * 1000:.2f} mm/s (avg over last {elapsed:.2f}s) | "
-                        f"Distance travelled: {imu.distance * 1000:.2f} mm"
+                        f"Avg velocity: {avg_velocity * 1000:.2f} mm/s | "
+                        f"Displacement: {displacement * 1000:.2f} mm"
                     )
 
             # Maintain real-time velocity
@@ -390,7 +374,7 @@ def main():
 
     # Unregister callback and save JSON data on exit
     mujoco.set_mjcb_control(None)
-    save_simulation_stats(model, avg_velocity, imu.distance, module_labels, filename="../output/simulation_stats.json")
+    save_simulation_stats(model, avg_velocity, displacement, module_labels, filename="../output/simulation_stats.json")
 
 
 if __name__ == "__main__":

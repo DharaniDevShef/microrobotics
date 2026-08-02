@@ -434,7 +434,6 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         # quat rotates +Z to point at the wall it's named after.
         if num_id == "1":
             main_body = elem.find(f"body[@name='bodyRigid_{num_id}']")
-            ET.SubElement(main_body, "site", name="imu_site", pos="0 0 0.001", quat="1 0 0 0")
             ET.SubElement(main_body, "site", name="rf_east", pos="0 0 0.001",
                           quat="0.70710678 0 0.70710678 0")
             ET.SubElement(main_body, "site", name="rf_west", pos="0 0 0.001",
@@ -533,20 +532,6 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
                 ctrllimited="true",
                 dampratio="1"
             )
-
-    # -------------------------------------------------------------
-    # 9. Sensors: IMU (accelerometer + gyro), mounted on module_1's imu_site
-    #    (see build_module_element above). The 4 rf_* sites are also defined
-    #    there, but wall distance is computed via a manual, group-filtered
-    #    mj_ray() call in roblet_simulator.py rather than a native
-    #    <rangefinder> sensor -- the native sensor only excludes the site's
-    #    own body from the raycast, so as the module pitches through the
-    #    flip gait it would "see" the floor and neighboring welded modules
-    #    (only ~8mm away) as if they were the wall.
-    # -------------------------------------------------------------
-    sensor_elem = ET.SubElement(root, "sensor")
-    ET.SubElement(sensor_elem, "accelerometer", name="imu_accel", site="imu_site")
-    ET.SubElement(sensor_elem, "gyro", name="imu_gyro", site="imu_site")
 
     xml_str = ET.tostring(root, encoding="utf-8")
     pretty_xml = minidom.parseString(xml_str).toprettyxml(indent="    ")

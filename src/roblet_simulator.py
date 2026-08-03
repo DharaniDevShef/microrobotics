@@ -32,7 +32,7 @@ FREQUENCY = 6.25  # Hz
 # Rangefinder reading (m) below which a wall is considered "reached".
 WALL_STOP_DISTANCE = 200  # 200 mm
 
-# Wall geoms are tagged group=1 in the model (see xml_gen_v2.py) so this
+# Wall geoms are tagged group=1 in the model (see mjcf_generator.py) so this
 # raycast can be filtered to see ONLY them.
 _WALL_GEOMGROUP = np.zeros(6, dtype=np.uint8)
 _WALL_GEOMGROUP[1] = 1

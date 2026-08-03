@@ -542,11 +542,13 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
 
     n_modules = len(G.nodes)
     n_edges = len(G.edges)
-    print(f"[{graph_json_path}] {n_modules} independent free-body module(s) "
-          f"({n_modules} freejoints), {len(fold_joints)} hinge joint(s), "
-          f"{n_edges} weld equality constraint(s) (one per graph edge, {len(components)} "
-          f"connected component(s)). Every fold joint is independently and "
-          f"simultaneously actuatable.")
+    # print(f"[{graph_json_path}] {n_modules} independent free-body module(s) "
+    #       f"({n_modules} freejoints), {len(fold_joints)} hinge joint(s), "
+    #       f"{n_edges} weld equality constraint(s) (one per graph edge, {len(components)} "
+    #       f"connected component(s)). Every fold joint is independently and "
+    #       f"simultaneously actuatable.")
+
+    print("MuJoCo assembly XML written created!")
 
     return {
         "graph": G, "global_pose": global_pose, "components": components,

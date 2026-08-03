@@ -14,10 +14,10 @@ from matplotlib.figure import Figure
 
 try:
     from . import graph_visualizer
-    from .xml_gen_v2 import build_assembly
+    from .mjcf_generator import build_assembly
 except ImportError:  # pragma: no cover - direct script execution fallback
     import graph_visualizer
-    from xml_gen_v2 import build_assembly
+    from mjcf_generator import build_assembly
 
 class AssemblyGrid(QWidget):
     def __init__(self, parent=None):

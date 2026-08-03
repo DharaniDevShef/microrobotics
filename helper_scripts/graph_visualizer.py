@@ -21,13 +21,88 @@ def load_graph_json(graph_json_path):
     return G
 
 
-def draw_graph_to_figure(graph_or_data, figure=None, title="Roblet Morphology Graph (Directed)"):
+def compute_layout_positions(G, x_gap=2.5, y_gap=2.5):
+    """Lay out nodes top-down by tree depth, using edges (and parent/depth
+    attrs if present) to find the hierarchy. Used as a fallback for graphs
+    that have no saved _pos/pos (e.g. graphs straight out of roblet_grammar,
+    before any physical folding geometry has been assigned).
+    """
+    roots = [n for n, d in G.in_degree() if d == 0] or [next(iter(G.nodes()))]
+
+    children = {n: [] for n in G.nodes()}
+    for u, v in G.edges():
+        children[u].append(v)
+
+    positions = {}
+    visited = set()
+    next_leaf_x = [0.0]
+
+    def place(node, depth):
+        visited.add(node)
+        kids = [c for c in children[node] if c not in visited]
+        if not kids:
+            x = next_leaf_x[0]
+            next_leaf_x[0] += x_gap
+        else:
+            for kid in kids:
+                place(kid, depth + 1)
+            x = sum(positions[kid][0] for kid in kids) / len(kids)
+        positions[node] = (x, -depth * y_gap)
+
+    for root in roots:
+        if root not in visited:
+            place(root, 0)
+
+    # Any nodes unreachable from a root (disconnected fragments) still need a spot.
+    for node in G.nodes():
+        if node not in positions:
+            positions[node] = (next_leaf_x[0], 0.0)
+            next_leaf_x[0] += x_gap
+
+    return normalize_positions(positions)
+
+
+def normalize_positions(positions, target_extent=10.0):
+    """Rescale positions to fit within a target_extent x target_extent box,
+    preserving relative proportions (no independent x/y stretch) so the
+    layout stays undistorted under ax.set_aspect("equal").
+    """
+    if not positions:
+        return positions
+
+    xs = [p[0] for p in positions.values()]
+    ys = [p[1] for p in positions.values()]
+    x_range = max(xs) - min(xs) or 1.0
+    y_range = max(ys) - min(ys) or 1.0
+    scale = target_extent / max(x_range, y_range)
+    x0, y0 = min(xs), min(ys)
+    return {node: ((x - x0) * scale, (y - y0) * scale) for node, (x, y) in positions.items()}
+
+
+def ensure_node_positions(G):
+    """Return a graph where every node has a 'pos' (or '_pos') attribute,
+    computing a fallback layout automatically when the source JSON has none.
+    """
+    if all("pos" in attrs or "_pos" in attrs for _, attrs in G.nodes(data=True)):
+        return G
+
+    G = G.copy()
+    layout = compute_layout_positions(G)
+    for node, attrs in G.nodes(data=True):
+        if "pos" not in attrs and "_pos" not in attrs:
+            attrs["pos"] = layout[node]
+    return G
+
+
+def draw_graph_to_figure(graph_or_data, figure=None, title="Roblet Morphology Graph (Directed)", aspect_equal=True):
     if isinstance(graph_or_data, str):
         G = load_graph_json(graph_or_data)
     elif isinstance(graph_or_data, dict):
         G = nx.node_link_graph(graph_or_data, edges="edges")
     else:
         G = graph_or_data.copy()
+
+    G = ensure_node_positions(G)
 
     relabel_map = {node: str(node).split("_")[-1] for node in G.nodes()}
     G = nx.relabel_nodes(G, relabel_map)
@@ -117,7 +192,8 @@ def draw_graph_to_figure(graph_or_data, figure=None, title="Roblet Morphology Gr
     #     framealpha=0.9,
     #     fontsize=10,
     # )
-    ax.set_aspect("equal")
+    if aspect_equal:
+        ax.set_aspect("equal")
     # ax.set_title(title, fontsize=12, fontweight="bold")
     figure.tight_layout()
     return figure, ax

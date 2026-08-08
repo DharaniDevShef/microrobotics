@@ -8,6 +8,7 @@ magnetic actuation of microrobots using MuJoCo physics engine.
 import json
 import os
 import time
+import matplotlib.pyplot as plt
 import mujoco
 import mujoco.viewer
 import numpy as np
@@ -18,16 +19,21 @@ parent_body_magnet_map = {}
 # Torque tracking global variables
 torque_history = []
 
+# B-field tracking global variables (paired with torque_history, one entry per step)
+b_field_history = []
+time_history = []
+
 # Physics constants
 # Magnetic field intensity (Tesla)
 B_INTENSITY = 0.01  # 10 mT
 # 6.5 x 10^-3 Am^2 - 2mm x 2mm neodymium magnet cylinder (N42SH)
 M_MOMENT = 6.5e-3
 # Maximum torque multiplier
-TORQUE_MULTIPLIER = 10
+TORQUE_MULTIPLIER = 1
 # Time taken to reach full torque
-TORQUE_RAMP_TIME = 10  # seconds
+TORQUE_RAMP_TIME = 5  # seconds
 FREQUENCY = 6.25  # Hz
+TOTAL_CYCLE_TIME = 1.0 / FREQUENCY
 
 # Rangefinder reading (m) below which a wall is considered "reached".
 WALL_STOP_DISTANCE = 200  # 200 mm
@@ -54,6 +60,25 @@ def magnetic_field_callback(model, data):
     ramp_factor = ramp_progress * ramp_progress * (3 - 2 * ramp_progress)
     effective_torque_multiplier = TORQUE_MULTIPLIER * ramp_factor
 
+    # # Oscillating magnetic field settings
+    # time_in_cycle = data.time % TOTAL_CYCLE_TIME
+
+    # # The magnetic field is controlled to roll forward to -50◦in 0.9 s,
+    # # and then backward to 50◦in 0.1 s, allowing the robot to
+    # # slowly tilt down and quickly tilt up to perform the stick-slip motion
+
+    # # Change from (-50 + 100*alpha)to (50 - 100*alpha)
+    # if time_in_cycle < 0.9:
+    #     alpha = time_in_cycle / 0.9
+    #     theta = np.radians(-50.0 + (100.0 * alpha))
+    # else:
+    #     alpha = (time_in_cycle - 0.9) / 0.1
+    #     theta = np.radians(50.0 - (100.0 * alpha))
+
+    # # Magnetic field in XZ plane
+    # b_vector = np.array([np.cos(theta), 0.0, np.sin(theta)]) * B_INTENSITY
+
+
 
     # Oscillating magnetic field along Z-axis (vertical) to induce walking motion.
     # It flips sign along a single fixed vertical axis at frequency f:
@@ -61,9 +86,8 @@ def magnetic_field_callback(model, data):
     #   Phase 2/3 (B = +z): torque lifts the front foot, robot rotates about its
     #   COM and lands back on its rear foot.
     # Half-period = 1/(2f) per the paper's t1 = 1/(2f).
-    total_cycle_time = 1.0 / FREQUENCY
-    half_cycle_time = total_cycle_time / 2.0
-    time_in_cycle = data.time % total_cycle_time
+    half_cycle_time = TOTAL_CYCLE_TIME / 2.0
+    time_in_cycle = data.time % TOTAL_CYCLE_TIME
 
     b_z = -B_INTENSITY if time_in_cycle < half_cycle_time else B_INTENSITY
 
@@ -92,6 +116,8 @@ def magnetic_field_callback(model, data):
 
     # Record magnitude of total torque on whole body for this step
     torque_history.append(np.linalg.norm(step_total_torque))
+    b_field_history.append(b_z)
+    time_history.append(data.time)
 
 
 def find_main_movable_parent(model, body_id):
@@ -106,14 +132,28 @@ def find_main_movable_parent(model, body_id):
 
 
 def find_all_magnets(model):
-    """Finds all magnets in the model and maps parent body ID to magnets."""
+    """Finds all magnets in the model and maps parent body ID to magnets.
+
+    Polarity comes from which connector mesh (SGA/SGB/SGX) is mounted at
+    that site -- see doc/design_info.txt ("N or S pole facing outward").
+    SGB sites are the mating partner of SGA (magnets attract when
+    complementary, per the smart-glue design) so they get the opposite
+    sign; SGX (unmated/free) sites keep the default pole. That mesh name
+    lives on the sibling "geom_connectorN_..." geom on the same body, not
+    on this magnet's own "magnet_connectorN_..." name.
+    """
     magnet_map = {}
     for geom_id in range(model.ngeom):
         geom_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
         if geom_name and "magnet_" in geom_name:
             immediate_body_id = model.geom_bodyid[geom_id]
             movable_parent_id = find_main_movable_parent(model, immediate_body_id)
-            polarity_sign = 1.0 if "SGA" in geom_name else -1.0
+
+            sibling_geom_name = geom_name.replace("magnet_", "geom_", 1)
+            sibling_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, sibling_geom_name)
+            mesh_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_MESH, model.geom_dataid[sibling_id])
+            polarity_sign = -1.0 if mesh_name == "connectorB" else 1.0
+
             if movable_parent_id not in magnet_map:
                 magnet_map[movable_parent_id] = []
             magnet_map[movable_parent_id].append((geom_id, polarity_sign))
@@ -263,6 +303,36 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels, fi
     print(f" - Average velocity: {avg_velocity * 1000:.2f} mm/s")
     print(f" - Total Distance: {total_distance * 1000:.2f} mm")
 
+
+def plot_b_field_history(filename="../output/b_field_plot.png"):
+    """Plots the applied magnetic field B (z-component) over simulation time and saves it to file."""
+    if not time_history:
+        return
+
+    fig, ax = plt.subplots(figsize=(9, 4), facecolor="#fcfcfb")
+    ax.set_facecolor("#fcfcfb")
+
+    ax.plot(time_history[0:120], b_field_history[0:120], drawstyle="steps-post", color="#2a78d6", linewidth=2)
+
+    ax.set_xlabel("Time (s)", color="#52514e")
+    ax.set_ylabel("Applied B field, z-component (T)", color="#52514e")
+    ax.set_title("Applied Magnetic Field Over Time", color="#0b0b0b")
+
+    ax.grid(True, color="#e1e0d9", linewidth=0.8)
+    ax.set_axisbelow(True)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    for spine in ("left", "bottom"):
+        ax.spines[spine].set_color("#c3c2b7")
+    ax.tick_params(colors="#898781")
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=150, facecolor=fig.get_facecolor())
+    plt.close(fig)
+
+    print(f"Saved B-field plot to '{filename}'")
+
+
 def main():
     """Load the MuJoCo model, initialize magnets, and run the simulation."""
     model_path = "../models/assembly.xml"
@@ -301,6 +371,13 @@ def main():
         # from the average velocity below.
         steady_state_displacement = None
         magnets_active = True
+        # Windowed velocity: displacement covered since the last 1-second
+        # print, so the printout reflects actual per-interval speed instead
+        # of the cumulative average-since-ramp-end (which can only creep
+        # slowly toward its converged value and hides real fluctuation).
+        window_velocity = 0.0
+        window_displacement = None
+        window_time = None
 
         while viewer.is_running():
             step_start = time.time()
@@ -319,11 +396,13 @@ def main():
                 if initial_com is None:
                     initial_com = com.copy()
 
-                displacement = float(np.linalg.norm(com - initial_com))
+                displacement = float(np.linalg.norm(com - initial_com)) #Euclidean distance
 
                 # Average velocity is calculated from the displacement after the torque ramp finishes.
                 if steady_state_displacement is None and data.time >= TORQUE_RAMP_TIME:
                     steady_state_displacement = displacement
+                    window_displacement = displacement
+                    window_time = data.time
                 if steady_state_displacement is not None:
                     steady_elapsed = data.time - TORQUE_RAMP_TIME
                     avg_velocity = (
@@ -362,7 +441,12 @@ def main():
                         f"Time: {data.time:.2f}s | Torque ramp: {int(ramp*100)}%"
                     )
                 else:
+                    interval = data.time - window_time
+                    window_velocity = (displacement - window_displacement) / interval if interval > 0 else 0.0
+                    window_displacement = displacement
+                    window_time = data.time
                     print(
+                        f"Velocity: {window_velocity * 1000:.2f} mm/s | "
                         f"Avg velocity: {avg_velocity * 1000:.2f} mm/s | "
                         f"Displacement: {displacement * 1000:.2f} mm"
                     )
@@ -375,6 +459,7 @@ def main():
     # Unregister callback and save JSON data on exit
     mujoco.set_mjcb_control(None)
     save_simulation_stats(model, avg_velocity, displacement, module_labels, filename="../output/simulation_stats.json")
+    #plot_b_field_history(filename="../output/b_field_plot.png")
 
 
 if __name__ == "__main__":

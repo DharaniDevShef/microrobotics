@@ -433,15 +433,16 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         # Rangefinders cast along their site's local +Z axis, so each site's
         # quat rotates +Z to point at the wall it's named after.
         if num_id == "1":
-            main_body = elem.find(f"body[@name='bodyRigid_{num_id}']")
+            main_body_name = f"bodyRigid_{num_id}" if is_rigid else f"bodyBase_{num_id}"
+            main_body = elem.find(f"body[@name='{main_body_name}']")
             ET.SubElement(main_body, "site", name="rf_east", pos="0 0 0.001",
-                          quat="0.70710678 0 0.70710678 0")
+                          quat="0.70710678 0 0.70710678 0", rgba="0 0 0 0")
             ET.SubElement(main_body, "site", name="rf_west", pos="0 0 0.001",
-                          quat="0.70710678 0 -0.70710678 0")
+                          quat="0.70710678 0 -0.70710678 0", rgba="0 0 0 0")
             ET.SubElement(main_body, "site", name="rf_north", pos="0 0 0.001",
-                          quat="0.70710678 -0.70710678 0 0")
+                          quat="0.70710678 -0.70710678 0 0", rgba="0 0 0 0")
             ET.SubElement(main_body, "site", name="rf_south", pos="0 0 0.001",
-                          quat="0.70710678 0.70710678 0 0")
+                          quat="0.70710678 0.70710678 0 0", rgba="0 0 0 0")
 
         return elem
 

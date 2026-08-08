@@ -64,14 +64,24 @@ def _find_main_movable_parent(model, body_id):
 
 
 def _find_all_magnets(model):
-    """body_id -> list[(geom_id, polarity_sign)], as in roblet_simulator.py."""
+    """body_id -> list[(geom_id, polarity_sign)], as in roblet_simulator.py.
+
+    Polarity comes from the connector mesh (SGA/SGB/SGX) mounted at each
+    site, read off the sibling "geom_connectorN_..." geom -- see
+    find_all_magnets() in roblet_simulator.py for the full rationale.
+    """
     magnet_map = {}
     for geom_id in range(model.ngeom):
         geom_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
         if geom_name and "magnet_" in geom_name:
             immediate_body_id = model.geom_bodyid[geom_id]
             movable_parent_id = _find_main_movable_parent(model, immediate_body_id)
-            polarity_sign = 1.0 if "SGA" in geom_name else -1.0
+
+            sibling_geom_name = geom_name.replace("magnet_", "geom_", 1)
+            sibling_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, sibling_geom_name)
+            mesh_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_MESH, model.geom_dataid[sibling_id])
+            polarity_sign = -1.0 if mesh_name == "connectorB" else 1.0
+
             magnet_map.setdefault(movable_parent_id, []).append((geom_id, polarity_sign))
     return magnet_map
 

@@ -47,10 +47,11 @@ class AssemblyGrid(QWidget):
             
             self.modules[inner_key] = {
                 'pos': (ix, iy),
-                'angle': inner_rot, 
+                'angle': inner_rot,
                 'active': True,
                 'type': 'inner',
-                'line_states': [0, 0, 0]  
+                'line_states': [0, 0, 0],
+                'hinge_angle': 45.0,
             }
             
             outer_key = f'module_{count}'
@@ -64,7 +65,8 @@ class AssemblyGrid(QWidget):
                 'angle': outer_rot,
                 'active': True,
                 'type': 'outer',
-                'line_states': [0, 0, 0]  
+                'line_states': [0, 0, 0],
+                'hinge_angle': 45.0,
             }
 
     # =====================================================
@@ -139,7 +141,7 @@ class AssemblyGrid(QWidget):
                 key,
                 module_type=module_type,
                 connectors={1: None, 2: None, 3: None},
-                hinge_angle=0,
+                hinge_angle=info.get('hinge_angle', 0.0),
                 _pos=info['pos'],
                 _angle=info['angle'],
                 _type=info['type'],
@@ -267,6 +269,7 @@ class AssemblyGrid(QWidget):
         self.modules.clear()
         
         for node, attrs in G.nodes(data=True):
+            hinge_angle = attrs.get('hinge_angle', 0.0)
             pos = attrs.get('_pos', (0.0, 0.0))
             angle = attrs.get('_angle', 0.0)
             module_type = attrs.get('_type', 'outer')
@@ -283,6 +286,7 @@ class AssemblyGrid(QWidget):
                     line_states = [0, 0, 0]
             
             self.modules[node] = {
+                'hinge_angle': hinge_angle,
                 'pos': tuple(pos),
                 'angle': angle,
                 'active': True,
@@ -502,7 +506,8 @@ class AssemblyGrid(QWidget):
                                 'angle': new_rot,
                                 'active': True,
                                 'type': 'outer',
-                                'line_states': [0, 0, 0]
+                                'line_states': [0, 0, 0],
+                                'hinge_angle': 45.0,
                             }
                             self.update()
                             self.notify_graph_update()

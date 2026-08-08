@@ -165,6 +165,21 @@ def connector_inertial(mesh_name, mount_site):
     return _inertial_xml(mass, com, inertia)
 
 
+def _write_joint_target_angles(root, graph, fold_joints):
+    """Write per-joint hinge angles from the graph JSON into XML metadata."""
+    custom_elem = ET.SubElement(root, "custom")
+    for idx, num_id in enumerate(fold_joints, start=1):
+        module_id = f"module_{num_id}"
+        hinge_angle = graph.nodes[module_id].get("hinge_angle", 0.0)
+        actuator_name = f"ctrl_joint{idx}"
+        ET.SubElement(
+            custom_elem,
+            "numeric",
+            name=actuator_name,
+            data=f"{float(hinge_angle):.6f}",
+        )
+
+
 def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
                     weld_solref="0.01 1", weld_solimp="0.99 0.999 0.0001"):
     with open(graph_json_path, "r") as f:
@@ -450,6 +465,10 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
     worldbody = root.find("worldbody")
     for n in sorted(G.nodes, key=lambda x: int(x.split("_")[1])):
         worldbody.append(build_module_element(n))
+
+    # Persist per-joint target angles as XML metadata so the simulator can
+    # recover them directly from the generated MuJoCo model file.
+    _write_joint_target_angles(root, G, fold_joints)
 
     # -------------------------------------------------------------
     # 7. Contact excludes + weld equality constraints (one weld per graph edge)

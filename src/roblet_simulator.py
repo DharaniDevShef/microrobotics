@@ -8,6 +8,7 @@ magnetic actuation of microrobots using MuJoCo physics engine.
 import json
 import os
 import time
+import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
 import mujoco
 import mujoco.viewer
@@ -171,14 +172,51 @@ def find_module_labels(model):
     return module_labels
 
 
+def read_joint_target_angles_from_xml(model_path):
+    """Read per-joint target angles from XML metadata by actuator name."""
+    tree = ET.parse(model_path)
+    root = tree.getroot()
+    target_angles = {}
+    for numeric in root.findall(".//custom/numeric"):
+        name = numeric.get("name", "")
+        if not name:
+            continue
+        if name.startswith("ctrl_joint"):
+            target_angles[name] = float(numeric.get("data", "0.0"))
+        elif name.startswith("joint_target_angle_"):
+            target_angles[name] = float(numeric.get("data", "0.0"))
+    return target_angles
+
+
 def set_angle_to_joint(model, data, target_angle_deg):
-    """Sets actuator position targets."""
+    """Set actuator position targets from a scalar, ordered sequence, or name map."""
     if model.nu == 0:
         return
 
-    target_rad = np.radians(abs(target_angle_deg))
+    if isinstance(target_angle_deg, dict):
+        target_values = []
+        for i in range(model.nu):
+            actuator_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+            if actuator_name is None:
+                actuator_name = f"actuator_{i}"
+            if actuator_name in target_angle_deg:
+                target_values.append(float(target_angle_deg[actuator_name]))
+            elif str(i + 1) in target_angle_deg:
+                target_values.append(float(target_angle_deg[str(i + 1)]))
+            else:
+                target_values.append(float(target_angle_deg.get("default", 0.0)))
+    elif isinstance(target_angle_deg, (list, tuple, np.ndarray)):
+        if len(target_angle_deg) != model.nu:
+            raise ValueError(
+                f"Expected {model.nu} target angles but received {len(target_angle_deg)}"
+            )
+        target_values = [float(v) for v in target_angle_deg]
+    else:
+        target_values = [float(target_angle_deg)] * model.nu
 
     for i in range(model.nu):
+        target_deg = float(target_values[i])
+        target_rad = np.radians(abs(target_deg))
         lo, hi = model.actuator_ctrlrange[i]
 
         # Target falls inside positive range (Valley fold)
@@ -190,8 +228,8 @@ def set_angle_to_joint(model, data, target_angle_deg):
         else:
             lo_deg, hi_deg = np.degrees(lo), np.degrees(hi)
             raise ValueError(
-                f"Target {target_angle_deg}° (or -{target_angle_deg}°) is out "
-                f"of bounds for actuator {i} range [{lo_deg:.1f}°, {hi_deg:.1f}°]"
+                f"Target {target_deg}° (or -{target_deg}°) is out of bounds "
+                f"for actuator {i} range [{lo_deg:.1f}°, {hi_deg:.1f}°]"
             )
 
 
@@ -344,6 +382,20 @@ def main():
     model = mujoco.MjModel.from_xml_path(model_path)
     data = mujoco.MjData(model)
 
+    target_angles = read_joint_target_angles_from_xml(model_path)
+    if not target_angles:
+        target_angles = [45.0] * model.nu
+
+    if isinstance(target_angles, dict):
+        print("Loaded actuator target angles from XML:")
+        for actuator_name, angle_deg in sorted(target_angles.items()):
+            if actuator_name.startswith("ctrl_joint"):
+                print(f" - {actuator_name}: {angle_deg:.2f}°")
+    else:
+        print("Loaded actuator target angles from XML as ordered values:")
+        for i, angle_deg in enumerate(target_angles):
+            print(f" - actuator {i}: {angle_deg:.2f}°")
+
     # Simulation timestep
     model.opt.timestep = 0.01  # 10 milliseconds
 
@@ -381,7 +433,7 @@ def main():
 
         while viewer.is_running():
             step_start = time.time()
-            set_angle_to_joint(model, data, target_angle_deg=45)
+            set_angle_to_joint(model, data, target_angle_deg=target_angles)
 
             mujoco.mj_step(model, data)
             mujoco.mj_subtreeVel(model, data)

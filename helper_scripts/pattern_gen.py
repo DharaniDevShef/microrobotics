@@ -15,9 +15,11 @@ from matplotlib.figure import Figure
 try:
     from . import graph_visualizer
     from .mjcf_generator import build_assembly
+    from .mjcf_generator_padded import build_padded_assembly
 except ImportError:  # pragma: no cover - direct script execution fallback
     import graph_visualizer
     from mjcf_generator import build_assembly
+    from mjcf_generator_padded import build_padded_assembly
 
 class AssemblyGrid(QWidget):
     def __init__(self, parent=None):
@@ -597,6 +599,7 @@ class MainWindow(QMainWindow):
         self.script_dir = Path(__file__).resolve().parent
         self.default_graph_path = (self.script_dir / ".." / "graphs" / "assembly_graph.json").resolve()
         self.default_xml_path = (self.script_dir / ".." / "models" / "assembly.xml").resolve()
+        self.default_padded_xml_path = (self.script_dir / ".." / "models" / "assembly_padded.xml").resolve()
         
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
@@ -638,6 +641,10 @@ class MainWindow(QMainWindow):
         self.save_xml_btn.clicked.connect(self.save_graph_and_build_xml)
         btn_layout.addWidget(self.save_xml_btn)
 
+        self.save_padded_xml_btn = QPushButton("Save Padded XML")
+        self.save_padded_xml_btn.clicked.connect(self.save_graph_and_build_padded_xml)
+        btn_layout.addWidget(self.save_padded_xml_btn)
+
         editor_layout.addLayout(btn_layout)
         self.tabs.addTab(editor_tab, "Pattern Editor")
 
@@ -664,6 +671,23 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Export Complete", f"Saved graph to {self.default_graph_path}\nSaved XML to {self.default_xml_path}")
         except Exception as exc:
             QMessageBox.warning(self, "Export Failed", f"Could not build XML:\n{exc}")
+
+    def save_graph_and_build_padded_xml(self):
+        """Same as save_graph_and_build_xml, but via mjcf_generator_padded --
+        the written model is padded to a fixed module capacity so it shares
+        its structural shape with every other padded export, current or
+        future (needed for MJWarp's batched-world GPU parallelism)."""
+        graph_json = self.grid_canvas.get_graph_text()
+        graph_data = json.loads(graph_json)
+        self.grid_canvas.load_graph_data(graph_data)
+        save_json(graph_json, str(self.default_graph_path))
+        try:
+            build_padded_assembly(str(self.default_graph_path), str(self.default_padded_xml_path))
+            QMessageBox.information(
+                self, "Export Complete",
+                f"Saved graph to {self.default_graph_path}\nSaved padded XML to {self.default_padded_xml_path}")
+        except Exception as exc:
+            QMessageBox.warning(self, "Export Failed", f"Could not build padded XML:\n{exc}")
 
     def load_graph_from_file(self):
         path, _ = QFileDialog.getOpenFileName(

@@ -1,0 +1,1083 @@
+<?xml version="1.0" ?>
+<mujoco model="roblet_padded_batch">
+    <compiler meshdir="D:\microrobotics\helper_scripts\..\meshes" autolimits="false"/>
+    <size nconmax="4000" njmax="8000"/>
+    <option timestep="0.01" integrator="implicitfast">
+        <flag contact="enable"/>
+    </option>
+    <asset>
+        <mesh name="bodyBase" file="BodyFoldedSide1.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="bodyLink" file="BodyFoldedSide2.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="connectorC" file="SGX.stl" scale="0.001 0.001 0.001"/>
+        <material name="glass" rgba="0.6 0.8 0.9 0.4" shininess="0.9" specular="1"/>
+    </asset>
+    <worldbody>
+        <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 1" dir="0 0 -1"/>
+        <geom name="glass_floor" type="plane" size="1 1 0.1" material="glass" friction="0.4 0.005 0.0001" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1" condim="3"/>
+        <geom name="wall_north" type="box" pos="0 1.0 0.1" size="1.05 0.02 0.1" group="1"/>
+        <geom name="wall_south" type="box" pos="0 -1.0 0.1" size="1.05 0.02 0.1" group="1"/>
+        <geom name="wall_east" type="box" pos="1.0 0 0.1" size="0.02 1.05 0.1" group="1"/>
+        <geom name="wall_west" type="box" pos="-1.0 0 0.1" size="0.02 1.05 0.1" group="1"/>
+        <body name="module_1" pos="0.000000000 0.000000000 0.050000000" quat="1.000000000 0.000000000 0.000000000 0.000000000">
+            <freejoint name="free_module_1"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_1" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_1" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <site name="rf_east" pos="0 0 0.001" quat="0.70710678 0 0.70710678 0" rgba="0 0 0 0"/>
+                <site name="rf_west" pos="0 0 0.001" quat="0.70710678 0 -0.70710678 0" rgba="0 0 0 0"/>
+                <site name="rf_north" pos="0 0 0.001" quat="0.70710678 -0.70710678 0 0" rgba="0 0 0 0"/>
+                <site name="rf_south" pos="0 0 0.001" quat="0.70710678 0.70710678 0 0" rgba="0 0 0 0"/>
+                <body name="connector2_1" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_1" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_1" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_1" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_1" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_1" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_1" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_1" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_1" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_2" pos="0.007361216 -0.004250000 0.050000000" quat="0.866025404 0.000000000 0.000000000 -0.500000000">
+            <freejoint name="free_module_2"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_2" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_2" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_2" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_2" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_2" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_2" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_2" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_2" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_2" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_2" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_2" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_3" pos="-0.007361216 -0.004250000 0.050000000" quat="0.866025404 0.000000000 0.000000000 0.500000000">
+            <freejoint name="free_module_3"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_3" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_3" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_3" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_3" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_3" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_3" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_3" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_3" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_3" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_3" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_3" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_4" pos="0.007361216 -0.012750000 0.050000000" quat="0.500000000 0.000000000 0.000000000 -0.866025404">
+            <freejoint name="free_module_4"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_4" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_4" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_4" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_4" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_4" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_4" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_4" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_4" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_4" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_4" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_4" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_5" pos="0.014722432 0.000000000 0.050000000" quat="1.000000000 0.000000000 0.000000000 0.000000000">
+            <freejoint name="free_module_5"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_5" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_5" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_5" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_5" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_5" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_5" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_5" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_5" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_5" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_5" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_5" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_6" pos="-0.007361216 -0.012750000 0.050000000" quat="0.500000000 0.000000000 0.000000000 0.866025404">
+            <freejoint name="free_module_6"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_6" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_6" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_6" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_6" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_6" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_6" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_6" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_6" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_6" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_6" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_6" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_7" pos="-0.014722432 0.000000000 0.050000000" quat="1.000000000 0.000000000 0.000000000 0.000000000">
+            <freejoint name="free_module_7"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_7" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_7" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_7" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_7" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_7" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_7" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_7" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_7" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_7" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_7" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_7" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_8" pos="0.014722432 -0.017000000 0.050000000" quat="-0.000000000 0.000000000 0.000000000 1.000000000">
+            <freejoint name="free_module_8"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_8" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_8" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_8" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_8" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_8" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_8" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_8" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_8" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_8" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_8" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_8" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_9" pos="0.000000000 -0.017000000 0.050000000" quat="-0.000000000 0.000000000 0.000000000 1.000000000">
+            <freejoint name="free_module_9"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_9" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_9" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_9" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_9" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_9" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_9" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_9" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_9" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_9" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_9" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_9" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_10" pos="0.014722432 0.008500000 0.050000000" quat="-0.000000000 0.000000000 0.000000000 1.000000000">
+            <freejoint name="free_module_10"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_10" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_10" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_10" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_10" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_10" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_10" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_10" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_10" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_10" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_10" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_10" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_11" pos="-0.014722432 -0.017000000 0.050000000" quat="0.000000000 0.000000000 0.000000000 1.000000000">
+            <freejoint name="free_module_11"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_11" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_11" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_11" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_11" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_11" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_11" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_11" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_11" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_11" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_11" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_11" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_12" pos="-0.014722432 0.008500000 0.050000000" quat="-0.000000000 0.000000000 0.000000000 1.000000000">
+            <freejoint name="free_module_12"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_12" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_12" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_12" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_12" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_12" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_12" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_12" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_12" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_12" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_12" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_12" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_13" pos="0.022083648 -0.012750000 0.050000000" quat="0.500000000 0.000000000 0.000000000 0.866025404">
+            <freejoint name="free_module_13"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_13" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_13" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_13" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_13" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_13" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_13" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_13" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_13" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_13" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_13" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_13" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_14" pos="0.000000000 -0.025500000 0.050000000" quat="1.000000000 0.000000000 0.000000000 0.000000000">
+            <freejoint name="free_module_14"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_14" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_14" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_14" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_14" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_14" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_14" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_14" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_14" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_14" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_14" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_14" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_15" pos="-0.022083648 -0.012750000 0.050000000" quat="-0.500000000 0.000000000 0.000000000 0.866025404">
+            <freejoint name="free_module_15"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_15" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_15" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_15" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_15" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_15" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_15" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_15" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_15" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_15" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_15" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_15" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_16" pos="-1.340 -1.500 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_16"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_16" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_16" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_16" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_16" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_16" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_16" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_16" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_16" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_16" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_16" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_16" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_17" pos="-1.340 -1.420 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_17"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_17" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_17" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_17" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_17" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_17" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_17" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_17" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_17" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_17" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_17" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_17" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_18" pos="-1.340 -1.340 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_18"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_18" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_18" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_18" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_18" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_18" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_18" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_18" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_18" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_18" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_18" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_18" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_19" pos="-1.340 -1.260 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_19"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_19" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_19" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_19" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_19" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_19" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_19" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_19" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_19" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_19" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_19" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_19" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_20" pos="-1.340 -1.180 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_20"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_20" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_20" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_20" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_20" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_20" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_20" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_20" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_20" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_20" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_20" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_20" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_21" pos="-1.340 -1.100 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_21"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_21" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_21" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_21" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_21" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_21" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_21" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_21" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_21" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_21" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_21" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_21" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_22" pos="-1.340 -1.020 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_22"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_22" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_22" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_22" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_22" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_22" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_22" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_22" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_22" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_22" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_22" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_22" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_23" pos="-1.340 -0.940 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_23"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_23" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_23" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_23" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_23" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_23" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_23" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_23" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_23" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_23" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_23" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_23" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_24" pos="-1.260 -1.500 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_24"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_24" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_24" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_24" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_24" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_24" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_24" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_24" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_24" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_24" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_24" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_24" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_25" pos="-1.260 -1.420 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_25"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_25" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_25" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_25" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_25" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_25" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_25" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_25" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_25" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_25" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_25" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_25" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_26" pos="-1.260 -1.340 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_26"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_26" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_26" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_26" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_26" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_26" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_26" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_26" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_26" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_26" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_26" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_26" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_27" pos="-1.260 -1.260 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_27"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_27" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_27" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_27" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_27" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_27" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_27" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_27" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_27" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_27" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_27" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_27" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_28" pos="-1.260 -1.180 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_28"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_28" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_28" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_28" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_28" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_28" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_28" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_28" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_28" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_28" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_28" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_28" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_29" pos="-1.260 -1.100 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_29"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_29" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_29" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_29" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_29" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_29" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_29" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_29" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_29" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_29" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_29" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_29" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_30" pos="-1.260 -1.020 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_30"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_30" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_30" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_30" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_30" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_30" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_30" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_30" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_30" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_30" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_30" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_30" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_31" pos="-1.260 -0.940 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_31"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_31" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_31" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_31" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_31" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_31" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_31" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_31" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_31" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_31" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_31" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_31" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_32" pos="-1.180 -1.500 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_32"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_32" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_32" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_32" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_32" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_32" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_32" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_32" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_32" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_32" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_32" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_32" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_33" pos="-1.180 -1.420 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_33"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_33" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_33" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_33" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_33" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_33" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_33" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_33" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_33" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_33" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_33" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_33" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_34" pos="-1.180 -1.340 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_34"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_34" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_34" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_34" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_34" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_34" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_34" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_34" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_34" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_34" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_34" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_34" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_35" pos="-1.180 -1.260 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_35"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_35" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_35" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_35" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_35" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_35" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_35" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_35" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_35" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_35" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_35" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_35" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_36" pos="-1.180 -1.180 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_36"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_36" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_36" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_36" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_36" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_36" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_36" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_36" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_36" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_36" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_36" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_36" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_37" pos="-1.180 -1.100 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_37"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_37" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_37" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_37" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_37" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_37" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_37" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_37" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_37" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_37" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_37" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_37" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_38" pos="-1.180 -1.020 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_38"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_38" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_38" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_38" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_38" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_38" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_38" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_38" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_38" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_38" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_38" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_38" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_39" pos="-1.180 -0.940 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_39"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_39" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_39" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_39" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_39" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_39" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_39" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_39" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_39" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_39" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_39" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_39" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_40" pos="-1.100 -1.500 -1.0" quat="1 0 0 0">
+            <freejoint name="free_module_40"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_40" pos="0 0 0" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_40" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                <body name="connector2_40" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_40" type="mesh" mesh="connectorC" rgba="0 0 0 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="connector3_40" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_40" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                </body>
+                <body name="bodyLink_40" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_40" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="-90 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_40" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1" contype="0" conaffinity="0"/>
+                    <body name="connector1_40" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                        <geom name="geom_connector1_40" type="mesh" mesh="connectorC" rgba="1 1 1 1" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+    </worldbody>
+    <equality>
+        <joint name="lock_1" joint1="joint_1" polycoef="0 0 0 0 0" active="true"/>
+        <joint name="lock_2" joint1="joint_2" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_3" joint1="joint_3" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_4" joint1="joint_4" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_5" joint1="joint_5" polycoef="0 0 0 0 0" active="true"/>
+        <joint name="lock_6" joint1="joint_6" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_7" joint1="joint_7" polycoef="0 0 0 0 0" active="true"/>
+        <joint name="lock_8" joint1="joint_8" polycoef="0 0 0 0 0" active="true"/>
+        <joint name="lock_9" joint1="joint_9" polycoef="0 0 0 0 0" active="true"/>
+        <joint name="lock_10" joint1="joint_10" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_11" joint1="joint_11" polycoef="0 0 0 0 0" active="true"/>
+        <joint name="lock_12" joint1="joint_12" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_13" joint1="joint_13" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_14" joint1="joint_14" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_15" joint1="joint_15" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_16" joint1="joint_16" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_17" joint1="joint_17" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_18" joint1="joint_18" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_19" joint1="joint_19" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_20" joint1="joint_20" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_21" joint1="joint_21" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_22" joint1="joint_22" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_23" joint1="joint_23" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_24" joint1="joint_24" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_25" joint1="joint_25" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_26" joint1="joint_26" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_27" joint1="joint_27" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_28" joint1="joint_28" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_29" joint1="joint_29" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_30" joint1="joint_30" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_31" joint1="joint_31" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_32" joint1="joint_32" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_33" joint1="joint_33" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_34" joint1="joint_34" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_35" joint1="joint_35" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_36" joint1="joint_36" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_37" joint1="joint_37" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_38" joint1="joint_38" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_39" joint1="joint_39" polycoef="0 0 0 0 0" active="false"/>
+        <joint name="lock_40" joint1="joint_40" polycoef="0 0 0 0 0" active="false"/>
+        <weld name="weld_1_2_2_3" body1="connector2_1" body2="connector3_2" relpose="0 -0.000000054 0.003840046  0  0 -1 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_1_3_3_2" body1="connector3_1" body2="connector2_3" relpose="0 0.000000054 0.003840046   0  0 1 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_2_1_5_3" body1="connector1_2" body2="connector3_5" relpose="0 0.000000397 0.003839439   0  0 -1 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_2_2_4_3" body1="connector2_2" body2="connector3_4" relpose="0 -0.000000054 0.003840046  0  0 -1 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_3_1_7_2" body1="connector1_3" body2="connector2_7" relpose="0 0.000000431 0.003839167   0  1 0 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_3_3_6_2" body1="connector3_3" body2="connector2_6" relpose="0 0.000000054 0.003840046   0  0 1 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_4_1_8_2" body1="connector1_4" body2="connector2_8" relpose="0 0.000000431 0.003839167   0  1 0 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_4_2_9_3" body1="connector2_4" body2="connector3_9" relpose="0 -0.000000054 0.003840046  0  0 -1 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_5_1_10_1" body1="connector1_5" body2="connector1_10" relpose="0 0.000000878 0.003838560   0 -1 0 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_6_1_11_3" body1="connector1_6" body2="connector3_11" relpose="0 0.000000397 0.003839439   0  0 -1 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_6_3_9_2" body1="connector3_6" body2="connector2_9" relpose="0 0.000000054 0.003840046   0  0 1 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_7_1_12_1" body1="connector1_7" body2="connector1_12" relpose="0 0.000000878 0.003838560   0 -1 0 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_8_3_13_1" body1="connector3_8" body2="connector1_13" relpose="0 -0.000000393 0.003839439  0  0 1 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_9_1_14_1" body1="connector1_9" body2="connector1_14" relpose="0 0.000000878 0.003838560   0 -1 0 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld name="weld_11_2_15_1" body1="connector2_11" body2="connector1_15" relpose="0 0.000000428 0.003839167   0 -1 0 0" active="true" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+    </equality>
+</mujoco>

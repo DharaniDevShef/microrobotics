@@ -5,6 +5,7 @@ magnetic actuation of microrobots using MuJoCo physics engine.
 
 # pylint: disable=no-member
 
+import argparse
 import json
 import os
 import time
@@ -13,6 +14,7 @@ import matplotlib.pyplot as plt
 import mujoco
 import mujoco.viewer
 import numpy as np
+from PIL import Image
 
 # Global dictionaries mapping Parent Body ID -> List of (Magnet Geom ID, Polarity Sign)
 parent_body_magnet_map = {}
@@ -309,22 +311,22 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels, fi
     # Total mass of the whole model
     total_mass = float(mujoco.mj_getTotalmass(model))
 
-    # Mass of each individual module body tree
-    module_masses = []
-    for body_id in sorted(module_labels.keys()):
-        # body_subtreemass includes the body and all child geoms/bodies attached to it
-        module_mass = float(model.body_subtreemass[body_id])
-        module_masses.append({
-            "module_id": module_labels[body_id],
-            "mass_mg": round(module_mass * 1e6, 4)  # Convert to milligrams
-        })
+    # # Mass of each individual module body tree
+    # module_masses = []
+    # for body_id in sorted(module_labels.keys()):
+    #     # body_subtreemass includes the body and all child geoms/bodies attached to it
+    #     module_mass = float(model.body_subtreemass[body_id])
+    #     module_masses.append({
+    #         "module_id": module_labels[body_id],
+    #         "mass_mg": round(module_mass * 1e6, 4)  # Convert to milligrams
+    #     })
 
     # Average torque acting on whole body across all physics steps
     avg_torque = float(np.mean(torque_history)) if torque_history else 0.0
 
     stats = {
         "total_mass_mg": round(total_mass * 1e6, 4),  # Convert to milligrams
-        "module_masses_mg": module_masses,
+        # "module_masses_mg": module_masses,
         "average_torque_Nm": round(avg_torque, 4),  # Convert to Newton-meters
         "total_simulated_steps": len(torque_history),
         "average_velocity_mmps": round(avg_velocity * 1000, 4),
@@ -371,9 +373,151 @@ def plot_b_field_history(filename="../output/b_field_plot.png"):
     print(f"Saved B-field plot to '{filename}'")
 
 
-def main():
-    """Load the MuJoCo model, initialize magnets, and run the simulation."""
-    model_path = "../models/assembly.xml"
+def _offscreen_camera(distance=0.25, lookat=(0, 0, 0)):
+    """MjvCamera matching the live viewer's default zoom/lookat, for
+    screenshots/video captured via mujoco.Renderer (no GUI window needed)."""
+    camera = mujoco.MjvCamera()
+    camera.distance = distance
+    camera.lookat[:] = lookat
+    return camera
+
+
+def run_headless(
+    model_path, stats_output_path, max_sim_time=None,
+    capture_media=False, media_dir="../output", gif_fps=15,
+):
+    """Runs one closed-loop simulation to completion with no viewer and no
+    real-time pacing, so it steps as fast as the CPU allows.
+
+    Designed to be called once per OS process (via parallel_main) so that N
+    different XML models can be simulated concurrently on N cores. Clears
+    the module-level tracking state at the start so this is also safe if a
+    process pool ever reuses a worker process across more than one model.
+
+    If capture_media is True, saves a final-pose screenshot PNG and a GIF of
+    the movement from TORQUE_RAMP_TIME (once the magnetic field is at full
+    strength) to the end of the run, via mujoco.Renderer - an offscreen
+    renderer that needs no visible window, so this works in a headless
+    worker process just like the rest of this function.
+    """
+    parent_body_magnet_map.clear()
+    torque_history.clear()
+    b_field_history.clear()
+    time_history.clear()
+
+    model = mujoco.MjModel.from_xml_path(model_path)
+    data = mujoco.MjData(model)
+    model.opt.timestep = 0.01
+
+    target_angles = read_joint_target_angles_from_xml(model_path)
+    if not target_angles:
+        target_angles = [45.0] * model.nu
+
+    parent_body_magnet_map.update(find_all_magnets(model))
+    module_labels = find_module_labels(model)
+
+    mujoco.set_mjcb_control(magnetic_field_callback)
+
+    model_name = os.path.splitext(os.path.basename(model_path))[0]
+
+    renderer = None
+    camera = None
+    gif_frames = []
+    # GIF frames are captured every gif_frame_stride steps so playback speed
+    # approximates real time: gif_fps output frames per second of sim time.
+    gif_frame_stride = max(1, round(1.0 / (gif_fps * model.opt.timestep)))
+    if capture_media:
+        renderer = mujoco.Renderer(model, height=480, width=640)
+        camera = _offscreen_camera()
+
+    avg_velocity = 0.0
+    initial_com = None
+    displacement = 0.0
+    steady_state_displacement = None
+    magnets_active = True
+    step_count = 0
+    # Raycasting the 4 rangefinders every single 0.01s step is wasted work:
+    # the robot moves on the order of mm/s, so it cannot close the 200mm
+    # WALL_STOP_DISTANCE gap between one step and the next. Checking every
+    # 10 steps (0.1s) is still far tighter than needed and cuts this cost 10x.
+    WALL_CHECK_STRIDE = 10
+
+    try:
+        while magnets_active:
+            set_angle_to_joint(model, data, target_angle_deg=target_angles)
+            mujoco.mj_step(model, data)
+            mujoco.mj_subtreeVel(model, data)
+            step_count += 1
+
+            com = get_com_position(data)
+            if initial_com is None:
+                initial_com = com.copy()
+            displacement = float(np.linalg.norm(com - initial_com))
+
+            if steady_state_displacement is None and data.time >= TORQUE_RAMP_TIME:
+                steady_state_displacement = displacement
+            if steady_state_displacement is not None:
+                steady_elapsed = data.time - TORQUE_RAMP_TIME
+                avg_velocity = (
+                    (displacement - steady_state_displacement) / steady_elapsed
+                    if steady_elapsed > 0 else 0.0
+                )
+
+            if (
+                capture_media and data.time >= TORQUE_RAMP_TIME
+                and step_count % gif_frame_stride == 0
+            ):
+                renderer.update_scene(data, camera=camera)
+                gif_frames.append(renderer.render().copy())
+
+            if step_count % WALL_CHECK_STRIDE == 0:
+                wall_dist = distance_to_nearest_wall(model, data)
+                if wall_dist is not None:
+                    wall_dist *= 1000  # Convert to mm
+                if wall_dist is not None and wall_dist < WALL_STOP_DISTANCE:
+                    magnets_active = False
+            if max_sim_time is not None and data.time >= max_sim_time:
+                magnets_active = False
+
+        if capture_media:
+            renderer.update_scene(data, camera=camera)
+            screenshot = renderer.render()
+            Image.fromarray(screenshot).save(
+                os.path.join(media_dir, f"screenshot_{model_name}.png")
+            )
+            if gif_frames:
+                frame_duration_ms = round(1000 / gif_fps)
+                frames = [Image.fromarray(f) for f in gif_frames]
+                frames[0].save(
+                    os.path.join(media_dir, f"movement_{model_name}.gif"),
+                    save_all=True, append_images=frames[1:],
+                    duration=frame_duration_ms, loop=0,
+                )
+    finally:
+        if renderer is not None:
+            renderer.close()
+
+    mujoco.set_mjcb_control(None)
+    data.xfrc_applied.fill(0)
+
+    save_simulation_stats(model, avg_velocity, displacement, module_labels, filename=stats_output_path)
+
+    return {
+        "model": model_name,
+        "avg_velocity_mmps": avg_velocity * 1000,
+        "displacement_mm": displacement * 1000,
+        "sim_time_s": data.time,
+    }
+
+
+def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
+    """Same closed-loop simulation as run_headless, but with the live passive
+    viewer and real-time pacing so you can watch it run.
+
+    max_sim_time is in seconds of simulated time (data.time), same as
+    run_headless - once reached, magnet actuation stops (same as reaching a
+    wall) but the viewer stays open so you can still inspect the final pose.
+    """
     if not os.path.exists(model_path):
         print(f"Error: Could not find '{model_path}'")
         return
@@ -478,6 +622,11 @@ def main():
                     magnets_active = False
                     print(f"Time: {data.time:.2f}s | Wall reached ({int(wall_dist)}) mm) - magnetic field stopped.")
 
+            if max_sim_time is not None and data.time >= max_sim_time:
+                print(f"Time: {data.time:.2f}s | max_sim_time reached - closing viewer.")
+                viewer.close()
+                break
+
             # Render dynamic text labels for each module
             #dynamic_text_rendering(viewer, data, module_labels)
 
@@ -510,9 +659,44 @@ def main():
 
     # Unregister callback and save JSON data on exit
     mujoco.set_mjcb_control(None)
-    save_simulation_stats(model, avg_velocity, displacement, module_labels, filename="../output/simulation_stats.json")
+    save_simulation_stats(model, avg_velocity, displacement, module_labels, filename=stats_output_path)
     #plot_b_field_history(filename="../output/b_field_plot.png")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+
+    parser.add_argument(
+        "--m", type=str, default="../models/assembly.xml",
+        help="MJCF model path to run in the live viewer",
+    )
+
+    parser.add_argument(
+        "--o", type=str, default="../output/simulation_stats.json",
+        help="Output path for simulation statistics JSON file",
+    )
+
+    parser.add_argument(
+        "--max_sim_time", type=float, default=10,
+        help="Maximum simulation time in seconds (for headless runs)",
+    )
+
+    parser.add_argument(
+        "--headless", action="store_true",
+        help="Run without the live viewer (default: show the live viewer)",
+    )
+
+    parser.add_argument(
+        "--capture-media", action="store_true",
+        help="With --headless, also save a final-pose screenshot PNG and a movement GIF (post torque-ramp) via offscreen rendering.",
+    )
+
+    args = parser.parse_args()
+
+    if args.headless:
+        run_headless(
+            args.m, args.o, max_sim_time=args.max_sim_time,
+            capture_media=args.capture_media, media_dir=os.path.dirname(args.o) or ".",
+        )
+    else:
+        run_with_viewer(args.m, args.o, max_sim_time=args.max_sim_time)

@@ -1,0 +1,576 @@
+<?xml version="1.0" ?>
+<mujoco model="FusionExportAssembly">
+    <compiler meshdir="../meshes" autolimits="false"/>
+    <size nconmax="500" njmax="1500" nstack="100000"/>
+    <option timestep="0.01" integrator="implicitfast">
+        <flag contact="enable"/>
+    </option>
+    <asset>
+        <mesh name="bodyBase" file="BodyFoldedSide1.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="bodyLink" file="BodyFoldedSide2.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="bodyRigid" file="Body.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="connectorA" file="SGA.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="connectorB" file="SGB.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="connectorC" file="SGX.stl" scale="0.001 0.001 0.001"/>
+        <material name="silver" specular="1" shininess="0.8" rgba="0.85 0.85 0.9 1"/>
+        <mesh name="Magnet" file="Magnet.stl" scale="1 1 1" inertia="shell"/>
+        <material name="glass" rgba="0.6 0.8 0.9 0.4" shininess="0.9" specular="1"/>
+    </asset>
+    <worldbody>
+        <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 1" dir="0 0 -1"/>
+        <geom name="glass_floor" type="plane" size="1 1 0.1" material="glass" friction="0.4 0.005 0.0001" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1" condim="3"/>
+        <geom name="wall_north" type="box" pos="0 1.0 0.1" size="1.05 0.02 0.1" group="1"/>
+        <geom name="wall_south" type="box" pos="0 -1.0 0.1" size="1.05 0.02 0.1" group="1"/>
+        <geom name="wall_east" type="box" pos="1.0 0 0.1" size="0.02 1.05 0.1" group="1"/>
+        <geom name="wall_west" type="box" pos="-1.0 0 0.1" size="0.02 1.05 0.1" group="1"/>
+        <body name="module_1" pos="0.000000000 0.000000000 0.000000000" quat="1.000000000 0.000000000 0.000000000 0.000000000">
+            <freejoint name="free_module_1"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyRigid_1" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 0.000000 -0.002331" mass="0.00019600" fullinertia="2.503000e-09 2.409000e-09 2.658000e-09 -9.900000e-11 2.210000e-10 -1.400000e-10"/>
+                <geom name="geom_bodyRigid_1" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector1_1" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                    <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector1_1" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
+                    <geom name="magnet_connector1_1" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector2_1" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001166" mass="0.00008810" fullinertia="1.466216e-10 1.946216e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                    <geom name="geom_connector2_1" type="mesh" mesh="connectorA" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_1" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_1" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001166" mass="0.00008810" fullinertia="1.466216e-10 1.946216e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                    <geom name="geom_connector3_1" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_1" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <site name="rf_east" pos="0 0 0.001" quat="0.70710678 0 0.70710678 0" rgba="0 0 0 0"/>
+                <site name="rf_west" pos="0 0 0.001" quat="0.70710678 0 -0.70710678 0" rgba="0 0 0 0"/>
+                <site name="rf_north" pos="0 0 0.001" quat="0.70710678 -0.70710678 0 0" rgba="0 0 0 0"/>
+                <site name="rf_south" pos="0 0 0.001" quat="0.70710678 0.70710678 0 0" rgba="0 0 0 0"/>
+            </body>
+        </body>
+        <body name="module_2" pos="0.007361216 -0.004250000 0.000000000" quat="0.866025404 0.000000000 0.000000000 -0.500000000">
+            <freejoint name="free_module_2"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_2" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_2" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_2" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.000994" mass="0.00008810" fullinertia="1.403694e-10 1.883694e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                    <geom name="geom_connector2_2" type="mesh" mesh="connectorA" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_2" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_2" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.000996" mass="0.00009010" fullinertia="2.213922e-10 1.713922e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                    <geom name="geom_connector3_2" type="mesh" mesh="connectorB" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_2" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="bodyLink_2" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_2" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 0" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_2" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_2" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000959" mass="0.00008810" fullinertia="1.398285e-10 1.878285e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                        <geom name="geom_connector1_2" type="mesh" mesh="connectorA" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_2" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_3" pos="-0.007361216 -0.004250000 0.000000000" quat="0.866025404 0.000000000 0.000000000 0.500000000">
+            <freejoint name="free_module_3"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_3" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_3" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_3" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.000996" mass="0.00009010" fullinertia="2.213922e-10 1.713922e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                    <geom name="geom_connector2_3" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_3" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.000994" mass="0.00008810" fullinertia="1.403694e-10 1.883694e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                    <geom name="geom_connector3_3" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="bodyLink_3" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_3" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 0" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_3" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_3" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000959" mass="0.00008810" fullinertia="1.398285e-10 1.878285e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                        <geom name="geom_connector1_3" type="mesh" mesh="connectorA" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_3" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_4" pos="0.007361216 -0.012750000 0.000000000" quat="0.500000000 0.000000000 0.000000000 -0.866025404">
+            <freejoint name="free_module_4"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_4" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_4" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_4" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.000994" mass="0.00008810" fullinertia="1.403694e-10 1.883694e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                    <geom name="geom_connector2_4" type="mesh" mesh="connectorA" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_4" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_4" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.000996" mass="0.00009010" fullinertia="2.213922e-10 1.713922e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                    <geom name="geom_connector3_4" type="mesh" mesh="connectorB" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_4" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="bodyLink_4" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_4" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 0" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_4" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_4" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000959" mass="0.00008810" fullinertia="1.398285e-10 1.878285e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                        <geom name="geom_connector1_4" type="mesh" mesh="connectorA" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_4" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_5" pos="0.014722432 0.000000000 0.000000000" quat="1.000000000 0.000000000 0.000000000 0.000000000">
+            <freejoint name="free_module_5"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyRigid_5" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 0.000000 -0.002331" mass="0.00019600" fullinertia="2.503000e-09 2.409000e-09 2.658000e-09 -9.900000e-11 2.210000e-10 -1.400000e-10"/>
+                <geom name="geom_bodyRigid_5" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector1_5" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                    <inertial pos="0.000000 0.000000 0.000959" mass="0.00008810" fullinertia="1.398285e-10 1.878285e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                    <geom name="geom_connector1_5" type="mesh" mesh="connectorA" rgba="1 1 1 1"/>
+                    <geom name="magnet_connector1_5" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector2_5" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001235" mass="0.00011410" fullinertia="3.194924e-10 2.594924e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_5" type="mesh" mesh="connectorC" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_5" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_5" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001173" mass="0.00009010" fullinertia="2.278039e-10 1.778039e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                    <geom name="geom_connector3_5" type="mesh" mesh="connectorB" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_5" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+            </body>
+        </body>
+        <body name="module_6" pos="-0.007361216 -0.012750000 0.000000000" quat="0.500000000 0.000000000 0.000000000 0.866025404">
+            <freejoint name="free_module_6"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_6" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_6" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_6" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.000996" mass="0.00009010" fullinertia="2.213922e-10 1.713922e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                    <geom name="geom_connector2_6" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_6" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_6" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.000994" mass="0.00008810" fullinertia="1.403694e-10 1.883694e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                    <geom name="geom_connector3_6" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_6" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="bodyLink_6" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_6" type="hinge" axis="1 0 0" pos="0 0.001 -0.0055" range="-90 0" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_6" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_6" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000959" mass="0.00008810" fullinertia="1.398285e-10 1.878285e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                        <geom name="geom_connector1_6" type="mesh" mesh="connectorA" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_6" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_7" pos="-0.014722432 0.000000000 0.000000000" quat="1.000000000 0.000000000 0.000000000 0.000000000">
+            <freejoint name="free_module_7"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyRigid_7" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 0.000000 -0.002331" mass="0.00019600" fullinertia="2.503000e-09 2.409000e-09 2.658000e-09 -9.900000e-11 2.210000e-10 -1.400000e-10"/>
+                <geom name="geom_bodyRigid_7" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector1_7" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                    <inertial pos="0.000000 0.000000 0.000959" mass="0.00008810" fullinertia="1.398285e-10 1.878285e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                    <geom name="geom_connector1_7" type="mesh" mesh="connectorA" rgba="1 1 1 1"/>
+                    <geom name="magnet_connector1_7" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector2_7" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001173" mass="0.00009010" fullinertia="2.278039e-10 1.778039e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                    <geom name="geom_connector2_7" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_7" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_7" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001235" mass="0.00011410" fullinertia="3.194924e-10 2.594924e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_7" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_7" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+            </body>
+        </body>
+        <body name="module_8" pos="0.014722432 -0.017000000 0.000000000" quat="-0.000000000 0.000000000 0.000000000 1.000000000">
+            <freejoint name="free_module_8"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyRigid_8" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 0.000000 -0.002331" mass="0.00019600" fullinertia="2.503000e-09 2.409000e-09 2.658000e-09 -9.900000e-11 2.210000e-10 -1.400000e-10"/>
+                <geom name="geom_bodyRigid_8" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector1_8" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                    <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector1_8" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
+                    <geom name="magnet_connector1_8" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector2_8" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001173" mass="0.00009010" fullinertia="2.278039e-10 1.778039e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                    <geom name="geom_connector2_8" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_8" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_8" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001166" mass="0.00008810" fullinertia="1.466216e-10 1.946216e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                    <geom name="geom_connector3_8" type="mesh" mesh="connectorA" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_8" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+            </body>
+        </body>
+        <body name="module_9" pos="0.000000000 -0.017000000 0.000000000" quat="-0.000000000 0.000000000 0.000000000 1.000000000">
+            <freejoint name="free_module_9"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyRigid_9" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 0.000000 -0.002331" mass="0.00019600" fullinertia="2.503000e-09 2.409000e-09 2.658000e-09 -9.900000e-11 2.210000e-10 -1.400000e-10"/>
+                <geom name="geom_bodyRigid_9" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector1_9" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                    <inertial pos="0.000000 0.000000 0.000959" mass="0.00008810" fullinertia="1.398285e-10 1.878285e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                    <geom name="geom_connector1_9" type="mesh" mesh="connectorA" rgba="1 1 1 1"/>
+                    <geom name="magnet_connector1_9" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector2_9" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001173" mass="0.00009010" fullinertia="2.278039e-10 1.778039e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                    <geom name="geom_connector2_9" type="mesh" mesh="connectorB" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_9" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_9" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001173" mass="0.00009010" fullinertia="2.278039e-10 1.778039e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                    <geom name="geom_connector3_9" type="mesh" mesh="connectorB" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_9" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+            </body>
+        </body>
+        <body name="module_10" pos="0.014722432 0.008500000 0.000000000" quat="-0.000000000 0.000000000 0.000000000 1.000000000">
+            <freejoint name="free_module_10"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_10" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_10" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_10" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_10" type="mesh" mesh="connectorC" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_10" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_10" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_10" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_10" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="bodyLink_10" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_10" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="0 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_10" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_10" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000961" mass="0.00009010" fullinertia="2.208376e-10 1.708376e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                        <geom name="geom_connector1_10" type="mesh" mesh="connectorB" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_10" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_11" pos="-0.014722432 -0.017000000 0.000000000" quat="0.000000000 0.000000000 0.000000000 1.000000000">
+            <freejoint name="free_module_11"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyRigid_11" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 0.000000 -0.002331" mass="0.00019600" fullinertia="2.503000e-09 2.409000e-09 2.658000e-09 -9.900000e-11 2.210000e-10 -1.400000e-10"/>
+                <geom name="geom_bodyRigid_11" type="mesh" mesh="bodyRigid" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector1_11" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                    <inertial pos="0.000000 0.000000 0.000975" mass="0.00011410" fullinertia="3.109211e-10 2.509211e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector1_11" type="mesh" mesh="connectorC" rgba="1 1 1 1"/>
+                    <geom name="magnet_connector1_11" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector2_11" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001166" mass="0.00008810" fullinertia="1.466216e-10 1.946216e-10 1.485500e-10 -6.000000e-12 -3.000000e-12 2.600000e-11"/>
+                    <geom name="geom_connector2_11" type="mesh" mesh="connectorA" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_11" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_11" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001173" mass="0.00009010" fullinertia="2.278039e-10 1.778039e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                    <geom name="geom_connector3_11" type="mesh" mesh="connectorB" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_11" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+            </body>
+        </body>
+        <body name="module_12" pos="-0.014722432 0.008500000 0.000000000" quat="-0.000000000 0.000000000 0.000000000 1.000000000">
+            <freejoint name="free_module_12"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_12" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_12" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_12" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_12" type="mesh" mesh="connectorC" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_12" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_12" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_12" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_12" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="bodyLink_12" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_12" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="0 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_12" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_12" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000961" mass="0.00009010" fullinertia="2.208376e-10 1.708376e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                        <geom name="geom_connector1_12" type="mesh" mesh="connectorB" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_12" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_13" pos="0.022083648 -0.012750000 0.000000000" quat="0.500000000 0.000000000 0.000000000 0.866025404">
+            <freejoint name="free_module_13"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_13" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_13" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_13" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_13" type="mesh" mesh="connectorC" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_13" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_13" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_13" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_13" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="bodyLink_13" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_13" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="0 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_13" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_13" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000961" mass="0.00009010" fullinertia="2.208376e-10 1.708376e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                        <geom name="geom_connector1_13" type="mesh" mesh="connectorB" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_13" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_14" pos="0.000000000 -0.025500000 0.000000000" quat="1.000000000 0.000000000 0.000000000 0.000000000">
+            <freejoint name="free_module_14"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_14" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_14" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_14" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_14" type="mesh" mesh="connectorC" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_14" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_14" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_14" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_14" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="bodyLink_14" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_14" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="0 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_14" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_14" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000961" mass="0.00009010" fullinertia="2.208376e-10 1.708376e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                        <geom name="geom_connector1_14" type="mesh" mesh="connectorB" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_14" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="module_15" pos="-0.022083648 -0.012750000 0.000000000" quat="-0.500000000 0.000000000 0.000000000 0.866025404">
+            <freejoint name="free_module_15"/>
+            <inertial pos="0 0 0" mass="1e-08" diaginertia="1e-08 1e-08 1e-08"/>
+            <body name="bodyBase_15" pos="0.000000000 0.000000000 0.000000000" quat="1 0 0 0">
+                <inertial pos="-0.000000 -0.002067 -0.002280" mass="0.00010500" fullinertia="9.830000e-10 1.030000e-09 9.600000e-10 5.800000e-11 -2.100000e-11 -3.700000e-11"/>
+                <geom name="geom_bodyBase_15" type="mesh" mesh="bodyBase" rgba="0.2 0.2 0.8 1"/>
+                <body name="connector2_15" pos="0.002017941 -0.001165050 -0.002500001" quat="0.683013104 0.183012443 0.683013104 -0.183012443">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector2_15" type="mesh" mesh="connectorC" rgba="0 0 0 1"/>
+                    <geom name="magnet_connector2_15" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="connector3_15" pos="-0.002017680 -0.001164957 -0.002500001" quat="0.683012546 0.183013001 -0.683012546 0.183013001">
+                    <inertial pos="0.000000 0.000000 0.001019" mass="0.00011410" fullinertia="3.116035e-10 2.516035e-10 2.835500e-10 -1.200000e-11 -4.900000e-11 9.000000e-12"/>
+                    <geom name="geom_connector3_15" type="mesh" mesh="connectorC" rgba="0.2 0.2 0.8 1"/>
+                    <geom name="magnet_connector3_15" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                </body>
+                <body name="bodyLink_15" pos="0 0 0" quat="1 0 0 0">
+                    <inertial pos="-0.000000 0.002372 -0.002389" mass="0.00009100" fullinertia="9.710000e-10 9.410000e-10 7.640000e-10 3.070000e-10 1.370000e-10 -2.200000e-10"/>
+                    <joint name="joint_15" type="hinge" axis="1 0 0" pos="0 0.001 0.0005" range="0 90" limited="true" armature="1e-04" damping="0"/>
+                    <geom name="geom_bodyLink_15" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 1"/>
+                    <body name="connector1_15" pos="0.000000439 0.002330720 -0.002500000" quat="0.500000000 -0.500000000 0.500000000 0.500000000">
+                        <inertial pos="0.000000 0.000000 0.000961" mass="0.00009010" fullinertia="2.208376e-10 1.708376e-10 1.975500e-10 -1.000000e-11 -4.100000e-11 8.000000e-12"/>
+                        <geom name="geom_connector1_15" type="mesh" mesh="connectorB" rgba="1 1 1 1"/>
+                        <geom name="magnet_connector1_15" type="mesh" mesh="Magnet" material="silver" rgba="0.75 0.75 0.78 1" pos="0 0 0.0009" mass="0"/>
+                    </body>
+                </body>
+            </body>
+        </body>
+    </worldbody>
+    <custom>
+        <numeric name="ctrl_joint1" data="45.000000"/>
+        <numeric name="ctrl_joint2" data="45.000000"/>
+        <numeric name="ctrl_joint3" data="45.000000"/>
+        <numeric name="ctrl_joint4" data="45.000000"/>
+        <numeric name="ctrl_joint5" data="45.000000"/>
+        <numeric name="ctrl_joint6" data="45.000000"/>
+        <numeric name="ctrl_joint7" data="45.000000"/>
+        <numeric name="ctrl_joint8" data="45.000000"/>
+        <numeric name="ctrl_joint9" data="45.000000"/>
+    </custom>
+    <contact>
+        <exclude body1="bodyRigid_1" body2="connector1_1"/>
+        <exclude body1="bodyRigid_1" body2="connector2_1"/>
+        <exclude body1="bodyRigid_1" body2="connector3_1"/>
+        <exclude body1="bodyBase_2" body2="bodyLink_2"/>
+        <exclude body1="bodyLink_2" body2="connector1_2"/>
+        <exclude body1="bodyBase_2" body2="connector2_2"/>
+        <exclude body1="bodyBase_2" body2="connector3_2"/>
+        <exclude body1="bodyBase_3" body2="bodyLink_3"/>
+        <exclude body1="bodyLink_3" body2="connector1_3"/>
+        <exclude body1="bodyBase_3" body2="connector2_3"/>
+        <exclude body1="bodyBase_3" body2="connector3_3"/>
+        <exclude body1="bodyBase_4" body2="bodyLink_4"/>
+        <exclude body1="bodyLink_4" body2="connector1_4"/>
+        <exclude body1="bodyBase_4" body2="connector2_4"/>
+        <exclude body1="bodyBase_4" body2="connector3_4"/>
+        <exclude body1="bodyRigid_5" body2="connector1_5"/>
+        <exclude body1="bodyRigid_5" body2="connector2_5"/>
+        <exclude body1="bodyRigid_5" body2="connector3_5"/>
+        <exclude body1="bodyBase_6" body2="bodyLink_6"/>
+        <exclude body1="bodyLink_6" body2="connector1_6"/>
+        <exclude body1="bodyBase_6" body2="connector2_6"/>
+        <exclude body1="bodyBase_6" body2="connector3_6"/>
+        <exclude body1="bodyRigid_7" body2="connector1_7"/>
+        <exclude body1="bodyRigid_7" body2="connector2_7"/>
+        <exclude body1="bodyRigid_7" body2="connector3_7"/>
+        <exclude body1="bodyRigid_8" body2="connector1_8"/>
+        <exclude body1="bodyRigid_8" body2="connector2_8"/>
+        <exclude body1="bodyRigid_8" body2="connector3_8"/>
+        <exclude body1="bodyRigid_9" body2="connector1_9"/>
+        <exclude body1="bodyRigid_9" body2="connector2_9"/>
+        <exclude body1="bodyRigid_9" body2="connector3_9"/>
+        <exclude body1="bodyBase_10" body2="bodyLink_10"/>
+        <exclude body1="bodyLink_10" body2="connector1_10"/>
+        <exclude body1="bodyBase_10" body2="connector2_10"/>
+        <exclude body1="bodyBase_10" body2="connector3_10"/>
+        <exclude body1="bodyRigid_11" body2="connector1_11"/>
+        <exclude body1="bodyRigid_11" body2="connector2_11"/>
+        <exclude body1="bodyRigid_11" body2="connector3_11"/>
+        <exclude body1="bodyBase_12" body2="bodyLink_12"/>
+        <exclude body1="bodyLink_12" body2="connector1_12"/>
+        <exclude body1="bodyBase_12" body2="connector2_12"/>
+        <exclude body1="bodyBase_12" body2="connector3_12"/>
+        <exclude body1="bodyBase_13" body2="bodyLink_13"/>
+        <exclude body1="bodyLink_13" body2="connector1_13"/>
+        <exclude body1="bodyBase_13" body2="connector2_13"/>
+        <exclude body1="bodyBase_13" body2="connector3_13"/>
+        <exclude body1="bodyBase_14" body2="bodyLink_14"/>
+        <exclude body1="bodyLink_14" body2="connector1_14"/>
+        <exclude body1="bodyBase_14" body2="connector2_14"/>
+        <exclude body1="bodyBase_14" body2="connector3_14"/>
+        <exclude body1="bodyBase_15" body2="bodyLink_15"/>
+        <exclude body1="bodyLink_15" body2="connector1_15"/>
+        <exclude body1="bodyBase_15" body2="connector2_15"/>
+        <exclude body1="bodyBase_15" body2="connector3_15"/>
+        <exclude body1="connector2_1" body2="connector3_2"/>
+        <exclude body1="connector2_1" body2="bodyBase_2"/>
+        <exclude body1="bodyRigid_1" body2="connector3_2"/>
+        <exclude body1="bodyRigid_1" body2="bodyBase_2"/>
+        <exclude body1="connector3_1" body2="connector2_3"/>
+        <exclude body1="connector3_1" body2="bodyBase_3"/>
+        <exclude body1="bodyRigid_1" body2="connector2_3"/>
+        <exclude body1="bodyRigid_1" body2="bodyBase_3"/>
+        <exclude body1="bodyBase_2" body2="connector3_4"/>
+        <exclude body1="bodyBase_2" body2="bodyBase_4"/>
+        <exclude body1="connector2_2" body2="connector3_4"/>
+        <exclude body1="connector2_2" body2="bodyBase_4"/>
+        <exclude body1="connector1_2" body2="connector3_5"/>
+        <exclude body1="connector1_2" body2="bodyRigid_5"/>
+        <exclude body1="bodyLink_2" body2="connector3_5"/>
+        <exclude body1="bodyLink_2" body2="bodyRigid_5"/>
+        <exclude body1="bodyBase_3" body2="connector2_6"/>
+        <exclude body1="bodyBase_3" body2="bodyBase_6"/>
+        <exclude body1="connector3_3" body2="connector2_6"/>
+        <exclude body1="connector3_3" body2="bodyBase_6"/>
+        <exclude body1="bodyLink_3" body2="bodyRigid_7"/>
+        <exclude body1="bodyLink_3" body2="connector2_7"/>
+        <exclude body1="connector1_3" body2="bodyRigid_7"/>
+        <exclude body1="connector1_3" body2="connector2_7"/>
+        <exclude body1="bodyLink_4" body2="bodyRigid_8"/>
+        <exclude body1="bodyLink_4" body2="connector2_8"/>
+        <exclude body1="connector1_4" body2="bodyRigid_8"/>
+        <exclude body1="connector1_4" body2="connector2_8"/>
+        <exclude body1="connector2_4" body2="connector3_9"/>
+        <exclude body1="connector2_4" body2="bodyRigid_9"/>
+        <exclude body1="bodyBase_4" body2="connector3_9"/>
+        <exclude body1="bodyBase_4" body2="bodyRigid_9"/>
+        <exclude body1="bodyRigid_5" body2="connector1_10"/>
+        <exclude body1="bodyRigid_5" body2="bodyLink_10"/>
+        <exclude body1="connector1_5" body2="connector1_10"/>
+        <exclude body1="connector1_5" body2="bodyLink_10"/>
+        <exclude body1="connector3_6" body2="connector2_9"/>
+        <exclude body1="connector3_6" body2="bodyRigid_9"/>
+        <exclude body1="bodyBase_6" body2="connector2_9"/>
+        <exclude body1="bodyBase_6" body2="bodyRigid_9"/>
+        <exclude body1="bodyLink_6" body2="bodyRigid_11"/>
+        <exclude body1="bodyLink_6" body2="connector3_11"/>
+        <exclude body1="connector1_6" body2="bodyRigid_11"/>
+        <exclude body1="connector1_6" body2="connector3_11"/>
+        <exclude body1="bodyRigid_7" body2="connector1_12"/>
+        <exclude body1="bodyRigid_7" body2="bodyLink_12"/>
+        <exclude body1="connector1_7" body2="connector1_12"/>
+        <exclude body1="connector1_7" body2="bodyLink_12"/>
+        <exclude body1="connector3_8" body2="bodyLink_13"/>
+        <exclude body1="connector3_8" body2="connector1_13"/>
+        <exclude body1="bodyRigid_8" body2="bodyLink_13"/>
+        <exclude body1="bodyRigid_8" body2="connector1_13"/>
+        <exclude body1="connector1_9" body2="connector1_14"/>
+        <exclude body1="connector1_9" body2="bodyLink_14"/>
+        <exclude body1="bodyRigid_9" body2="connector1_14"/>
+        <exclude body1="bodyRigid_9" body2="bodyLink_14"/>
+        <exclude body1="bodyRigid_11" body2="bodyLink_15"/>
+        <exclude body1="bodyRigid_11" body2="connector1_15"/>
+        <exclude body1="connector2_11" body2="bodyLink_15"/>
+        <exclude body1="connector2_11" body2="connector1_15"/>
+    </contact>
+    <equality>
+        <weld body1="connector2_1" body2="connector3_2" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector3_1" body2="connector2_3" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector2_2" body2="connector3_4" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector1_2" body2="connector3_5" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector3_3" body2="connector2_6" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector1_3" body2="connector2_7" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector1_4" body2="connector2_8" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector2_4" body2="connector3_9" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector1_5" body2="connector1_10" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector3_6" body2="connector2_9" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector1_6" body2="connector3_11" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector1_7" body2="connector1_12" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector3_8" body2="connector1_13" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector1_9" body2="connector1_14" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+        <weld body1="connector2_11" body2="connector1_15" solref="0.01 1" solimp="0.99 0.999 0.0001"/>
+    </equality>
+    <actuator>
+        <position name="ctrl_joint1" joint="joint_2" kp="1" ctrlrange="-1.5707963267948966 0" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint2" joint="joint_3" kp="1" ctrlrange="-1.5707963267948966 0" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint3" joint="joint_4" kp="1" ctrlrange="-1.5707963267948966 0" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint4" joint="joint_6" kp="1" ctrlrange="-1.5707963267948966 0" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint5" joint="joint_10" kp="1" ctrlrange="0 1.5707963267948966" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint6" joint="joint_12" kp="1" ctrlrange="0 1.5707963267948966" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint7" joint="joint_13" kp="1" ctrlrange="0 1.5707963267948966" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint8" joint="joint_14" kp="1" ctrlrange="0 1.5707963267948966" ctrllimited="true" dampratio="1"/>
+        <position name="ctrl_joint9" joint="joint_15" kp="1" ctrlrange="0 1.5707963267948966" ctrllimited="true" dampratio="1"/>
+    </actuator>
+</mujoco>

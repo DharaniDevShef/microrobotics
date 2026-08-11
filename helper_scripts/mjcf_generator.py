@@ -180,8 +180,93 @@ def _write_joint_target_angles(root, graph, fold_joints):
         )
 
 
+class ModuleCollisionError(ValueError):
+    """Raised when two un-mated modules geometrically overlap in 3D."""
+
+
+def _assert_no_unintended_collisions(xml_path, G, fold_joints):
+    """Load the just-written model, evaluate contacts at both the flat
+    (qpos0) pose and the fully-folded pose (every hinge driven to its
+    graph's `hinge_angle`), and raise if any geom of one module
+    touches/interpenetrates a geom of a *different* module in either pose.
+
+    Mated module pairs (joined by a graph edge) already have every
+    body-body pair excluded in <contact> (see step 7b above), so MuJoCo
+    never generates a contact for them regardless of geometry. Any contact
+    that still shows up here is therefore a genuine, un-mated overlap --
+    e.g. two branches that swing into each other once folded -- not a
+    false positive from the mating surfaces. Module-vs-world contacts
+    (floor/walls) are ignored: resting on the floor is expected.
+
+    The folded pose is checked (not just the flat rest pose) because
+    origami-like self-collisions typically only appear once hinges are
+    actually folded -- see roblet_simulator.py's actuated "folded" state /
+    mujoco_api.py's State 2. Modules are independent freejoint bodies tied
+    together only by <equality><weld> constraints (not a kinematic joint
+    tree), and mj_forward() does NOT resolve equality constraints into
+    qpos -- it only computes kinematics from whatever qpos already is. So
+    directly poking a hinge joint's qpos and calling mj_forward once would
+    rotate that hinge locally while every module downstream of it (linked
+    through the weld chain) stays stranded at its flat-pose position,
+    producing phantom overlaps that would never occur once the weld
+    actually settles. Instead, the fold is driven through the real
+    position actuators and mj_step()'d forward so the welds pull dependent
+    modules along, exactly as happens in an actual rollout.
+    """
+    import mujoco  # local import: keep this generator usable without mujoco installed
+
+    model = mujoco.MjModel.from_xml_path(xml_path)
+    data = mujoco.MjData(model)
+
+    def module_of(geom_id):
+        body_id = model.geom_bodyid[geom_id]
+        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body_id)
+        return name.rsplit("_", 1)[-1] if name and "_" in name else None
+
+    def contacts_now(state_label):
+        found = set()
+        for i in range(data.ncon):
+            con = data.contact[i]
+            m1, m2 = module_of(con.geom1), module_of(con.geom2)
+            if m1 is None or m2 is None or m1 == m2:
+                continue  # world geom (floor/wall) or within-module contact
+            pair = tuple(sorted((f"module_{m1}", f"module_{m2}"), key=lambda n: int(n.split("_")[1])))
+            found.add((state_label, pair[0], pair[1]))
+        return found
+
+    mujoco.mj_resetData(model, data)
+    mujoco.mj_forward(model, data)
+    bad = contacts_now("flat")
+
+    if fold_joints:
+        for idx, num_id in enumerate(fold_joints):
+            m_type = G.nodes[f"module_{num_id}"]["module_type"]
+            sign = 1.0 if m_type == "valley fold" else -1.0
+            angle_rad = sign * np.radians(G.nodes[f"module_{num_id}"].get("hinge_angle", 0.0))
+            data.ctrl[idx] = angle_rad
+        # Settle: let the weld constraints pull dependent modules along as
+        # the hinges fold, same as a real rollout (welds use solref "0.01 1"
+        # -- a ~10ms time constant -- so a couple of settled seconds is
+        # comfortably past convergence).
+        for _ in range(300):
+            mujoco.mj_step(model, data)
+        bad |= contacts_now("folded")
+
+    if bad:
+        details = "\n".join(
+            f"  [{state}] {m1} <-> {m2}"
+            for state, m1, m2 in sorted(bad)
+        )
+        raise ModuleCollisionError(
+            f"{xml_path}: {len(bad)} colliding module pair(s) -- "
+            f"these modules are not connected by a graph edge, so they were not excluded "
+            f"from contact, and the geometry actually overlaps in 3D:\n{details}"
+        )
+
+
 def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
-                    weld_solref="0.01 1", weld_solimp="0.99 0.999 0.0001"):
+                    weld_solref="0.01 1", weld_solimp="0.99 0.999 0.0001",
+                    check_collisions=True):
     with open(graph_json_path, "r") as f:
         data = json.load(f)
 
@@ -477,15 +562,6 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
     equality_elem = ET.SubElement(root, "equality")
     actuator_elem = ET.SubElement(root, "actuator")
 
-    def module_bodies(node_id):
-        """All geom-bearing body names belonging to a single module."""
-        num_id = node_id.replace("module_", "")
-        if modules_info[node_id] == "non-foldable":
-            return [f"bodyRigid_{num_id}", f"connector1_{num_id}",
-                    f"connector2_{num_id}", f"connector3_{num_id}"]
-        return [f"bodyBase_{num_id}", f"bodyLink_{num_id}", f"connector1_{num_id}",
-                f"connector2_{num_id}", f"connector3_{num_id}"]
-
     # 7a. Internal excludes (hinge-adjacent bodies within one module) -- unchanged.
     for node_id, m_type in modules_info.items():
         num_id = node_id.replace("module_", "")
@@ -499,19 +575,49 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
             ET.SubElement(contact_elem, "exclude", body1=f"bodyRigid_{num_id}", body2=f"connector2_{num_id}")
             ET.SubElement(contact_elem, "exclude", body1=f"bodyRigid_{num_id}", body2=f"connector3_{num_id}")
 
+    def _connector_parent_body(node_id, c_idx):
+        """The body a given connector is mounted on: connector1 hangs off
+        bodyLink (the hinged half), connector2/3 off bodyBase -- both
+        collapse to bodyRigid for a non-foldable module."""
+        num_id = node_id.replace("module_", "")
+        if modules_info[node_id] == "non-foldable":
+            return f"bodyRigid_{num_id}"
+        return f"bodyLink_{num_id}" if c_idx == 1 else f"bodyBase_{num_id}"
+
     # 7b. Cross-module excludes: since mating is done via weld (not contact),
-    #     disable contact between EVERY geom-bearing body of one module and
-    #     every geom-bearing body of any other module. This avoids the weld
-    #     fighting a simultaneous contact force at the same mating surface,
-    #     and matches the old code's intent (it excluded whole-module pairs,
-    #     but those wrapper bodies carried no geoms, so this version is the
-    #     one that actually takes effect).
-    node_list = sorted(G.nodes, key=lambda x: int(x.split("_")[1]))
-    for i in range(len(node_list)):
-        for j in range(i + 1, len(node_list)):
-            for b1 in module_bodies(node_list[i]):
-                for b2 in module_bodies(node_list[j]):
-                    ET.SubElement(contact_elem, "exclude", body1=b1, body2=b2)
+    #     disable contact only in the immediate neighborhood of each mate --
+    #     the two connector bodies the weld joins, AND each connector's own
+    #     parent panel (it's flush-mounted on that panel's edge, so the two
+    #     panels legitimately sit right next to each other at every normal
+    #     joint too). That's a 2x2 set of 4 body pairs per edge, not the
+    #     whole module: a bare connector-connector exclude is too narrow
+    #     (falsely flags every ordinary joint, since the parent panels also
+    #     touch by design), while excluding entire modules is too broad --
+    #     see the two paragraphs below.
+    #
+    #     Every OTHER body pair between two mated modules -- e.g. one
+    #     module's *other*, unrelated connector against the other module's
+    #     bodyLink -- is deliberately left un-excluded. A module can be
+    #     legitimately mated to two different neighbors at once (a graph
+    #     cycle, e.g. a module welded to both a "left" and "right" parent),
+    #     and in that case its own body can still collide with either
+    #     parent's *other* geoms even though the two connector bodies are
+    #     correctly mated -- excluding the whole module pair previously hid
+    #     exactly that overlap.
+    #     Likewise, module pairs with no edge at all are left un-excluded,
+    #     so a real 3D overlap between two non-adjacent modules (e.g. a
+    #     self-intersecting branch layout) still produces genuine MuJoCo
+    #     contacts instead of being silently hidden -- see
+    #     _assert_no_unintended_collisions() below, which turns any such
+    #     contact into a build-time error.
+    for u, v, d in G.edges(data=True):
+        u_num, v_num = u.replace("module_", ""), v.replace("module_", "")
+        c1, c2 = d["connector1"], d["connector2"]
+        side_u = {f"connector{c1}_{u_num}", _connector_parent_body(u, c1)}
+        side_v = {f"connector{c2}_{v_num}", _connector_parent_body(v, c2)}
+        for b1 in side_u:
+            for b2 in side_v:
+                ET.SubElement(contact_elem, "exclude", body1=b1, body2=b2)
 
     # 7c. One weld equality constraint per graph edge = the actual physical
     #     magnetic mate between the two connector bodies. No relpose is given,
@@ -559,6 +665,9 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
 
     with open(out_xml_path, "w") as f:
         f.write(clean_xml)
+
+    if check_collisions:
+        _assert_no_unintended_collisions(out_xml_path, G, fold_joints)
 
     n_modules = len(G.nodes)
     n_edges = len(G.edges)

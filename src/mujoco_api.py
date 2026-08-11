@@ -195,7 +195,12 @@ def evaluate_graph(G, work_dir=None, sim_seconds=3.0, torque_ramp_time=TORQUE_RA
     with open(graph_json_path, "w", encoding="utf-8") as f:
         json.dump(nx.node_link_data(G, edges="edges"), f)
 
-    build_assembly(graph_json_path, xml_path, meshdir=_MESHDIR)
+    # check_collisions=False: this pipeline already treats self-collision as
+    # a soft feasibility constraint (objectives_api.collision_constraint,
+    # derived from the NaN-blowup "collided" flag below), not a hard error -
+    # the EA needs to score/select against colliding candidates, not crash
+    # run_generation() on the first one it generates.
+    build_assembly(graph_json_path, xml_path, meshdir=_MESHDIR, check_collisions=False)
 
     model = mujoco.MjModel.from_xml_path(xml_path)
     model.opt.timestep = TIMESTEP

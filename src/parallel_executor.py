@@ -8,8 +8,8 @@ commands = [
     [
         VENV_PYTHON,
         "roblet_simulator.py",
-        "--m", "../models/assembly.xml",
-        "--o", "../output/simulation_stats.json",
+        "--m", "../models/assembly0.xml",
+        "--o", "../output/simulation_stats0.json",
         "--headless",
         "--capture-media"
     ],

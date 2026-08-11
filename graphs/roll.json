@@ -1,0 +1,123 @@
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "module_type": "non-foldable",
+      "connectors": {
+        "1": null,
+        "2": "module_3",
+        "3": "module_2"
+      },
+      "hinge_angle": 45.0,
+      "_pos": [
+        65.08180909440055,
+        37.57499999999999
+      ],
+      "_angle": 90,
+      "_type": "inner",
+      "_line_states": [
+        0,
+        0,
+        0
+      ],
+      "depth": 0,
+      "parent": null,
+      "type_id": 0,
+      "id": "module_1"
+    },
+    {
+      "module_type": "valley fold",
+      "connectors": {
+        "1": "module_1",
+        "2": null,
+        "3": null
+      },
+      "hinge_angle": 45.0,
+      "_pos": [
+        130.1636181888011,
+        75.14999999999998
+      ],
+      "_angle": 270,
+      "_type": "outer",
+      "_line_states": [
+        2,
+        0,
+        0
+      ],
+      "depth": 1,
+      "parent": "module_1",
+      "type_id": 2,
+      "id": "module_2"
+    },
+    {
+      "module_type": "non-foldable",
+      "connectors": {
+        "1": "module_1",
+        "2": null,
+        "3": "module_4"
+      },
+      "hinge_angle": 45.0,
+      "_pos": [
+        4.601610347796179e-15,
+        75.14999999999999
+      ],
+      "_angle": 150,
+      "_type": "inner",
+      "_line_states": [
+        0,
+        0,
+        0
+      ],
+      "depth": 1,
+      "parent": "module_1",
+      "type_id": 0,
+      "id": "module_3"
+    },
+    {
+      "module_type": "Mountain fold",
+      "connectors": {
+        "1": "module_3",
+        "2": null,
+        "3": null
+      },
+      "hinge_angle": 45.0,
+      "_pos": [
+        9.203220695592358e-15,
+        150.29999999999998
+      ],
+      "_angle": 330,
+      "_type": "outer",
+      "_line_states": [
+        1,
+        0,
+        0
+      ],
+      "depth": 2,
+      "parent": "module_3",
+      "type_id": 1,
+      "id": "module_4"
+    }
+  ],
+  "edges": [
+    {
+      "connector1": 3,
+      "connector2": 1,
+      "source": "module_1",
+      "target": "module_2"
+    },
+    {
+      "connector1": 2,
+      "connector2": 1,
+      "source": "module_1",
+      "target": "module_3"
+    },
+    {
+      "connector1": 3,
+      "connector2": 1,
+      "source": "module_3",
+      "target": "module_4"
+    }
+  ]
+}

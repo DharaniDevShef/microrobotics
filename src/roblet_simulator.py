@@ -34,7 +34,7 @@ M_MOMENT = 6.5e-3
 # Maximum torque multiplier
 TORQUE_MULTIPLIER = 1
 # Time taken to reach full torque
-TORQUE_RAMP_TIME = 5  # seconds
+TORQUE_RAMP_TIME = 1  # seconds
 FREQUENCY = 6.25  # Hz
 TOTAL_CYCLE_TIME = 1.0 / FREQUENCY
 
@@ -306,17 +306,43 @@ def dynamic_text_rendering(viewer, data, module_labels):
         viewer.user_scn.ngeom += 1
 
 
+def _detect_instability(window_velocities, cv_threshold=0.75):
+    """Flags a "jumping/rolling" gait from its per-second windowed speed
+    samples (post torque-ramp): a steady walker's window-to-window speed
+    stays in a fairly narrow, consistently-forward band, while a robot
+    that's tumbling/bouncing instead of walking shows big swings -- most
+    tellingly, whole one-second windows of *net backward* COM motion (a
+    real stick-slip gait can micro-slip backward within a step, but
+    shouldn't lose ground over a full second), or a speed spread so wide
+    (stdev over mean) that "average velocity" isn't a meaningful summary.
+    """
+    if len(window_velocities) < 2:
+        return False
+    arr = np.array(window_velocities, dtype=float)
+    if np.any(arr < 0):
+        return True
+    mean = float(np.mean(arr))
+    std = float(np.std(arr))
+    return mean > 1e-9 and (std / mean) > cv_threshold
+
+
 def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
-                           filename="simulation_stats.json", success=True):
+                           filename="simulation_stats.json", success=True, instability=False):
     """Calculates masses and average torque, then saves to a JSON file.
 
     success=False means a MuJoCo physics warning (bad qpos/qvel/qacc, a
     diverging/colliding model, ...) fired during the rollout, so every
     stat is meaningless -- write zeros for all of them instead of whatever
-    partial numbers had accumulated up to the point of failure."""
+    partial numbers had accumulated up to the point of failure.
+
+    instability=True means the run completed (success=True) but its gait
+    looked like jumping/rolling rather than walking -- see
+    _detect_instability(). The velocity/distance numbers are still real,
+    just not a meaningful "how well does this walk" signal."""
     if not success:
         stats = {
             "success": 0,
+            "instability": 0,
             "total_mass_mg": 0,
             "average_torque_Nm": 0,
             "total_simulated_steps": 0,
@@ -345,7 +371,8 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
     avg_torque = float(np.mean(torque_history)) if torque_history else 0.0
 
     stats = {
-        "success": 1,
+        "success": 1 if success and not instability else 0,
+        "instability": 1 if instability else 0,
         "total_mass_mg": round(total_mass * 1e6, 4),  # Convert to milligrams
         # "module_masses_mg": module_masses,
         "average_torque_Nm": round(avg_torque, 4),  # Convert to Newton-meters
@@ -358,6 +385,7 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
         json.dump(stats, f, indent=4)
 
     print(f"\nSaved simulation statistics to '{filename}':")
+    print(f" - Instability: {'yes' if instability else 'no'}")
     print(f" - Total Mass: {total_mass * 1e6:.2f} mg")
     print(f" - Average Torque: {avg_torque:.2e} N·m")
     print(f" - Last Torque: {torque_history[-1]:.2e} N·m")
@@ -405,7 +433,7 @@ def _offscreen_camera(distance=0.25, lookat=(0, 0, 0)):
 
 def run_headless(
     model_path, stats_output_path, max_sim_time=None,
-    capture_media=False, media_dir="../output", gif_fps=15,
+    capture_img=False, capture_gif=False, media_dir="../output", gif_fps=15,
 ):
     """Runs one closed-loop simulation to completion with no viewer and no
     real-time pacing, so it steps as fast as the CPU allows.
@@ -447,7 +475,7 @@ def run_headless(
     # GIF frames are captured every gif_frame_stride steps so playback speed
     # approximates real time: gif_fps output frames per second of sim time.
     gif_frame_stride = max(1, round(1.0 / (gif_fps * model.opt.timestep)))
-    if capture_media:
+    if capture_img or capture_gif:
         renderer = mujoco.Renderer(model, height=480, width=640)
         camera = _offscreen_camera()
 
@@ -463,6 +491,14 @@ def run_headless(
     # WALL_STOP_DISTANCE gap between one step and the next. Checking every
     # 10 steps (0.1s) is still far tighter than needed and cuts this cost 10x.
     WALL_CHECK_STRIDE = 10
+
+    # Per-second windowed speed samples (post torque-ramp), for
+    # _detect_instability() -- same windowing as run_with_viewer's printed
+    # "Velocity: ..." line, just collected silently instead of printed.
+    last_window_second = -1
+    window_velocity_history = []
+    window_displacement = None
+    window_time = None
 
     try:
         while magnets_active:
@@ -489,6 +525,8 @@ def run_headless(
 
             if steady_state_displacement is None and data.time >= TORQUE_RAMP_TIME:
                 steady_state_displacement = displacement
+                window_displacement = displacement
+                window_time = data.time
             if steady_state_displacement is not None:
                 steady_elapsed = data.time - TORQUE_RAMP_TIME
                 avg_velocity = (
@@ -496,8 +534,17 @@ def run_headless(
                     if steady_elapsed > 0 else 0.0
                 )
 
+                current_second = int(data.time)
+                if current_second != last_window_second:
+                    last_window_second = current_second
+                    interval = data.time - window_time
+                    if interval > 0:
+                        window_velocity_history.append((displacement - window_displacement) / interval)
+                        window_displacement = displacement
+                        window_time = data.time
+
             if (
-                capture_media and data.time >= TORQUE_RAMP_TIME
+                capture_gif and data.time >= TORQUE_RAMP_TIME
                 and step_count % gif_frame_stride == 0
             ):
                 renderer.update_scene(data, camera=camera)
@@ -512,20 +559,27 @@ def run_headless(
             if max_sim_time is not None and data.time >= max_sim_time:
                 magnets_active = False
 
-        if capture_media and success:
+        # Save screenshot if requested
+        if capture_img and renderer is not None and success:
+            os.makedirs(media_dir, exist_ok=True)
             renderer.update_scene(data, camera=camera)
             screenshot = renderer.render()
-            Image.fromarray(screenshot).save(
-                os.path.join(media_dir, f"screenshot_{model_name}.png")
-            )
-            if gif_frames:
-                frame_duration_ms = round(1000 / gif_fps)
-                frames = [Image.fromarray(f) for f in gif_frames]
-                frames[0].save(
-                    os.path.join(media_dir, f"movement_{model_name}.gif"),
-                    save_all=True, append_images=frames[1:],
-                    duration=frame_duration_ms, loop=0,
+            if screenshot is not None:
+                Image.fromarray(screenshot).save(
+                    os.path.join(media_dir, f"screenshot_{model_name}.png")
                 )
+
+        # Save GIF if requested and frames were captured
+        if capture_gif and gif_frames:
+            os.makedirs(media_dir, exist_ok=True)
+            frame_duration_ms = round(1000 / gif_fps)
+            frames = [Image.fromarray(f) for f in gif_frames]
+            frames[0].save(
+                os.path.join(media_dir, f"movement_{model_name}.gif"),
+                save_all=True, append_images=frames[1:],
+                duration=frame_duration_ms, loop=0,
+            )
+
     finally:
         if renderer is not None:
             renderer.close()
@@ -533,12 +587,15 @@ def run_headless(
     mujoco.set_mjcb_control(None)
     data.xfrc_applied.fill(0)
 
+    instability = _detect_instability(window_velocity_history) if success else False
+
     save_simulation_stats(model, avg_velocity, displacement, module_labels,
-                           filename=stats_output_path, success=success)
+                           filename=stats_output_path, success=success, instability=instability)
 
     return {
         "model": model_name,
         "success": success,
+        "instability": instability,
         "avg_velocity_mmps": avg_velocity * 1000 if success else 0.0,
         "displacement_mm": displacement * 1000 if success else 0.0,
         "sim_time_s": data.time,
@@ -610,6 +667,8 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
         window_velocity = 0.0
         window_displacement = None
         window_time = None
+        # Same per-second samples as run_headless, for _detect_instability().
+        window_velocity_history = []
 
         while viewer.is_running():
             step_start = time.time()
@@ -695,6 +754,7 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
                     window_velocity = (displacement - window_displacement) / interval if interval > 0 else 0.0
                     window_displacement = displacement
                     window_time = data.time
+                    window_velocity_history.append(window_velocity)
                     print(
                         f"Velocity: {window_velocity * 1000:.2f} mm/s | "
                         f"Avg velocity: {avg_velocity * 1000:.2f} mm/s | "
@@ -708,8 +768,9 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
 
     # Unregister callback and save JSON data on exit
     mujoco.set_mjcb_control(None)
+    instability = _detect_instability(window_velocity_history) if success else False
     save_simulation_stats(model, avg_velocity, displacement, module_labels,
-                           filename=stats_output_path, success=success)
+                           filename=stats_output_path, success=success, instability=instability)
     #plot_b_field_history(filename="../output/b_field_plot.png")
 
 
@@ -717,7 +778,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
 
     parser.add_argument(
-        "--m", type=str, default="../models/assembly1.xml",
+        "--m", type=str, default="../models/assembly.xml",
         help="MJCF model path to run in the live viewer",
     )
 
@@ -727,7 +788,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--max_sim_time", type=float, default=10,
+        "--max_sim_time", type=float, default=7.0,
         help="Maximum simulation time in seconds (for headless runs)",
     )
 
@@ -737,8 +798,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--capture-media", action="store_true",
-        help="With --headless, also save a final-pose screenshot PNG and a movement GIF (post torque-ramp) via offscreen rendering.",
+        "--capture_img", action="store_true",
+        help="With --headless, also save a final-pose screenshot PNG",
+    )
+
+    parser.add_argument(
+        "--capture_gif", action="store_true",
+        help="With --headless, also save a movement GIF (post torque-ramp)",
     )
 
     args = parser.parse_args()
@@ -746,7 +812,8 @@ if __name__ == "__main__":
     if args.headless:
         run_headless(
             args.m, args.o, max_sim_time=args.max_sim_time,
-            capture_media=args.capture_media, media_dir=os.path.dirname(args.o) or ".",
+            capture_img=args.capture_img, capture_gif=args.capture_gif,
+            media_dir=os.path.dirname(args.o) or ".",
         )
     else:
         run_with_viewer(args.m, args.o, max_sim_time=args.max_sim_time)

@@ -11,7 +11,8 @@ commands = [
         "--m", "../models/assembly0.xml",
         "--o", "../output/simulation_stats0.json",
         "--headless",
-        "--capture-media"
+        "--capture_img",
+        # "--capture_gif"
     ],
     [
         VENV_PYTHON,
@@ -19,7 +20,8 @@ commands = [
         "--m", "../models/assembly1.xml",
         "--o", "../output/simulation_stats1.json",
         "--headless",
-        "--capture-media"
+        "--capture_img",
+        # "--capture_gif"
     ],
     [
         VENV_PYTHON,
@@ -27,7 +29,8 @@ commands = [
         "--m", "../models/assembly2.xml",
         "--o", "../output/simulation_stats2.json",
         "--headless",
-        "--capture-media"
+        "--capture_img",
+        # "--capture_gif"
     ],
     [
         VENV_PYTHON,
@@ -35,7 +38,8 @@ commands = [
         "--m", "../models/assembly3.xml",
         "--o", "../output/simulation_stats3.json",
         "--headless",
-        "--capture-media"
+        "--capture_img",
+        # "--capture_gif"
     ],
 ]
 

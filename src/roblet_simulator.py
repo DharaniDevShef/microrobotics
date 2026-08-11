@@ -306,8 +306,28 @@ def dynamic_text_rendering(viewer, data, module_labels):
         viewer.user_scn.ngeom += 1
 
 
-def save_simulation_stats(model, avg_velocity, total_distance, module_labels, filename="simulation_stats.json"):
-    """Calculates masses and average torque, then saves to a JSON file."""
+def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
+                           filename="simulation_stats.json", success=True):
+    """Calculates masses and average torque, then saves to a JSON file.
+
+    success=False means a MuJoCo physics warning (bad qpos/qvel/qacc, a
+    diverging/colliding model, ...) fired during the rollout, so every
+    stat is meaningless -- write zeros for all of them instead of whatever
+    partial numbers had accumulated up to the point of failure."""
+    if not success:
+        stats = {
+            "success": 0,
+            "total_mass_mg": 0,
+            "average_torque_Nm": 0,
+            "total_simulated_steps": 0,
+            "average_velocity_mmps": 0,
+            "total_distance_mm": 0,
+        }
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(stats, f, indent=4)
+        # print("Error: Simulation failed - MuJoCo warning triggered")
+        return
+
     # Total mass of the whole model
     total_mass = float(mujoco.mj_getTotalmass(model))
 
@@ -325,6 +345,7 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels, fi
     avg_torque = float(np.mean(torque_history)) if torque_history else 0.0
 
     stats = {
+        "success": 1,
         "total_mass_mg": round(total_mass * 1e6, 4),  # Convert to milligrams
         # "module_masses_mg": module_masses,
         "average_torque_Nm": round(avg_torque, 4),  # Convert to Newton-meters
@@ -435,6 +456,7 @@ def run_headless(
     displacement = 0.0
     steady_state_displacement = None
     magnets_active = True
+    success = True
     step_count = 0
     # Raycasting the 4 rangefinders every single 0.01s step is wasted work:
     # the robot moves on the order of mm/s, so it cannot close the 200mm
@@ -448,6 +470,17 @@ def run_headless(
             mujoco.mj_step(model, data)
             mujoco.mj_subtreeVel(model, data)
             step_count += 1
+
+            # A MuJoCo warning (bad qpos/qvel/qacc from a diverging or
+            # colliding model, ...) means the physics is no longer
+            # trustworthy - stop immediately rather than let a headless run
+            # spin through every remaining step (or hang, if the resulting
+            # NaNs make the wall-distance check never trip) on garbage state.
+            if int(np.sum(data.warning.number)) > 0:
+                # print(f"Time: {data.time:.2f}s | MuJoCo warning triggered - aborting run.")
+                success = False
+                magnets_active = False
+                break
 
             com = get_com_position(data)
             if initial_com is None:
@@ -479,7 +512,7 @@ def run_headless(
             if max_sim_time is not None and data.time >= max_sim_time:
                 magnets_active = False
 
-        if capture_media:
+        if capture_media and success:
             renderer.update_scene(data, camera=camera)
             screenshot = renderer.render()
             Image.fromarray(screenshot).save(
@@ -500,12 +533,14 @@ def run_headless(
     mujoco.set_mjcb_control(None)
     data.xfrc_applied.fill(0)
 
-    save_simulation_stats(model, avg_velocity, displacement, module_labels, filename=stats_output_path)
+    save_simulation_stats(model, avg_velocity, displacement, module_labels,
+                           filename=stats_output_path, success=success)
 
     return {
         "model": model_name,
-        "avg_velocity_mmps": avg_velocity * 1000,
-        "displacement_mm": displacement * 1000,
+        "success": success,
+        "avg_velocity_mmps": avg_velocity * 1000 if success else 0.0,
+        "displacement_mm": displacement * 1000 if success else 0.0,
         "sim_time_s": data.time,
     }
 
@@ -567,6 +602,7 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
         # from the average velocity below.
         steady_state_displacement = None
         magnets_active = True
+        success = True
         # Windowed velocity: displacement covered since the last 1-second
         # print, so the printout reflects actual per-interval speed instead
         # of the cumulative average-since-ramp-end (which can only creep
@@ -581,6 +617,19 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
 
             mujoco.mj_step(model, data)
             mujoco.mj_subtreeVel(model, data)
+
+            # A MuJoCo warning (bad qpos/qvel/qacc from a diverging or
+            # colliding model, ...) means the physics is no longer
+            # trustworthy - stop feeding it to the viewer immediately
+            # instead of continuing to sync() frames from a state that's
+            # about to (or already did) blow up.
+            if int(np.sum(data.warning.number)) > 0:
+                #print(f"Time: {data.time:.2f}s | MuJoCo warning triggered - aborting run.")
+                success = False
+                mujoco.set_mjcb_control(None)
+                data.xfrc_applied.fill(0)
+                viewer.close()
+                break
 
             # Ground-truth morphology performance metrics, tracked from the
             # whole-model subtree COM (body 0 = worldbody subtree = everything).
@@ -659,7 +708,8 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
 
     # Unregister callback and save JSON data on exit
     mujoco.set_mjcb_control(None)
-    save_simulation_stats(model, avg_velocity, displacement, module_labels, filename=stats_output_path)
+    save_simulation_stats(model, avg_velocity, displacement, module_labels,
+                           filename=stats_output_path, success=success)
     #plot_b_field_history(filename="../output/b_field_plot.png")
 
 
@@ -667,7 +717,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
 
     parser.add_argument(
-        "--m", type=str, default="../models/assembly.xml",
+        "--m", type=str, default="../models/assembly1.xml",
         help="MJCF model path to run in the live viewer",
     )
 

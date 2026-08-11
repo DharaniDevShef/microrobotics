@@ -12,6 +12,7 @@ commands = [
         "--o", "../output/simulation_stats0.json",
         "--headless",
         "--capture_img",
+        "--sweep_b",
         # "--capture_gif"
     ],
     [
@@ -21,6 +22,7 @@ commands = [
         "--o", "../output/simulation_stats1.json",
         "--headless",
         "--capture_img",
+        "--sweep_b",
         # "--capture_gif"
     ],
     [
@@ -30,6 +32,7 @@ commands = [
         "--o", "../output/simulation_stats2.json",
         "--headless",
         "--capture_img",
+        "--sweep_b",
         # "--capture_gif"
     ],
     [
@@ -39,6 +42,7 @@ commands = [
         "--o", "../output/simulation_stats3.json",
         "--headless",
         "--capture_img",
+        "--sweep_b",
         # "--capture_gif"
     ],
 ]

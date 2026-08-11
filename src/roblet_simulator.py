@@ -8,6 +8,7 @@ magnetic actuation of microrobots using MuJoCo physics engine.
 import argparse
 import json
 import os
+import tempfile
 import time
 import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
@@ -29,6 +30,11 @@ time_history = []
 # Physics constants
 # Magnetic field intensity (Tesla)
 B_INTENSITY = 0.01  # 10 mT
+# Candidate drive strengths for run_headless_b_sweep() -- the field a
+# morphology needs to overcome stiction and walk (rather than stall, or
+# over-drive into a rolling/tumbling gait) is morphology-dependent, so
+# this is swept per run rather than assumed fixed.
+B_SWEEP_VALUES = (0.001, 0.005, 0.01, 0.05)
 # 6.5 x 10^-3 Am^2 - 2mm x 2mm neodymium magnet cylinder (N42SH)
 M_MOMENT = 6.5e-3
 # Maximum torque multiplier
@@ -306,7 +312,7 @@ def dynamic_text_rendering(viewer, data, module_labels):
         viewer.user_scn.ngeom += 1
 
 
-def _detect_instability(window_velocities, cv_threshold=0.75):
+def _detect_instability(window_velocities, cv_threshold=0.60):
     """Flags a "jumping/rolling" gait from its per-second windowed speed
     samples (post torque-ramp): a steady walker's window-to-window speed
     stays in a fairly narrow, consistently-forward band, while a robot
@@ -327,7 +333,8 @@ def _detect_instability(window_velocities, cv_threshold=0.75):
 
 
 def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
-                           filename="simulation_stats.json", success=True, instability=False):
+                           filename="simulation_stats.json", success=True, instability=False,
+                           b_intensity=None):
     """Calculates masses and average torque, then saves to a JSON file.
 
     success=False means a MuJoCo physics warning (bad qpos/qvel/qacc, a
@@ -335,14 +342,19 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
     stat is meaningless -- write zeros for all of them instead of whatever
     partial numbers had accumulated up to the point of failure.
 
-    instability=True means the run completed (success=True) but its gait
+    instability=True means the run completed (physics-wise) but its gait
     looked like jumping/rolling rather than walking -- see
     _detect_instability(). The velocity/distance numbers are still real,
-    just not a meaningful "how well does this walk" signal."""
+    just not a meaningful "how well does this walk" signal.
+
+    b_intensity is the magnetic field strength (Tesla) this particular run
+    used -- recorded so a B sweep (see run_headless_b_sweep()) can tell
+    which candidate B produced the reported stats."""
     if not success:
         stats = {
             "success": 0,
             "instability": 0,
+            "B_intensity_T": round(b_intensity, 6) if b_intensity is not None else 0,
             "total_mass_mg": 0,
             "average_torque_Nm": 0,
             "total_simulated_steps": 0,
@@ -373,6 +385,7 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
     stats = {
         "success": 1 if success and not instability else 0,
         "instability": 1 if instability else 0,
+        "B_intensity_T": round(b_intensity, 6) if b_intensity is not None else 0,
         "total_mass_mg": round(total_mass * 1e6, 4),  # Convert to milligrams
         # "module_masses_mg": module_masses,
         "average_torque_Nm": round(avg_torque, 4),  # Convert to Newton-meters
@@ -590,16 +603,92 @@ def run_headless(
     instability = _detect_instability(window_velocity_history) if success else False
 
     save_simulation_stats(model, avg_velocity, displacement, module_labels,
-                           filename=stats_output_path, success=success, instability=instability)
+                           filename=stats_output_path, success=success, instability=instability,
+                           b_intensity=B_INTENSITY)
 
     return {
         "model": model_name,
         "success": success,
         "instability": instability,
+        "B_intensity_T": B_INTENSITY,
         "avg_velocity_mmps": avg_velocity * 1000 if success else 0.0,
         "displacement_mm": displacement * 1000 if success else 0.0,
         "sim_time_s": data.time,
     }
+
+
+def run_headless_b_sweep(
+    model_path, stats_output_path, b_values=B_SWEEP_VALUES, max_sim_time=None,
+    capture_img=False, capture_gif=False, media_dir="../output", gif_fps=15,
+):
+    """Runs one fast (no media) run_headless() rollout per candidate B in
+    b_values, picks the one with the highest average velocity among those
+    that both succeeded and weren't flagged unstable, then re-runs just
+    that winning B for real (with the caller's actual capture_img/
+    capture_gif) so media is never spent rendering a discarded candidate.
+
+    Winner selection:
+      1. Prefer the highest avg_velocity_mmps among success=True,
+         instability=False runs.
+      2. If none qualify, fall back to the highest avg_velocity_mmps among
+         success=True runs regardless of instability (a sweep should never
+         come back with nothing just because every candidate rocked).
+      3. If every B outright failed (a MuJoCo warning fired), report the
+         last attempted B's failed (all-zero) result.
+
+    Mutates the module-level B_INTENSITY for the duration of the sweep
+    (magnetic_field_callback reads it directly); always restored
+    afterward, even on error.
+    """
+    global B_INTENSITY
+    original_b = B_INTENSITY
+
+    results = []  # (result_dict, b_value)
+    tmp_paths = []
+    try:
+        for b in b_values:
+            B_INTENSITY = b
+            fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix="b_sweep_")
+            os.close(fd)
+            tmp_paths.append(tmp_path)
+            result = run_headless(
+                model_path, tmp_path, max_sim_time=max_sim_time,
+                capture_img=False, capture_gif=False, media_dir=media_dir, gif_fps=gif_fps,
+            )
+            results.append((result, b))
+            print(f"[B sweep] B={b} T -> success={int(result['success'])} "
+                  f"instability={int(result['instability'])} "
+                  f"velocity={result['avg_velocity_mmps']:.2f} mm/s")
+    finally:
+        B_INTENSITY = original_b
+        for p in tmp_paths:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+    clean = [(r, b) for r, b in results if r["success"] and not r["instability"]]
+    pool = clean if clean else [(r, b) for r, b in results if r["success"]]
+    winner_result, winner_b = (
+        max(pool, key=lambda rb: rb[0]["avg_velocity_mmps"]) if pool else results[-1]
+    )
+
+    print(f"[B sweep] picked B={winner_b} T (velocity={winner_result['avg_velocity_mmps']:.2f} mm/s, "
+          f"success={int(winner_result['success'])}, instability={int(winner_result['instability'])})")
+
+    # Re-run the winner for real, at the caller's requested stats path and
+    # media flags.
+    B_INTENSITY = winner_b
+    try:
+        final_result = run_headless(
+            model_path, stats_output_path, max_sim_time=max_sim_time,
+            capture_img=capture_img, capture_gif=capture_gif,
+            media_dir=media_dir, gif_fps=gif_fps,
+        )
+    finally:
+        B_INTENSITY = original_b
+
+    return final_result
 
 
 def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
@@ -770,7 +859,8 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
     mujoco.set_mjcb_control(None)
     instability = _detect_instability(window_velocity_history) if success else False
     save_simulation_stats(model, avg_velocity, displacement, module_labels,
-                           filename=stats_output_path, success=success, instability=instability)
+                           filename=stats_output_path, success=success, instability=instability,
+                           b_intensity=B_INTENSITY)
     #plot_b_field_history(filename="../output/b_field_plot.png")
 
 
@@ -807,13 +897,36 @@ if __name__ == "__main__":
         help="With --headless, also save a movement GIF (post torque-ramp)",
     )
 
+    parser.add_argument(
+        "--sweep_b", action="store_true",
+        help="With --headless, sweep B_intensity over --b_values and keep the "
+             "highest-velocity success+stable run (see run_headless_b_sweep)",
+    )
+
+    parser.add_argument(
+        "--b_values", type=str, default=None,
+        help="Comma-separated Tesla values for --sweep_b "
+             f"(default: {','.join(str(b) for b in B_SWEEP_VALUES)})",
+    )
+
     args = parser.parse_args()
 
     if args.headless:
-        run_headless(
-            args.m, args.o, max_sim_time=args.max_sim_time,
-            capture_img=args.capture_img, capture_gif=args.capture_gif,
-            media_dir=os.path.dirname(args.o) or ".",
-        )
+        if args.sweep_b:
+            b_values = (
+                tuple(float(v) for v in args.b_values.split(","))
+                if args.b_values else B_SWEEP_VALUES
+            )
+            run_headless_b_sweep(
+                args.m, args.o, b_values=b_values, max_sim_time=args.max_sim_time,
+                capture_img=args.capture_img, capture_gif=args.capture_gif,
+                media_dir=os.path.dirname(args.o) or ".",
+            )
+        else:
+            run_headless(
+                args.m, args.o, max_sim_time=args.max_sim_time,
+                capture_img=args.capture_img, capture_gif=args.capture_gif,
+                media_dir=os.path.dirname(args.o) or ".",
+            )
     else:
         run_with_viewer(args.m, args.o, max_sim_time=args.max_sim_time)

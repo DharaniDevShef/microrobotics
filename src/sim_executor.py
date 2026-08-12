@@ -9,9 +9,12 @@ batch of jobs, capped at `max_workers` concurrent processes at a time so
 a generation bigger than the CPU's core count doesn't oversubscribe it.
 """
 
+import logging
 import os
 import subprocess
 import sys
+
+logger = logging.getLogger(__name__)
 
 _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROBLET_SIMULATOR = os.path.join(_SRC_DIR, "roblet_simulator.py")
@@ -27,18 +30,22 @@ def run_batch(jobs, max_workers=None, max_sim_time=7.0):
     processes.
     """
     if not jobs:
+        logger.info("No simulation jobs to run.")
         return
     max_workers = max_workers or os.cpu_count() or 4
+    logger.info("Running %d simulation jobs in batches of %d workers", len(jobs), max_workers)
 
     for batch_start in range(0, len(jobs), max_workers):
         batch = jobs[batch_start:batch_start + max_workers]
+        logger.info("Starting batch %d: %d processes", batch_start // max_workers + 1, len(batch))
         processes = []
         for xml_path, stats_path in batch:
+            log_path = os.path.splitext(stats_path)[0] + ".log"
             cmd = [
                 sys.executable, _ROBLET_SIMULATOR,
                 "--m", xml_path, "--o", stats_path,
                 "--headless", "--sweep_b", "--max_sim_time", str(max_sim_time),
-                "--capture_img"
+                "--capture_img", "--log-file", log_path,
             ]
             processes.append(subprocess.Popen(cmd, cwd=_SRC_DIR))
         for p in processes:

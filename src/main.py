@@ -13,6 +13,7 @@ Loop, per generation:
     plotting_api                 -> generation JSON + Pareto plot + RL diagnostics
 """
 
+import logging
 import os
 import random
 
@@ -20,10 +21,25 @@ import moo_api
 import plotting_api
 import rl_api
 
+logger = logging.getLogger(__name__)
+
 POP_SIZE = 3
 N_GENERATIONS = 5
 SIM_SECONDS = 30
 SEED = 0
+
+
+def configure_logging(log_file, level=logging.INFO):
+    handlers = [logging.StreamHandler()]
+    if log_file:
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(name)s %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=handlers,
+    )
 
 _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(_SRC_DIR, "..", "output", "evolution_run")
@@ -32,15 +48,16 @@ OUTPUT_DIR = os.path.join(_SRC_DIR, "..", "output", "evolution_run")
 def main():
     random.seed(SEED)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    configure_logging(os.path.join(OUTPUT_DIR, "main.log"))
 
     rng = random.Random(SEED)
     ppo_trainer = rl_api.PPOTrainer(seed=SEED)
 
-    print(f"Sobol-seeding initial population (pop_size={POP_SIZE})...")
+    logger.info("Sobol-seeding initial population (pop_size=%d)...", POP_SIZE)
     population = moo_api.sobol_seed_population(POP_SIZE, seed=SEED)
 
     for gen in range(N_GENERATIONS):
-        print(f"=== Generation {gen} ===")
+        logger.info("\n------------------------Generation %d------------------------", gen)
         # Each generation gets its own folder (XMLs, stats.json, screenshots,
         # breeding_events.json) instead of a shared _scratch dir that the
         # next generation's same-named files would just overwrite - see
@@ -65,13 +82,14 @@ def main():
         # f1 (flat-state velocity) is ignored for now - see objectives_api.py -
         # so f2 (the single evolved-gait velocity) is the real signal to watch.
         best = max(records, key=lambda r: r["objectives"]["f2_forward_velocity_folded"])
-        print(
-            f"  parents={log['n_parents']} offspring={log['n_offspring']} "
-            f"collided={log['n_collided']} | survivors={len(population)} | "
-            f"best f2 (velocity)={best['objectives']['f2_forward_velocity_folded']:.4f} m/s"
+        logger.info(
+            "parents=%d offspring=%d collided=%d | survivors=%d | "
+            "best f2 (velocity)=%.4f m/s",
+            log['n_parents'], log['n_offspring'], log['n_collided'],
+            len(population), best['objectives']['f2_forward_velocity_folded'],
         )
 
-    print(f"Done. Artifacts written to {os.path.abspath(OUTPUT_DIR)}")
+    logger.info("Done. Artifacts written to %s", os.path.abspath(OUTPUT_DIR))
 
 
 if __name__ == "__main__":

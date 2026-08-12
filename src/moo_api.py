@@ -27,6 +27,7 @@ scalar fitness formula).
 """
 
 import json
+import logging
 import os
 import random
 import sys
@@ -44,6 +45,8 @@ import objectives_api as obj_api
 import rl_api
 import roblet_grammar as rg
 import sim_executor
+
+logger = logging.getLogger(__name__)
 
 _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 _HELPER_SCRIPTS_DIR = os.path.join(_SRC_DIR, "..", "helper_scripts")
@@ -113,6 +116,7 @@ def evaluate_population(graphs, work_dir, sim_seconds=7.0, max_workers=None):
     objectives_api. Returns a list of (objectives, f_vec, constraint)
     aligned to `graphs`' order."""
     os.makedirs(work_dir, exist_ok=True)
+    logger.info("Evaluating population: %d graphs, work_dir=%s", len(graphs), work_dir)
 
     stats_paths = [None] * len(graphs)
     jobs = []
@@ -124,6 +128,7 @@ def evaluate_population(graphs, work_dir, sim_seconds=7.0, max_workers=None):
         jobs.append((xml_path, stats_paths[i]))
 
     sim_executor.run_batch(jobs, max_workers=max_workers, max_sim_time=sim_seconds)
+    logger.info("Finished simulation batch: %d jobs", len(jobs))
 
     results = []
     for stats_path in stats_paths:

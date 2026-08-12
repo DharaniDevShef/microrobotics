@@ -7,6 +7,7 @@ magnetic actuation of microrobots using MuJoCo physics engine.
 
 import argparse
 import json
+import logging
 import os
 import tempfile
 import time
@@ -26,6 +27,8 @@ torque_history = []
 # B-field tracking global variables (paired with torque_history, one entry per step)
 b_field_history = []
 time_history = []
+
+logger = logging.getLogger(__name__)
 
 # Physics constants
 # Magnetic field intensity (Tesla)
@@ -363,7 +366,10 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
         }
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(stats, f, indent=4)
-        # print("Error: Simulation failed - MuJoCo warning triggered")
+        logger.info(
+            "Simulation Results: \n(success=%d, instability=%d, avg_velocity=%.2f mm/s, total_distance=%.2f mm)",
+            stats["success"], stats["instability"], stats["average_velocity_mmps"], stats["total_distance_mm"],
+        )
         return
 
     # Total mass of the whole model
@@ -397,13 +403,14 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(stats, f, indent=4)
 
-    print(f"\nSaved simulation statistics to '{filename}':")
-    print(f" - Instability: {'yes' if instability else 'no'}")
-    print(f" - Total Mass: {total_mass * 1e6:.2f} mg")
-    print(f" - Average Torque: {avg_torque:.2e} N·m")
-    print(f" - Last Torque: {torque_history[-1]:.2e} N·m")
-    print(f" - Average velocity: {avg_velocity * 1000:.2f} mm/s")
-    print(f" - Total Distance: {total_distance * 1000:.2f} mm")
+    logger.info(
+        "Simulation Results: \n(success=%d, instability=%d, avg_velocity=%.2f mm/s, total_distance=%.2f mm)",
+         stats["success"], stats["instability"], stats["average_velocity_mmps"], stats["total_distance_mm"],
+    )
+    logger.debug(
+        "Total mass=%.2f mg, average_torque=%.2e Nm, last_torque=%.2e Nm, steps=%d",
+        total_mass * 1e6, avg_torque, torque_history[-1] if torque_history else 0.0, len(torque_history),
+    )
 
 
 def plot_b_field_history(filename="../output/b_field_plot.png"):
@@ -418,6 +425,7 @@ def plot_b_field_history(filename="../output/b_field_plot.png"):
 
     ax.set_xlabel("Time (s)", color="#52514e")
     ax.set_ylabel("Applied B field, z-component (T)", color="#52514e")
+    logger.info("Saved B-field plot to '%s'", filename)
     ax.set_title("Applied Magnetic Field Over Time", color="#0b0b0b")
 
     ax.grid(True, color="#e1e0d9", linewidth=0.8)
@@ -432,7 +440,7 @@ def plot_b_field_history(filename="../output/b_field_plot.png"):
     fig.savefig(filename, dpi=150, facecolor=fig.get_facecolor())
     plt.close(fig)
 
-    print(f"Saved B-field plot to '{filename}'")
+    logger.info("Saved B-field plot to '%s'", filename)
 
 
 def _offscreen_camera(distance=0.25, lookat=(0, 0, 0)):
@@ -656,9 +664,10 @@ def run_headless_b_sweep(
                 capture_img=False, capture_gif=False, media_dir=media_dir, gif_fps=gif_fps,
             )
             results.append((result, b))
-            print(f"[B sweep] B={b} T -> success={int(result['success'])} "
-                  f"instability={int(result['instability'])} "
-                  f"velocity={result['avg_velocity_mmps']:.2f} mm/s")
+            logger.debug(
+                "[B sweep] B=%s T -> success=%d instability=%d velocity=%.2f mm/s",
+                b, int(result['success']), int(result['instability']), result['avg_velocity_mmps'],
+            )
     finally:
         B_INTENSITY = original_b
         for p in tmp_paths:
@@ -683,8 +692,10 @@ def run_headless_b_sweep(
             "sim_time_s": 0.0,
         }
 
-    print(f"[B sweep] picked B={winner_b} T (velocity={winner_result['avg_velocity_mmps']:.2f} mm/s, "
-          f"success={int(winner_result['success'])}, instability={int(winner_result['instability'])})")
+    logger.info(
+        "[B sweep] picked B=%.6f T (velocity=%.2f mm/s, success=%d, instability=%d)",
+        winner_b, winner_result['avg_velocity_mmps'], int(winner_result['success']), int(winner_result['instability']),
+    )
 
     # Re-run the winner for real, at the caller's requested stats path and
     # media flags.
@@ -720,9 +731,9 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
     wall) but the viewer stays open so you can still inspect the final pose.
     """
     if not os.path.exists(model_path):
-        print(f"Error: Could not find '{model_path}'")
+        logger.error("Could not find '%s'", model_path)
         return
-    print(f"Loading model: {model_path}...")
+    logger.info("Loading model: %s...", model_path)
 
     model = mujoco.MjModel.from_xml_path(model_path)
     data = mujoco.MjData(model)
@@ -732,14 +743,14 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
         target_angles = [45.0] * model.nu
 
     if isinstance(target_angles, dict):
-        print("Loaded actuator target angles from XML:")
+        logger.debug("Loaded actuator target angles from XML:")
         for actuator_name, angle_deg in sorted(target_angles.items()):
             if actuator_name.startswith("ctrl_joint"):
-                print(f" - {actuator_name}: {angle_deg:.2f}°")
+                logger.debug(" - %s: %.2f°", actuator_name, angle_deg)
     else:
-        print("Loaded actuator target angles from XML as ordered values:")
+        logger.debug("Loaded actuator target angles from XML as ordered values:")
         for i, angle_deg in enumerate(target_angles):
-            print(f" - actuator {i}: {angle_deg:.2f}°")
+            logger.debug(" - actuator %d: %.2f°", i, angle_deg)
 
     # Simulation timestep
     model.opt.timestep = 0.01  # 10 milliseconds
@@ -837,10 +848,10 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
                     # applied torque would keep acting on every future step.
                     data.xfrc_applied.fill(0)
                     magnets_active = False
-                    print(f"Time: {data.time:.2f}s | Wall reached ({int(wall_dist)}) mm) - magnetic field stopped.")
+                    logger.info("Time: %.2fs | Wall reached (%d mm) - magnetic field stopped.", data.time, int(wall_dist))
 
             if max_sim_time is not None and data.time >= max_sim_time:
-                print(f"Time: {data.time:.2f}s | max_sim_time reached - closing viewer.")
+                logger.info("Time: %.2fs | max_sim_time reached - closing viewer.", data.time)
                 viewer.close()
                 break
 
@@ -855,19 +866,16 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
                 last_print = current_second
                 ramp = min(data.time / TORQUE_RAMP_TIME, 1.0)
                 if ramp < 1.0:
-                    print(
-                        f"Time: {data.time:.2f}s | Torque ramp: {int(ramp*100)}%"
-                    )
+                    logger.info("Time: %.2fs | Torque ramp: %d%%", data.time, int(ramp * 100))
                 else:
                     interval = data.time - window_time
                     window_velocity = (displacement - window_displacement) / interval if interval > 0 else 0.0
                     window_displacement = displacement
                     window_time = data.time
                     window_velocity_history.append(window_velocity)
-                    print(
-                        f"Velocity: {window_velocity * 1000:.2f} mm/s | "
-                        f"Avg velocity: {avg_velocity * 1000:.2f} mm/s | "
-                        f"Displacement: {displacement * 1000:.2f} mm"
+                    logger.info(
+                        "Velocity: %.2f mm/s | Avg velocity: %.2f mm/s | Displacement: %.2f mm",
+                        window_velocity * 1000, avg_velocity * 1000, displacement * 1000,
                     )
 
             # Maintain real-time velocity
@@ -929,7 +937,22 @@ if __name__ == "__main__":
              f"(default: {','.join(str(b) for b in B_SWEEP_VALUES)})",
     )
 
+    parser.add_argument(
+        "--log-file", type=str, default=None,
+        help="Optional log file path to write simulator logs to.",
+    )
+
     args = parser.parse_args()
+    handlers = [logging.StreamHandler()]
+    if args.log_file:
+        os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
+        handlers.append(logging.FileHandler(args.log_file, encoding="utf-8"))
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=handlers,
+    )
 
     if args.headless:
         if args.sweep_b:

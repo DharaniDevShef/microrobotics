@@ -38,6 +38,33 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
 
 GRAPH_CARD_WIDTH = 340
 PLOT_CARD_WIDTH = 600
+LINEAGE_THUMB_WIDTH = 200
+SCREENSHOT_CARD_WIDTH = 260
+SCREENSHOTS_COLUMNS = 3
+
+
+def generation_dir(generation_idx: int) -> Path:
+    """moo_api.run_generation's per-generation work_dir (XMLs, stats.json,
+    screenshots, breeding_events.json) - see main.py."""
+    return OUTPUT_DIR / f"generation_{generation_idx}"
+
+
+def screenshot_path(generation_idx: int, ind_idx: int) -> Path:
+    """Matches roblet_simulator.run_headless's `screenshot_{model_name}.png`
+    naming, where model_name is the XML's basename - moo_api.py always
+    names an individual's XML `ind{i}_assembly.xml`."""
+    return generation_dir(generation_idx) / f"screenshot_ind{ind_idx}_assembly.png"
+
+
+def load_breeding_events(generation_idx: int) -> Optional[dict]:
+    """The lineage log moo_api.run_generation writes via
+    _write_breeding_events() - None if this generation predates the
+    feature (or hasn't run yet)."""
+    path = generation_dir(generation_idx) / "breeding_events.json"
+    if not path.exists():
+        return None
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 class GraphCardWidget(QLabel):
@@ -110,10 +137,33 @@ class EvolutionResultsVisualizer(QMainWindow):
         controls.addStretch(1)
         layout.addLayout(controls)
 
-        content = QHBoxLayout()
+        self.graphs_subtabs = QTabWidget(self.graphs_tab)
+        layout.addWidget(self.graphs_subtabs)
+
+        population_subtab = QWidget()
+        self.graphs_subtabs.addTab(population_subtab, "Population")
+        self._build_population_subtab(population_subtab)
+
+        screenshots_subtab = QWidget()
+        self.graphs_subtabs.addTab(screenshots_subtab, "3D Screenshots")
+        self._build_screenshots_subtab(screenshots_subtab)
+
+        mutations_subtab = QWidget()
+        self.graphs_subtabs.addTab(mutations_subtab, "Mutations")
+        self.mutations_layout = self._build_lineage_subtab(mutations_subtab)
+
+        crossover_subtab = QWidget()
+        self.graphs_subtabs.addTab(crossover_subtab, "Crossover")
+        self.crossover_layout = self._build_lineage_subtab(crossover_subtab)
+
+    def _build_population_subtab(self, tab: QWidget) -> None:
+        """The original single-generation graph-topology cards + fitness
+        metrics view, now living in its own sub-tab alongside the new
+        Screenshots/Mutations/Crossover ones."""
+        content = QHBoxLayout(tab)
         content.setSpacing(12)
 
-        left_panel = QWidget(self.graphs_tab)
+        left_panel = QWidget(tab)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -132,7 +182,7 @@ class EvolutionResultsVisualizer(QMainWindow):
 
         content.addWidget(left_panel, 3)
 
-        right_panel = QWidget(self.graphs_tab)
+        right_panel = QWidget(tab)
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -145,7 +195,44 @@ class EvolutionResultsVisualizer(QMainWindow):
         metrics_layout.addWidget(self.metrics_label)
         right_layout.addWidget(self.metrics_group)
         content.addWidget(right_panel, 1)
-        layout.addLayout(content)
+
+    def _build_screenshots_subtab(self, tab: QWidget) -> None:
+        """3D Screenshots: grid of the individuals newly bred THIS
+        generation only - carried-over survivors from the previous
+        generation are excluded (they were already shown when they were
+        new)."""
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 12, 12, 12)
+
+        scroll = QScrollArea(tab)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        container = QWidget(scroll)
+        self.screenshots_grid = QGridLayout(container)
+        self.screenshots_grid.setContentsMargins(0, 0, 0, 0)
+        self.screenshots_grid.setSpacing(10)
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
+
+    def _build_lineage_subtab(self, tab: QWidget) -> QVBoxLayout:
+        """Shared scaffold for Mutations/Crossover: a scrollable vertical
+        stack of parent(s) -> offspring(s) rows. Returns the layout rows
+        get added to."""
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 12, 12, 12)
+
+        scroll = QScrollArea(tab)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        container = QWidget(scroll)
+        rows_layout = QVBoxLayout(container)
+        rows_layout.setContentsMargins(0, 0, 0, 0)
+        rows_layout.setSpacing(10)
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
+        return rows_layout
 
     def _build_plots_tab(self) -> None:
         layout = QVBoxLayout(self.plots_tab)
@@ -196,6 +283,9 @@ class EvolutionResultsVisualizer(QMainWindow):
             return
         self.current_generation = generation_idx
         self.populate_graph_cards(generation_idx)
+        self.populate_screenshots_tab(generation_idx)
+        self.populate_mutations_tab(generation_idx)
+        self.populate_crossover_tab(generation_idx)
 
     def populate_graph_cards(self, generation_idx: int) -> None:
         self._clear_graph_cards()
@@ -236,6 +326,161 @@ class EvolutionResultsVisualizer(QMainWindow):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
+
+    # ------------------------------------------------------------------
+    # 3D Screenshots / Mutations / Crossover sub-tabs
+    # ------------------------------------------------------------------
+
+    def populate_screenshots_tab(self, generation_idx: int) -> None:
+        self._clear_layout(self.screenshots_grid)
+        data = load_breeding_events(generation_idx)
+        if data is None:
+            self._add_placeholder(self.screenshots_grid, "No breeding_events.json for this generation.")
+            return
+
+        n_parents = data.get("n_parents", 0)
+        n_total = n_parents + data.get("n_offspring", 0)
+        offspring_ids = list(range(n_parents, n_total))  # newly bred this generation only
+        if not offspring_ids:
+            self._add_placeholder(self.screenshots_grid, "No newly bred offspring this generation.")
+            return
+
+        for position, ind_idx in enumerate(offspring_ids):
+            # This grid only ever lists offspring_ids (parents are
+            # excluded by design), but caption by role rather than the
+            # raw batch index either way, in case that ever changes.
+            role = "Parent" if ind_idx < n_parents else "Offspring"
+            caption = f"{role} {position if role == 'Offspring' else ind_idx}"
+            card = self._image_card(
+                screenshot_path(generation_idx, ind_idx), width=SCREENSHOT_CARD_WIDTH, caption=caption
+            )
+            row, col = divmod(position, SCREENSHOTS_COLUMNS)
+            self.screenshots_grid.addWidget(card, row, col)
+
+    def populate_mutations_tab(self, generation_idx: int) -> None:
+        self._populate_lineage_tab(generation_idx, self.mutations_layout, event_type="mutation")
+
+    def populate_crossover_tab(self, generation_idx: int) -> None:
+        self._populate_lineage_tab(generation_idx, self.crossover_layout, event_type="crossover")
+
+    def _populate_lineage_tab(self, generation_idx: int, layout: QVBoxLayout, event_type: str) -> None:
+        self._clear_layout(layout)
+        data = load_breeding_events(generation_idx)
+        if data is None:
+            self._add_placeholder(layout, "No breeding_events.json for this generation.")
+            return
+
+        events = [e for e in data.get("events", []) if e.get("type") == event_type]
+        if not events:
+            self._add_placeholder(layout, f"No {event_type} events recorded this generation.")
+            return
+
+        for event in events:
+            row = self._build_lineage_row(
+                generation_idx, event.get("parent_ids", []), event.get("child_ids", []), event.get("action", "")
+            )
+            layout.addWidget(row)
+        layout.addStretch(1)
+
+    def _build_lineage_row(self, generation_idx: int, parent_ids: list, child_ids: list, action_label: str) -> QWidget:
+        """One parent(s) -> offspring(s) row: 1 parent for a mutation, 2
+        parents for a crossover (which itself has 1 child for
+        GRAFT_SUBTREE, or 2 for SWAP_SUBTREES - both render fine here,
+        just with more thumbnails after the arrow). Captions are named by
+        ROLE + POSITION in this row ("Parent 1", "Offspring 2", ...), not
+        by the raw ind{i} batch index, which was confusing on its own."""
+        frame = QFrame()
+        frame.setFrameShape(QFrame.Shape.StyledPanel)
+        row = QHBoxLayout(frame)
+        row.setSpacing(10)
+
+        for position, parent_id in enumerate(parent_ids, start=1):
+            row.addWidget(self._image_card(
+                self._graph_topology_image(generation_idx, parent_id),
+                width=LINEAGE_THUMB_WIDTH, caption=f"Parent {position}",
+            ))
+
+        action_taken = QLabel(f"{action_label}" if action_label else "---")
+        action_taken.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(action_taken)
+
+        for position, child_id in enumerate(child_ids, start=1):
+            row.addWidget(self._image_card(
+                self._graph_topology_image(generation_idx, child_id),
+                width=LINEAGE_THUMB_WIDTH, caption=f"Offspring {position}",
+            ))
+
+        row.addStretch(1)
+        return frame
+
+    def _graph_topology_image(self, generation_idx: int, ind_idx: int) -> Optional[Path]:
+        """Renders ind{ind_idx}'s graph topology (same graph_visualizer
+        rendering the Population tab's cards use) from the per-generation
+        `ind{i}_graph.json` moo_api.py writes for EVERY individual it
+        evaluates - not just the survivors in
+        generation_{g}_population.json, which is all breeding_events.json's
+        ids can otherwise point to (a bred-but-not-selected offspring, or a
+        parent that didn't survive, won't be in that file). Cached inside
+        that generation's own folder so it only renders once."""
+        graph_json_path = generation_dir(generation_idx) / f"ind{ind_idx}_graph.json"
+        if not graph_json_path.exists():
+            return None
+
+        cache_path = generation_dir(generation_idx) / "_graph_previews" / f"ind{ind_idx}.png"
+        if cache_path.exists():
+            return cache_path
+
+        with graph_json_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        fig, ax = plt.subplots(figsize=(5, 5))
+        ax.axis("off")
+        draw_graph_to_figure(data, figure=fig, title=f"ind{ind_idx}", aspect_equal=False)
+        fig.savefig(cache_path, dpi=140)
+        plt.close(fig)
+        return cache_path
+
+    def _image_card(self, path: Optional[Path], width: int, caption: str = "") -> QWidget:
+        """A thumbnail (or a gray placeholder if `path` is missing/None -
+        e.g. the individual failed to build/simulate) with a caption
+        underneath."""
+        wrapper = QWidget()
+        column = QVBoxLayout(wrapper)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(2)
+
+        pixmap = QPixmap(str(path)) if path is not None and path.exists() else QPixmap()
+        if pixmap.isNull():
+            pixmap = QPixmap(width, int(width * 0.75))
+            pixmap.fill(Qt.GlobalColor.lightGray)
+        pixmap = pixmap.scaledToWidth(width, Qt.TransformationMode.SmoothTransformation)
+
+        image_label = QLabel()
+        image_label.setPixmap(pixmap)
+        image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        column.addWidget(image_label)
+
+        if caption:
+            caption_label = QLabel(caption)
+            caption_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            column.addWidget(caption_label)
+        return wrapper
+
+    def _clear_layout(self, layout) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _add_placeholder(self, layout, text: str) -> None:
+        label = QLabel(text)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if isinstance(layout, QGridLayout):
+            layout.addWidget(label, 0, 0)
+        else:
+            layout.addWidget(label)
 
     def select_graph_card(self, card: GraphCardWidget) -> None:
         for index in range(self.graph_cards_layout.count()):

@@ -1,11 +1,18 @@
 """
 Objectives API - Fitness Evaluator.
 
-Turns mujoco_api.evaluate_graph()'s raw trajectories into the design
-doc's f1..f5 objective vector.
+Turns a roblet_simulator.py `stats.json` dict (see its save_simulation_stats)
+into the design doc's f1..f5 objective vector. This reads ONLY the JSON
+fields that process writes to disk - roblet_simulator.py runs as its own
+OS process per individual (see sim_executor.py), so no raw trajectory
+data ever comes back to this process.
 
-Scope for this pass: f1, f2, f5 are real; f3 and f4 are dummy
-placeholders (always 0.0) - see their docstrings below for what a real
+Scope for this pass: only f2 (single evolved-gait forward velocity) is
+real. f1 (a separate flat-state velocity) is ignored for now -
+roblet_simulator.run_headless runs one rollout per model, driven by each
+module's own evolved `hinge_angle` (via the XML's <custom> ctrl_joint
+fields), not a separate all-flat baseline pass. f3, f4, f5 are dummy
+placeholders (always 0.0) - see their docstrings for what a real
 implementation needs.
 """
 
@@ -31,62 +38,51 @@ MAXIMIZE = {
 }
 
 
-def _forward_velocity(rollout):
-    """Mean horizontal (x-y) COM speed (m/s)."""
-    if rollout.com_vel.shape[0] == 0:
+def _f1_forward_velocity_flat(stats):
+    """IGNORED for now - always 0.0. roblet_simulator.py runs a single
+    rollout per model (the graph's own evolved hinge angles), not a
+    separate all-flat baseline pass, so there is nothing to score here."""
+    return 0.0
+
+
+def _f2_forward_velocity_folded(stats):
+    """Forward displacement speed (m/s) of the single evolved-gait
+    rollout, read directly from stats.json's average_velocity_mmps.
+    0.0 if the run failed (stats["success"] == 0)."""
+    if not stats.get("success", 0):
         return 0.0
-    horizontal_speed = np.linalg.norm(rollout.com_vel[:, :2], axis=1)
-    return float(np.mean(horizontal_speed))
+    return float(stats.get("average_velocity_mmps", 0.0)) / 1000.0
 
 
-def _f1_forward_velocity_flat(state1, state2):
-    """Baseline forward displacement speed in the flat (State 1) rollout."""
-    return _forward_velocity(state1)
-
-
-def _f2_forward_velocity_folded(state1, state2):
-    """Forward displacement speed in the folded (State 2) rollout."""
-    return _forward_velocity(state2)
-
-
-def _f3_relative_yaw(state1, state2):
+def _f3_relative_yaw(stats):
     """PLACEHOLDER (dummy) - always 0.0.
 
-    TODO: real implementation needs a well-defined whole-body heading
-    (e.g. tracked from module_1's own body orientation via data.xmat,
-    not the subtree COM which has no orientation) sampled at the start
-    and end of each rollout, then the flat-vs-folded heading delta.
+    TODO: needs a whole-body heading tracked and written into stats.json
+    by roblet_simulator.py (e.g. from module_1's own orientation), since
+    this process only ever sees the JSON, never raw trajectories.
     """
     return 0.0
 
 
-def _f4_gait_stability(state1, state2):
+def _f4_gait_stability(stats):
     """PLACEHOLDER (dummy) - always 0.0.
 
-    TODO: real implementation should penalize vertical (z) COM
-    oscillation during locomotion, e.g. -std(state2.com_pos[:, 2]) (or
-    some other z-jitter measure), evaluated after the torque ramp settles.
+    TODO: stats.json's "instability" flag (roblet_simulator.py's
+    _detect_instability, already JSON-native) is a real signal that could
+    drive this once wired in - e.g. `-1.0 if stats["instability"] else 0.0`.
     """
     return 0.0
 
 
-def _f5_entropy(state1, state2):
-    """Shannon entropy (bits) of the folded-state COM heading-direction
-    histogram - a real, if simple, proxy for "diversity/complexity" of the
-    locomotion pattern: a robot walking a straight line has low entropy; one
-    that wanders/turns unpredictably has high entropy."""
-    vel = state2.com_vel
-    if vel.shape[0] < 2:
-        return 0.0
-    speed = np.linalg.norm(vel[:, :2], axis=1)
-    moving = speed > 1e-6
-    if not np.any(moving):
-        return 0.0
-    headings = np.arctan2(vel[moving, 1], vel[moving, 0])
-    n_bins = 16
-    hist, _ = np.histogram(headings, bins=n_bins, range=(-np.pi, np.pi))
-    probs = hist[hist > 0] / hist.sum()
-    return float(-np.sum(probs * np.log2(probs)))
+def _f5_entropy(stats):
+    """PLACEHOLDER (dummy) - always 0.0.
+
+    TODO: compute from stats.json fields once roblet_simulator.py's
+    save_simulation_stats is extended to record something suitable (e.g.
+    its already-collected window_velocity_history) - NOT by replaying raw
+    simulation trajectories, which this process never receives.
+    """
+    return 0.0
 
 
 _OBJECTIVE_FUNCS = {
@@ -98,12 +94,13 @@ _OBJECTIVE_FUNCS = {
 }
 
 
-def compute_objectives(rollout_result):
-    """rollout_result: the dict returned by mujoco_api.evaluate_graph().
-    Returns dict[name -> float] in natural ("MAXIMIZE says which way is
-    good") units."""
-    state1, state2 = rollout_result["state1"], rollout_result["state2"]
-    return {name: fn(state1, state2) for name, fn in _OBJECTIVE_FUNCS.items()}
+def compute_objectives(stats):
+    """stats: the dict loaded from a roblet_simulator.py stats.json (or an
+    equivalent all-failed dict for a graph that couldn't even be built -
+    see moo_api.py's ModuleCollisionError handling). Returns
+    dict[name -> float] in natural ("MAXIMIZE says which way is good")
+    units."""
+    return {name: fn(stats) for name, fn in _OBJECTIVE_FUNCS.items()}
 
 
 def to_minimization_vector(objectives_dict):
@@ -122,6 +119,9 @@ def scalarize(objectives_dict):
     return float(sum(v if MAXIMIZE[n] else -v for n, v in objectives_dict.items()))
 
 
-def collision_constraint(rollout_result):
-    """pymoo constraint convention: <= 0 is feasible."""
-    return 1.0 if rollout_result["collided"] else -1.0
+def collision_constraint(stats):
+    """pymoo constraint convention: <= 0 is feasible. stats["success"] is
+    0 whenever a MuJoCo warning (bad qpos/qvel/qacc) fired during the
+    rollout, or when the graph couldn't even be built into a valid model
+    (see moo_api.py's ModuleCollisionError handling)."""
+    return 1.0 if not stats.get("success", 0) else -1.0

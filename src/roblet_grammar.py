@@ -5,7 +5,7 @@ primitives for the RL-guided NSGA-III evolutionary framework.
 The genotype is a NetworkX DiGraph (see graphs/*.json for the on-disk
 schema, and helper_scripts/mjcf_generator.py for how it becomes an MJCF
 assembly). This module is the single place that knows how to read/write
-that schema, so moo_api.py, rl_api.py, and mujoco_api.py all agree on it.
+that schema, so moo_api.py, rl_api.py, and mjcf_generator.py all agree on it.
 
 Design variables (per the design doc):
     1. Module Type (Vi)      - categorical {non-foldable, Mountain fold, valley fold}
@@ -14,6 +14,7 @@ Design variables (per the design doc):
     4. Hinge Angle (theta_i) - continuous, [0, 90] degrees
 """
 
+import copy
 import random
 from enum import Enum, auto
 
@@ -29,19 +30,16 @@ MAX_HINGE_ANGLE = 90.0
 
 
 class Action(Enum):
-    """Mutation grammar actions. RL (rl_api.py) selects among these.
-
-    Crossover actions (GRAFT_SUBTREE, SWAP_SUBTREES) live in this module
-    too (as plain graph ops) but are driven by grammar-legal random choice
-    in moo_api.py rather than the RL policy - see rl_api.py module
-    docstring for why the policy is scoped to mutation only in this pass.
-    """
+    """Grammar actions. rl_api.py's policy selects among ALL of these
+    (mutation AND crossover) from one unified, masked action head."""
     ADD_NODE = auto()
     DELETE_NODE = auto()
     PRUNE_SUBTREE = auto()
     MUTATE_FOLD_TYPE = auto()
     MUTATE_HINGE_ANGLE = auto()
     RECONNECT_PORT = auto()
+    GRAFT_SUBTREE = auto()
+    SWAP_SUBTREES = auto()
 
 
 MUTATION_ACTIONS = [
@@ -52,6 +50,12 @@ MUTATION_ACTIONS = [
     Action.MUTATE_HINGE_ANGLE,
     Action.RECONNECT_PORT,
 ]
+
+# Crossover needs a second parent graph (donor/partner), unlike the
+# single-graph MUTATION_ACTIONS above - see rl_api.py for how the policy
+# handles that (a second Graph Transformer encoder pass + cross-attention).
+CROSSOVER_ACTIONS = [Action.GRAFT_SUBTREE, Action.SWAP_SUBTREES]
+ALL_ACTIONS = MUTATION_ACTIONS + CROSSOVER_ACTIONS
 
 
 # ---------------------------------------------------------------------
@@ -146,6 +150,19 @@ def any_node_allows(G, action):
     return any(compute_node_action_mask(G, n)[action] for n in G.nodes)
 
 
+def graft_host_eligible(G, node_id):
+    """True if `node_id` can host a GRAFT_SUBTREE (same Port Availability /
+    Module Count Limit masks as ADD_NODE - attaching a donor subtree is
+    grammar-equivalent to attaching a single new node)."""
+    return compute_node_action_mask(G, node_id)[Action.ADD_NODE]
+
+
+def swap_eligible(G, node_id):
+    """True if `node_id` can take part in a SWAP_SUBTREES (Root Protection
+    Mask: never swap out a graph's root module)."""
+    return not is_root(G, node_id)
+
+
 # ---------------------------------------------------------------------
 # Mutation operators - each returns a NEW graph (deep copy), leaving the
 # input graph untouched, and raises ValueError if the grammar mask forbids
@@ -169,7 +186,11 @@ def add_node(G, target_node, port, module_type, hinge_angle=0.0, rng=None):
     if port not in free_ports(G, target_node):
         raise ValueError(f"Port {port} on {target_node} is occupied")
 
-    G2 = G.copy()
+    # deepcopy, not G.copy(): networkx's shallow copy shares each node's
+    # `connectors` dict OBJECT with the original graph, so mutating G2's
+    # connectors below would silently corrupt every parent still holding
+    # a reference to `G` (e.g. the population list in moo_api.py).
+    G2 = copy.deepcopy(G)
     new_id = next_free_id(G2)
     depth = G2.nodes[target_node]["depth"] + 1
     G2.add_node(new_id, id=new_id, **_new_node_attrs(module_type, hinge_angle, target_node, depth))
@@ -185,7 +206,7 @@ def add_node(G, target_node, port, module_type, hinge_angle=0.0, rng=None):
 def delete_node(G, target_node):
     if not compute_node_action_mask(G, target_node)[Action.DELETE_NODE]:
         raise ValueError(f"DELETE_NODE not allowed on {target_node}")
-    G2 = G.copy()
+    G2 = copy.deepcopy(G)
     parent = G2.nodes[target_node]["parent"]
     if parent is not None:
         for port, nbr in G2.nodes[parent]["connectors"].items():
@@ -198,7 +219,7 @@ def delete_node(G, target_node):
 def prune_subtree(G, target_node):
     if not compute_node_action_mask(G, target_node)[Action.PRUNE_SUBTREE]:
         raise ValueError(f"PRUNE_SUBTREE not allowed on {target_node}")
-    G2 = G.copy()
+    G2 = copy.deepcopy(G)
     parent = G2.nodes[target_node]["parent"]
     if parent is not None:
         for port, nbr in G2.nodes[parent]["connectors"].items():
@@ -213,7 +234,7 @@ def mutate_fold_type(G, target_node, new_fold_type):
         raise ValueError(f"Unknown fold type {new_fold_type}")
     if not compute_node_action_mask(G, target_node)[Action.MUTATE_FOLD_TYPE]:
         raise ValueError(f"MUTATE_FOLD_TYPE not allowed on {target_node}")
-    G2 = G.copy()
+    G2 = copy.deepcopy(G)
     G2.nodes[target_node]["module_type"] = new_fold_type
     G2.nodes[target_node]["type_id"] = MODULE_TYPE_IDS[new_fold_type]
     if new_fold_type == "non-foldable":
@@ -224,7 +245,7 @@ def mutate_fold_type(G, target_node, new_fold_type):
 def mutate_hinge_angle(G, target_node, new_angle):
     if not compute_node_action_mask(G, target_node)[Action.MUTATE_HINGE_ANGLE]:
         raise ValueError(f"MUTATE_HINGE_ANGLE not allowed on {target_node}")
-    G2 = G.copy()
+    G2 = copy.deepcopy(G)
     G2.nodes[target_node]["hinge_angle"] = float(min(max(new_angle, MIN_HINGE_ANGLE), MAX_HINGE_ANGLE))
     return G2
 
@@ -237,7 +258,7 @@ def reconnect_port(G, target_node, old_port, new_port):
     if new_port not in free_ports(G, target_node):
         raise ValueError(f"Port {new_port} on {target_node} is occupied")
 
-    G2 = G.copy()
+    G2 = copy.deepcopy(G)
     nbr = G2.nodes[target_node]["connectors"][old_port]
     G2.nodes[target_node]["connectors"][old_port] = None
     G2.nodes[target_node]["connectors"][new_port] = nbr
@@ -254,7 +275,8 @@ def reconnect_port(G, target_node, old_port, new_port):
 
 
 # ---------------------------------------------------------------------
-# Crossover operators (grammar-legal, randomly chosen by moo_api.py)
+# Crossover operators (grammar-legal graph ops; rl_api.py's policy picks
+# the donor/partner nodes that get passed in here)
 # ---------------------------------------------------------------------
 
 def graft_subtree(host_G, host_node, host_port, donor_G, donor_root, rng=None):
@@ -263,7 +285,7 @@ def graft_subtree(host_G, host_node, host_port, donor_G, donor_root, rng=None):
     if not compute_node_action_mask(host_G, host_node)[Action.ADD_NODE]:
         raise ValueError(f"GRAFT_SUBTREE not allowed on {host_node} (port/limit mask)")
 
-    G2 = host_G.copy()
+    G2 = copy.deepcopy(host_G)
     donor_nodes = subtree_nodes(donor_G, donor_root)
     remaining_capacity = MAX_MODULES - G2.number_of_nodes()
     if remaining_capacity <= 0:

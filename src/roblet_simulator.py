@@ -667,26 +667,46 @@ def run_headless_b_sweep(
             except OSError:
                 pass
 
-    clean = [(r, b) for r, b in results if r["success"] and not r["instability"]]
-    pool = clean if clean else [(r, b) for r, b in results if r["success"]]
-    winner_result, winner_b = (
-        max(pool, key=lambda rb: rb[0]["avg_velocity_mmps"]) if pool else results[-1]
-    )
+    pool = [(r, b) for r, b in results if r["success"] and not r["instability"]]
+    if pool:
+        winner_result, winner_b = max(pool, key=lambda rb: rb[0]["avg_velocity_mmps"])
+    else:
+        winner_b = results[-1][1] if results else 0
+        last_model = results[-1][0].get("model", os.path.basename(model_path)) if results else os.path.basename(model_path)
+        winner_result = {
+            "model": last_model,
+            "success": 0,
+            "instability": 0,
+            "B_intensity_T": round(winner_b, 6),
+            "avg_velocity_mmps": 0,
+            "displacement_mm": 0,
+            "sim_time_s": 0.0,
+        }
 
     print(f"[B sweep] picked B={winner_b} T (velocity={winner_result['avg_velocity_mmps']:.2f} mm/s, "
           f"success={int(winner_result['success'])}, instability={int(winner_result['instability'])})")
 
     # Re-run the winner for real, at the caller's requested stats path and
     # media flags.
-    B_INTENSITY = winner_b
-    try:
-        final_result = run_headless(
-            model_path, stats_output_path, max_sim_time=max_sim_time,
-            capture_img=capture_img, capture_gif=capture_gif,
-            media_dir=media_dir, gif_fps=gif_fps,
+    if winner_result["success"]:
+        B_INTENSITY = winner_b
+        try:
+            final_result = run_headless(
+                model_path, stats_output_path, max_sim_time=max_sim_time,
+                capture_img=capture_img, capture_gif=capture_gif,
+                media_dir=media_dir, gif_fps=gif_fps,
+            )
+        finally:
+            B_INTENSITY = original_b
+    else:
+        # No successful B found, write a zeroed stats file to the caller's
+        # requested path.
+        save_simulation_stats(
+            model=None, avg_velocity=0.0, total_distance=0.0, module_labels={},
+            filename=stats_output_path, success=False, instability=True,
+            b_intensity=winner_b,
         )
-    finally:
-        B_INTENSITY = original_b
+        final_result = winner_result
 
     return final_result
 

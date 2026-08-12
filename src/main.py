@@ -58,6 +58,8 @@ def main():
         ]
         plotting_api.save_generation_population(gen, records, OUTPUT_DIR)
         plotting_api.plot_pareto_front(gen, records, OUTPUT_DIR)
+        plotting_api.plot_fitness_trends(OUTPUT_DIR)
+        plotting_api.plot_convergence(OUTPUT_DIR)
         plotting_api.plot_rl_diagnostics(ppo_trainer.history, OUTPUT_DIR)
 
         # f1 (flat-state velocity) is ignored for now - see objectives_api.py -

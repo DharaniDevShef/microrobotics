@@ -59,11 +59,11 @@ _MESHDIR = os.path.abspath(os.path.join(_SRC_DIR, "..", "meshes")).replace("\\",
 
 COLLISION_PENALTY = -10.0  # subtracted from the RL reward when a child collides
 
-# What roblet_simulator.py's save_simulation_stats(success=False) writes -
+# What roblet_simulator.py's save_simulation_stats(physics_ok=False) writes -
 # used verbatim for a graph that couldn't even be built into a valid MJCF
 # (ModuleCollisionError), so it never wastes a simulation slot but still
 # scores as a failed/infeasible individual like any other collision.
-_FAILED_STATS = {"success": 0, "instability": 0, "average_velocity_mmps": 0.0, "total_distance_mm": 0.0}
+_FAILED_STATS = {"success": 0, "physics_ok": 0, "is_stable": 0, "average_velocity_mmps": 0.0, "total_distance_mm": 0.0}
 
 
 def sobol_seed_population(pop_size, seed=0):

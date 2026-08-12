@@ -67,9 +67,6 @@ def _f3_relative_yaw(stats):
 def _f4_gait_stability(stats):
     """PLACEHOLDER (dummy) - always 0.0.
 
-    TODO: stats.json's "instability" flag (roblet_simulator.py's
-    _detect_instability, already JSON-native) is a real signal that could
-    drive this once wired in - e.g. `-1.0 if stats["instability"] else 0.0`.
     """
     return 0.0
 

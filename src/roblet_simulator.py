@@ -336,27 +336,30 @@ def _detect_instability(window_velocities, cv_threshold=0.60):
 
 
 def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
-                           filename="simulation_stats.json", success=True, instability=False,
+                           filename="simulation_stats.json", physics_ok=True, is_stable=True,
                            b_intensity=None):
     """Calculates masses and average torque, then saves to a JSON file.
 
-    success=False means a MuJoCo physics warning (bad qpos/qvel/qacc, a
+    physics_ok=False means a MuJoCo physics warning (bad qpos/qvel/qacc, a
     diverging/colliding model, ...) fired during the rollout, so every
     stat is meaningless -- write zeros for all of them instead of whatever
     partial numbers had accumulated up to the point of failure.
 
-    instability=True means the run completed (physics-wise) but its gait
+    is_stable=False means the run completed (physics-wise) but its gait
     looked like jumping/rolling rather than walking -- see
     _detect_instability(). The velocity/distance numbers are still real,
     just not a meaningful "how well does this walk" signal.
 
+    success (written to the JSON) is physics_ok AND is_stable.
+
     b_intensity is the magnetic field strength (Tesla) this particular run
     used -- recorded so a B sweep (see run_headless_b_sweep()) can tell
     which candidate B produced the reported stats."""
-    if not success:
+    if not physics_ok:
         stats = {
             "success": 0,
-            "instability": 0,
+            "physics_ok": 0,
+            "is_stable": 0,
             "B_intensity_T": round(b_intensity, 6) if b_intensity is not None else 0,
             "total_mass_mg": 0,
             "average_torque_Nm": 0,
@@ -367,8 +370,8 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(stats, f, indent=4)
         logger.info(
-            "Simulation Results: \n(success=%d, instability=%d, avg_velocity=%.2f mm/s, total_distance=%.2f mm)",
-            stats["success"], stats["instability"], stats["average_velocity_mmps"], stats["total_distance_mm"],
+            "Simulation Results: \n(success=%d, physics_ok=%d, is_stable=%d, avg_velocity=%.2f mm/s, total_distance=%.2f mm)",
+            stats["success"], stats["physics_ok"], stats["is_stable"], stats["average_velocity_mmps"], stats["total_distance_mm"],
         )
         return
 
@@ -389,8 +392,9 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
     avg_torque = float(np.mean(torque_history)) if torque_history else 0.0
 
     stats = {
-        "success": 1 if success and not instability else 0,
-        "instability": 1 if instability else 0,
+        "success": 1 if physics_ok and is_stable else 0,
+        "physics_ok": 1 if physics_ok else 0,
+        "is_stable": 1 if is_stable else 0,
         "B_intensity_T": round(b_intensity, 6) if b_intensity is not None else 0,
         "total_mass_mg": round(total_mass * 1e6, 4),  # Convert to milligrams
         # "module_masses_mg": module_masses,
@@ -404,8 +408,8 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
         json.dump(stats, f, indent=4)
 
     logger.info(
-        "Simulation Results: \n(success=%d, instability=%d, avg_velocity=%.2f mm/s, total_distance=%.2f mm)",
-         stats["success"], stats["instability"], stats["average_velocity_mmps"], stats["total_distance_mm"],
+        "Simulation Results: \n(success=%d, physics_ok=%d, is_stable=%d, avg_velocity=%.2f mm/s, total_distance=%.2f mm)",
+         stats["success"], stats["physics_ok"], stats["is_stable"], stats["average_velocity_mmps"], stats["total_distance_mm"],
     )
     logger.debug(
         "Total mass=%.2f mg, average_torque=%.2e Nm, last_torque=%.2e Nm, steps=%d",
@@ -505,7 +509,7 @@ def run_headless(
     displacement = 0.0
     steady_state_displacement = None
     magnets_active = True
-    success = True
+    physics_ok = True
     step_count = 0
     # Raycasting the 4 rangefinders every single 0.01s step is wasted work:
     # the robot moves on the order of mm/s, so it cannot close the 200mm
@@ -535,7 +539,7 @@ def run_headless(
             # NaNs make the wall-distance check never trip) on garbage state.
             if int(np.sum(data.warning.number)) > 0:
                 # print(f"Time: {data.time:.2f}s | MuJoCo warning triggered - aborting run.")
-                success = False
+                physics_ok = False
                 magnets_active = False
                 break
 
@@ -581,7 +585,7 @@ def run_headless(
                 magnets_active = False
 
         # Save screenshot if requested
-        if capture_img and renderer is not None and success:
+        if capture_img and renderer is not None and physics_ok:
             os.makedirs(media_dir, exist_ok=True)
             renderer.update_scene(data, camera=camera)
             screenshot = renderer.render()
@@ -608,16 +612,18 @@ def run_headless(
     mujoco.set_mjcb_control(None)
     data.xfrc_applied.fill(0)
 
-    instability = _detect_instability(window_velocity_history) if success else False
+    is_stable = not _detect_instability(window_velocity_history) if physics_ok else False
+    success = physics_ok and is_stable
 
     save_simulation_stats(model, avg_velocity, displacement, module_labels,
-                           filename=stats_output_path, success=success, instability=instability,
+                           filename=stats_output_path, physics_ok=physics_ok, is_stable=is_stable,
                            b_intensity=B_INTENSITY)
 
     return {
         "model": model_name,
+        "physics_ok": physics_ok,
         "success": success,
-        "instability": instability,
+        "is_stable": is_stable,
         "B_intensity_T": B_INTENSITY,
         "avg_velocity_mmps": avg_velocity * 1000 if success else 0.0,
         "displacement_mm": displacement * 1000 if success else 0.0,
@@ -636,10 +642,10 @@ def run_headless_b_sweep(
     capture_gif) so media is never spent rendering a discarded candidate.
 
     Winner selection:
-      1. Prefer the highest avg_velocity_mmps among success=True,
-         instability=False runs.
+      1. Prefer the highest avg_velocity_mmps among physics_ok=True,
+         is_stable=True runs.
       2. If none qualify, fall back to the highest avg_velocity_mmps among
-         success=True runs regardless of instability (a sweep should never
+         physics_ok=True runs regardless of is_stable (a sweep should never
          come back with nothing just because every candidate rocked).
       3. If every B outright failed (a MuJoCo warning fired), report the
          last attempted B's failed (all-zero) result.
@@ -665,8 +671,8 @@ def run_headless_b_sweep(
             )
             results.append((result, b))
             logger.debug(
-                "[B sweep] B=%s T -> success=%d instability=%d velocity=%.2f mm/s",
-                b, int(result['success']), int(result['instability']), result['avg_velocity_mmps'],
+                "[B sweep] B=%s T -> physics_ok=%d is_stable=%d velocity=%.2f mm/s",
+                b, int(result['physics_ok']), int(result['is_stable']), result['avg_velocity_mmps'],
             )
     finally:
         B_INTENSITY = original_b
@@ -676,7 +682,8 @@ def run_headless_b_sweep(
             except OSError:
                 pass
 
-    pool = [(r, b) for r, b in results if r["success"] and not r["instability"]]
+    # Prefer runs where the physics completed and the gait was stable.
+    pool = [(r, b) for r, b in results if r["physics_ok"] and r["is_stable"]]
     if pool:
         winner_result, winner_b = max(pool, key=lambda rb: rb[0]["avg_velocity_mmps"])
     else:
@@ -685,7 +692,8 @@ def run_headless_b_sweep(
         winner_result = {
             "model": last_model,
             "success": 0,
-            "instability": 0,
+            "physics_ok": 0,
+            "is_stable": 0,
             "B_intensity_T": round(winner_b, 6),
             "avg_velocity_mmps": 0,
             "displacement_mm": 0,
@@ -693,13 +701,14 @@ def run_headless_b_sweep(
         }
 
     logger.info(
-        "[B sweep] picked B=%.6f T (velocity=%.2f mm/s, success=%d, instability=%d)",
-        winner_b, winner_result['avg_velocity_mmps'], int(winner_result['success']), int(winner_result['instability']),
+        "[B sweep] picked B=%.6f T (velocity=%.2f mm/s, physics_ok=%d, is_stable=%d)",
+        winner_b, winner_result['avg_velocity_mmps'], int(winner_result['physics_ok']), int(winner_result['is_stable']),
     )
 
     # Re-run the winner for real, at the caller's requested stats path and
-    # media flags.
-    if winner_result["success"]:
+    # media flags, only if the physics completed successfully and the gait
+    # wasn't flagged unstable.
+    if winner_result["physics_ok"] and winner_result["is_stable"]:
         B_INTENSITY = winner_b
         try:
             final_result = run_headless(
@@ -714,7 +723,7 @@ def run_headless_b_sweep(
         # requested path.
         save_simulation_stats(
             model=None, avg_velocity=0.0, total_distance=0.0, module_labels={},
-            filename=stats_output_path, success=False, instability=True,
+            filename=stats_output_path, physics_ok=False, is_stable=False,
             b_intensity=winner_b,
         )
         final_result = winner_result
@@ -779,7 +788,7 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
         # from the average velocity below.
         steady_state_displacement = None
         magnets_active = True
-        success = True
+        physics_ok = True
         # Windowed velocity: displacement covered since the last 1-second
         # print, so the printout reflects actual per-interval speed instead
         # of the cumulative average-since-ramp-end (which can only creep
@@ -804,7 +813,7 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
             # about to (or already did) blow up.
             if int(np.sum(data.warning.number)) > 0:
                 #print(f"Time: {data.time:.2f}s | MuJoCo warning triggered - aborting run.")
-                success = False
+                physics_ok = False
                 mujoco.set_mjcb_control(None)
                 data.xfrc_applied.fill(0)
                 viewer.close()
@@ -885,9 +894,9 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
 
     # Unregister callback and save JSON data on exit
     mujoco.set_mjcb_control(None)
-    instability = _detect_instability(window_velocity_history) if success else False
+    is_stable = not _detect_instability(window_velocity_history) if physics_ok else False
     save_simulation_stats(model, avg_velocity, displacement, module_labels,
-                           filename=stats_output_path, success=success, instability=instability,
+                           filename=stats_output_path, physics_ok=physics_ok, is_stable=is_stable,
                            b_intensity=B_INTENSITY)
     #plot_b_field_history(filename="../output/b_field_plot.png")
 
@@ -941,14 +950,24 @@ if __name__ == "__main__":
         "--log-file", type=str, default=None,
         help="Optional log file path to write simulator logs to.",
     )
+    parser.add_argument(
+        "--log-level", type=str, default=None,
+        help="Optional log level for simulator (DEBUG, INFO, WARNING, ERROR).",
+    )
 
     args = parser.parse_args()
     handlers = [logging.StreamHandler()]
     if args.log_file:
         os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
         handlers.append(logging.FileHandler(args.log_file, encoding="utf-8"))
+    level = logging.INFO
+    if args.log_level:
+        try:
+            level = getattr(logging, args.log_level.upper(), logging.INFO)
+        except Exception:
+            level = logging.INFO
     logging.basicConfig(
-        level=logging.INFO,
+        level=level,
         format="%(asctime)s %(name)s %(levelname)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=handlers,

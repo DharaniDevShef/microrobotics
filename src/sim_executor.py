@@ -13,6 +13,7 @@ import logging
 import os
 import subprocess
 import sys
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,43 @@ def run_batch(jobs, max_workers=None, max_sim_time=7.0):
                 "--headless", "--sweep_b", "--max_sim_time", str(max_sim_time),
                 "--capture_img", "--log-file", log_path,
             ]
-            processes.append(subprocess.Popen(cmd, cwd=_SRC_DIR))
-        for p in processes:
-            p.wait()
+            p = subprocess.Popen(cmd, cwd=_SRC_DIR)
+            processes.append((p, xml_path, stats_path))
+
+        # Wait for each process with a safe timeout and handle failures
+        for p, xml_path, stats_path in processes:
+            try:
+                p.wait(timeout=max_sim_time + 5)
+            except subprocess.TimeoutExpired:
+                logger.error("Simulation timed out for %s, killing process", xml_path)
+                try:
+                    p.kill()
+                except Exception:
+                    pass
+                p.wait()
+                _write_failed_stats(stats_path)
+                continue
+
+            if p.returncode is None or p.returncode != 0:
+                logger.error("Simulation failed (returncode=%s) for %s", str(p.returncode), xml_path)
+                _write_failed_stats(stats_path)
+            else:
+                logger.info("Simulation finished successfully (PID %d) -> %s", p.pid, stats_path)
+
+
+def _write_failed_stats(stats_path: str):
+    """Write a minimal failed stats JSON to the given path so downstream
+    consumers don't crash if a subprocess fails or times out."""
+    failed = {
+        "success": 0,
+        "physics_ok": 0,
+        "is_stable": 0,
+        "average_velocity_mmps": 0.0,
+        "total_distance_mm": 0.0,
+    }
+    try:
+        os.makedirs(os.path.dirname(stats_path), exist_ok=True)
+        with open(stats_path, "w", encoding="utf-8") as f:
+            json.dump(failed, f, indent=4)
+    except Exception:
+        logger.exception("Could not write failed stats to %s", stats_path)

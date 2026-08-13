@@ -1,8 +1,24 @@
+import os
 import subprocess
 import time
 
 # Direct path to your venv's Python binary
 VENV_PYTHON = r"d:\microrobotics\.venv\Scripts\python.exe"
+
+# Each simulation is a single-threaded physics loop, but NumPy/MuJoCo's
+# BLAS backend still defaults to spawning one thread per CPU core. With
+# N processes launched at once, that's N x core_count threads fighting
+# over core_count cores - the actual reason a 7s (simulated) run was
+# taking ~16s of wall-clock time here. Pinning each subprocess to a
+# single BLAS thread lets them run genuinely in parallel instead of
+# thrashing each other.
+_SUBPROCESS_ENV = {
+    **os.environ,
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+}
 
 commands = [
     [
@@ -54,7 +70,7 @@ print(f"Starting {len(commands)} simulations in parallel...")
 
 # Start all simulations without blocking
 for cmd in commands:
-    p = subprocess.Popen(cmd)
+    p = subprocess.Popen(cmd, env=_SUBPROCESS_ENV)
     processes.append(p)
 
 # Wait for every simulation to finish naturally

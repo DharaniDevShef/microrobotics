@@ -50,6 +50,23 @@ TOTAL_CYCLE_TIME = 1.0 / FREQUENCY
 # Rangefinder reading (m) below which a wall is considered "reached".
 WALL_STOP_DISTANCE = 200  # 200 mm
 
+# Offscreen screenshot/GIF render resolution. The visualizer only ever
+# displays these at a couple hundred px wide (see SCREENSHOT_CARD_WIDTH in
+# evolution_results_visualizer.py), so 1920x1080 was pure waste -
+# needlessly heavy GPU/EGL context memory per renderer, which under
+# sim_executor.py's parallel subprocesses meant several large contexts
+# competing at once - a plausible source of the occasional renderer
+# failure some individuals were hitting.
+RENDER_WIDTH = 640
+RENDER_HEIGHT = 480
+
+# Pre-gait "settle" phase (see run_headless): how long to let the hinge
+# position actuators reach their evolved target angles - and the body
+# settle under gravity - before a requested screenshot is taken, and the
+# hard cap on that in case a configuration never quite stops jittering.
+SETTLE_MAX_STEPS = 300  # 10 steps * 0.01s timestep = 0.1s settle phase
+SETTLE_VELOCITY_THRESHOLD = 1e-3  # rad/s or m/s - "basically stopped moving"
+
 # Wall geoms are tagged group=1 in the model (see mjcf_generator.py) so this
 # raycast can be filtered to see ONLY them.
 _WALL_GEOMGROUP = np.zeros(6, dtype=np.uint8)
@@ -355,6 +372,8 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
     b_intensity is the magnetic field strength (Tesla) this particular run
     used -- recorded so a B sweep (see run_headless_b_sweep()) can tell
     which candidate B produced the reported stats."""
+
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
     if not physics_ok:
         stats = {
             "success": 0,
@@ -490,7 +509,6 @@ def run_headless(
     parent_body_magnet_map.update(find_all_magnets(model))
     module_labels = find_module_labels(model)
 
-    mujoco.set_mjcb_control(magnetic_field_callback)
 
     model_name = os.path.splitext(os.path.basename(model_path))[0]
 
@@ -501,8 +519,18 @@ def run_headless(
     # approximates real time: gif_fps output frames per second of sim time.
     gif_frame_stride = max(1, round(1.0 / (gif_fps * model.opt.timestep)))
     if capture_img or capture_gif:
-        renderer = mujoco.Renderer(model, height=480, width=640)
-        camera = _offscreen_camera()
+        try:
+            renderer = mujoco.Renderer(model, height=RENDER_HEIGHT, width=RENDER_WIDTH)
+            camera = _offscreen_camera()
+        except Exception:
+            # A renderer/GPU context failure should cost this individual
+            # its screenshot, not its whole physics result - the rest of
+            # run_headless below still runs and still writes real stats.
+            logger.exception(
+                "Could not create offscreen renderer for '%s' - continuing without screenshot/GIF capture.",
+                model_name,
+            )
+            renderer = None
 
     avg_velocity = 0.0
     initial_com = None
@@ -526,6 +554,47 @@ def run_headless(
     window_time = None
 
     try:
+        # Save screenshot if requested
+        if capture_img and renderer is not None:
+            # Run a short settle phase to let the hinge position actuators reach their
+            for _ in range(SETTLE_MAX_STEPS):
+                set_angle_to_joint(model, data, target_angle_deg=target_angles)
+                mujoco.mj_step(model, data)
+                mujoco.mj_subtreeVel(model, data)
+
+                if int(np.sum(data.warning.number)) > 0:
+                    physics_ok = False
+                    magnets_active = False
+                    break
+                if np.max(np.abs(data.qvel)) < SETTLE_VELOCITY_THRESHOLD:
+                    break
+
+            # The settle phase has its own simulated-time cost; reset it
+            # so the torque ramp / max_sim_time cutoff / displacement
+            # tracking below all start fresh, exactly as if the settle
+            # phase had never happened.
+            data.time = 0.0
+
+            if physics_ok:
+                try:
+                    os.makedirs(media_dir, exist_ok=True)
+                    renderer.update_scene(data, camera=camera)
+                    screenshot = renderer.render()
+                    if screenshot is not None:
+                        Image.fromarray(screenshot).save(
+                            os.path.join(media_dir, f"screenshot_{model_name}.png")
+                        )
+                    else:
+                        logger.warning("Renderer returned no image for '%s' - no screenshot saved.", model_name)
+                except Exception:
+                    # Same principle as the renderer-construction guard
+                    # above: a failed screenshot save shouldn't cost this
+                    # individual its (otherwise valid) physics results.
+                    logger.exception("Failed to render/save screenshot for '%s' - continuing without it.", model_name)
+
+        # Set the MuJoCo control callback to apply magnetic torque each step
+        mujoco.set_mjcb_control(magnetic_field_callback)
+
         while magnets_active:
             set_angle_to_joint(model, data, target_angle_deg=target_angles)
             mujoco.mj_step(model, data)
@@ -569,7 +638,7 @@ def run_headless(
                         window_time = data.time
 
             if (
-                capture_gif and data.time >= TORQUE_RAMP_TIME
+                capture_gif and renderer is not None and data.time >= TORQUE_RAMP_TIME
                 and step_count % gif_frame_stride == 0
             ):
                 renderer.update_scene(data, camera=camera)
@@ -583,16 +652,6 @@ def run_headless(
                     magnets_active = False
             if max_sim_time is not None and data.time >= max_sim_time:
                 magnets_active = False
-
-        # Save screenshot if requested
-        if capture_img and renderer is not None and physics_ok:
-            os.makedirs(media_dir, exist_ok=True)
-            renderer.update_scene(data, camera=camera)
-            screenshot = renderer.render()
-            if screenshot is not None:
-                Image.fromarray(screenshot).save(
-                    os.path.join(media_dir, f"screenshot_{model_name}.png")
-                )
 
         # Save GIF if requested and frames were captured
         if capture_gif and gif_frames:

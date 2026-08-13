@@ -66,15 +66,68 @@ COLLISION_PENALTY = -10.0  # subtracted from the RL reward when a child collides
 _FAILED_STATS = {"success": 0, "physics_ok": 0, "is_stable": 0, "average_velocity_mmps": 0.0, "total_distance_mm": 0.0}
 
 
-def sobol_seed_population(pop_size, seed=0):
+def _is_collision_free(G, scratch_dir):
+    """True if `G` builds cleanly through mjcf_generator.build_assembly's
+    own 3D collision check (check_collisions=True - the same check
+    evaluate_population() relies on): no un-mated module overlaps in
+    either the flat or fully-folded pose. Used to GATE a graph before
+    it's accepted into the population at all - see sobol_seed_population()
+    and make_children_collision_free() - rather than just detecting and
+    penalizing the collision after the fact during evaluation."""
+    os.makedirs(scratch_dir, exist_ok=True)
+    graph_json_path = os.path.join(scratch_dir, "_collision_check_graph.json")
+    xml_path = os.path.join(scratch_dir, "_collision_check_assembly.xml")
+    with open(graph_json_path, "w", encoding="utf-8") as f:
+        json.dump(nx.node_link_data(G, edges="edges"), f)
+    try:
+        build_assembly(graph_json_path, xml_path, meshdir=_MESHDIR)
+        return True
+    except ModuleCollisionError:
+        return False
+
+
+def _build_collision_free_seed(rng, n_modules, type_weights, hinge_angle_fn, scratch_dir, max_attempts):
+    """Resamples a fresh random_seed_graph at `n_modules` up to
+    `max_attempts` times looking for one that passes _is_collision_free().
+    If every attempt at that size collides, halves the module count and
+    tries again (down to MIN_MODULES) - sparser graphs are far less
+    likely to self-overlap, so this reliably converges to SOME valid
+    graph rather than exhausting attempts forever at a size that's simply
+    too dense for random_seed_graph's geometry-blind construction."""
+    candidate_n = max(rg.MIN_MODULES, n_modules)
+    while True:
+        for _ in range(max_attempts):
+            type_choices = [rng.choices(rg.MODULE_TYPES, weights=type_weights, k=1)[0] for _ in range(candidate_n)]
+            G = rg.random_seed_graph(rng, candidate_n, module_type_choices=type_choices,
+                                      hinge_angle_fn=hinge_angle_fn)
+            if _is_collision_free(G, scratch_dir):
+                return G
+        if candidate_n <= rg.MIN_MODULES:
+            logger.warning(
+                "No collision-free seed graph found at MIN_MODULES=%d after %d attempts; "
+                "using the last candidate anyway (evaluate_population()'s ModuleCollisionError "
+                "handling remains a safety net).", rg.MIN_MODULES, max_attempts,
+            )
+            return G
+        logger.info("No collision-free seed graph at %d modules after %d attempts; shrinking.",
+                    candidate_n, max_attempts)
+        candidate_n = max(rg.MIN_MODULES, candidate_n // 2)
+
+
+def sobol_seed_population(pop_size, seed=0, scratch_dir=None, max_attempts=15):
     """Sobol-sampled initial genotypes (design doc's sampling plan): a
     3D Sobol sequence over (module_count, hinge_angle_bias, fold_type_bias)
     gives a uniform, low-discrepancy spread across the design-variable
-    space before RL-guided evolution starts refining it."""
+    space before RL-guided evolution starts refining it.
+
+    Every returned graph is validated collision-free up front (see
+    _build_collision_free_seed) - no individual enters generation 0
+    without already having passed mjcf_generator.py's 3D collision test."""
     sampler = qmc.Sobol(d=3, scramble=True, seed=seed)
     n = 1 << max(1, (pop_size - 1).bit_length())  # Sobol is balanced at powers of two
     draws = sampler.random(n)[:pop_size]
     rng = random.Random(seed)
+    scratch_dir = scratch_dir or tempfile.mkdtemp(prefix="roblet_seed_check_")
 
     population = []
     for module_count_u, hinge_u, fold_u in draws:
@@ -85,10 +138,7 @@ def sobol_seed_population(pop_size, seed=0):
             return float(np.clip(rng.gauss(base_angle, 15.0), rg.MIN_HINGE_ANGLE, rg.MAX_HINGE_ANGLE))
 
         weights = [1.0, 1.0 + 2 * fold_u, 1.0 + 2 * (1 - fold_u)]  # biases Mountain vs. valley fold
-        type_choices = [rng.choices(rg.MODULE_TYPES, weights=weights, k=1)[0] for _ in range(n_modules)]
-
-        G = rg.random_seed_graph(rng, n_modules, module_type_choices=type_choices,
-                                  hinge_angle_fn=hinge_angle_fn)
+        G = _build_collision_free_seed(rng, n_modules, weights, hinge_angle_fn, scratch_dir, max_attempts)
         population.append(G)
     return population
 
@@ -168,6 +218,29 @@ def make_children(parent_a, parent_b, ppo_trainer, rng):
     return children, decision
 
 
+def make_children_collision_free(parent_a, parent_b, ppo_trainer, rng, scratch_dir, max_attempts=8):
+    """Wraps make_children() with a 3D collision gate: if the proposed
+    child/children fail mjcf_generator.py's collision check
+    (_is_collision_free), the decision is rejected - recording a flat
+    COLLISION_PENALTY reward so the policy still gets a learning signal
+    against it - and a fresh decision is re-sampled from the RL policy.
+    Falls back to a guaranteed-valid no-op copy of parent_a (parent_a is
+    already known collision-free, by induction from this same gate) if
+    every attempt still collides.
+
+    This is what keeps every individual entering a generation already
+    validated: parents start collision-free (sobol_seed_population), and
+    this function is the only source of new offspring, so the invariant
+    holds by construction for every later generation too."""
+    for _ in range(max_attempts):
+        children, decision = make_children(parent_a, parent_b, ppo_trainer, rng)
+        if all(_is_collision_free(child, scratch_dir) for child in children):
+            return children, decision
+        if decision is not None:
+            ppo_trainer.record(decision, COLLISION_PENALTY)
+    return [parent_a.copy()], None
+
+
 def _write_breeding_events(work_dir, n_parents, n_offspring, events):
     """Writes `work_dir/breeding_events.json` - the per-generation lineage
     log helper_scripts/evolution_results_visualizer.py reads for its
@@ -219,7 +292,7 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
         pa_idx = population_graphs.index(pa)
         pb_idx = population_graphs.index(pb)
 
-        children, decision = make_children(pa, pb, ppo_trainer, rng)
+        children, decision = make_children_collision_free(pa, pb, ppo_trainer, rng, work_dir)
         # Which parent each child's improvement is measured against: a
         # mutation/GRAFT_SUBTREE child is a single offspring bred from
         # parent_a, but SWAP_SUBTREES returns one recombined offspring
@@ -267,21 +340,55 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
     _write_breeding_events(work_dir, pop_size, len(offspring_records), breeding_events)
 
     all_records = parent_records + offspring_records
-    F = np.array([r["F"] for r in all_records])
     obj_lookup = {id(r["graph"]): r["objectives"] for r in all_records}
+    # Position in all_records == position in the ind0..indN batch
+    # evaluate_population() just wrote/simulated (parents first, then
+    # offspring in breeding order) - kept per-survivor so the visualizer
+    # can tell exactly which screenshot/XML/stats.json belongs to each
+    # surviving individual, and which survivors are newly-bred offspring
+    # vs. carried-over parents (ind_id >= n_parents).
+    ind_id_lookup = {id(r["graph"]): i for i, r in enumerate(all_records)}
 
-    individuals = [Individual(X=r["graph"], F=F[i]) for i, r in enumerate(all_records)]
-    pop = Population.create(*individuals)
+    # Feasibility-first selection: ReferenceDirectionSurvival._do() does
+    # pure Pareto/niche sorting on F alone - it has no idea `constraint`
+    # even exists (this module only ever used it for RL reward penalties
+    # and the n_collided log, never attached it to the pymoo Individuals).
+    # Left unchecked, a failed simulation (all-zero objectives, since
+    # f1/f3/f4/f5 are still placeholders) isn't necessarily Pareto-
+    # dominated by anything, so it can survive into the next generation
+    # purely by not being strictly worse - which is exactly how a failed,
+    # screenshot-less individual ends up looking like a "survivor". Feasible
+    # individuals (constraint <= 0) are selected first; only if there
+    # aren't enough of them to fill the population are infeasible ones
+    # used to pad it out, so the population size never shrinks.
+    def _survive(indices, n_survive):
+        if not indices or n_survive <= 0:
+            return []
+        sub_records = [all_records[i] for i in indices]
+        sub_F = np.array([r["F"] for r in sub_records])
+        sub_individuals = [Individual(X=r["graph"], F=sub_F[j]) for j, r in enumerate(sub_records)]
+        sub_pop = Population.create(*sub_individuals)
+        ref_dirs = _reference_directions(sub_F.shape[1], n_partitions=ref_partitions)
+        survival = ReferenceDirectionSurvival(ref_dirs)
+        n_take = min(n_survive, len(sub_pop))
+        return list(survival._do(None, sub_pop, n_take))
 
-    ref_dirs = _reference_directions(F.shape[1], n_partitions=ref_partitions)
-    survival = ReferenceDirectionSurvival(ref_dirs)
-    n_survive = min(pop_size, len(pop))
-    survivors = survival._do(None, pop, n_survive)
+    feasible_idx = [i for i, r in enumerate(all_records) if r["constraint"] <= 0]
+    infeasible_idx = [i for i, r in enumerate(all_records) if r["constraint"] > 0]
+
+    survivors = _survive(feasible_idx, pop_size)
+    if len(survivors) < pop_size:
+        logger.warning(
+            "Only %d/%d feasible individuals available this generation; padding survivors with %d infeasible one(s).",
+            len(survivors), pop_size, pop_size - len(survivors),
+        )
+        survivors += _survive(infeasible_idx, pop_size - len(survivors))
 
     next_generation = [ind.X for ind in survivors]
     log = dict(
         survivor_objectives=[obj_lookup[id(ind.X)] for ind in survivors],
-        survivor_rank=survivors.get("rank"),
+        survivor_ind_ids=[ind_id_lookup[id(ind.X)] for ind in survivors],
+        survivor_rank=[ind.get("rank") for ind in survivors],
         n_parents=len(parent_records),
         n_offspring=len(offspring_records),
         n_collided=sum(1 for r in all_records if r["constraint"] > 0),

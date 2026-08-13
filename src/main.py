@@ -8,7 +8,8 @@ Loop, per generation:
     moo_api.evaluate_population  -> mjcf_generator.build_assembly (XML per individual)
                                   -> sim_executor.run_batch (roblet_simulator.py --headless, N parallel OS processes)
                                   -> objectives_api.compute_objectives (reads each stats.json)
-    moo_api.make_children        -> rl_api.PPOTrainer.select_action (mutation AND crossover) -> roblet_grammar
+    moo_api.make_children_collision_free -> rl_api.PPOTrainer.select_action (mutation AND crossover)
+                                  -> roblet_grammar, gated on mjcf_generator's 3D collision check
     moo_api NSGA-III survival    -> pymoo ReferenceDirectionSurvival
     plotting_api                 -> generation JSON + Pareto plot + RL diagnostics
 """
@@ -16,6 +17,7 @@ Loop, per generation:
 import logging
 import os
 import random
+import time
 
 import moo_api
 import plotting_api
@@ -23,10 +25,10 @@ import rl_api
 
 logger = logging.getLogger(__name__)
 
-POP_SIZE = 3
+POP_SIZE = 4
 N_GENERATIONS = 5
-SIM_SECONDS = 30
-SEED = 0
+SIM_SECONDS = 7
+SEED = 42  # reproducible Sobol-seeding of initial population
 
 
 def configure_logging(log_file, level=logging.INFO):
@@ -54,9 +56,15 @@ def main():
     ppo_trainer = rl_api.PPOTrainer(seed=SEED)
 
     logger.info("Sobol-seeding initial population (pop_size=%d)...", POP_SIZE)
-    population = moo_api.sobol_seed_population(POP_SIZE, seed=SEED)
+    # Every seed graph is validated collision-free (mjcf_generator.py's 3D
+    # check) before it's accepted - see moo_api._build_collision_free_seed.
+    # This scratch dir is just where those validation attempts get built
+    # and checked, not a real generation's artifacts.
+    seed_scratch_dir = os.path.join(OUTPUT_DIR, "_seed_check")
+    population = moo_api.sobol_seed_population(POP_SIZE, seed=SEED, scratch_dir=seed_scratch_dir)
 
     for gen in range(N_GENERATIONS):
+        gen_start_time = time.time()
         logger.info("\n------------------------Generation %d------------------------", gen)
         # Each generation gets its own folder (XMLs, stats.json, screenshots,
         # breeding_events.json) instead of a shared _scratch dir that the
@@ -70,8 +78,8 @@ def main():
         )
 
         records = [
-            dict(graph=g, objectives=obj)
-            for g, obj in zip(population, log["survivor_objectives"])
+            dict(graph=g, objectives=obj, ind_id=ind_id)
+            for g, obj, ind_id in zip(population, log["survivor_objectives"], log["survivor_ind_ids"])
         ]
         plotting_api.save_generation_population(gen, records, OUTPUT_DIR)
         plotting_api.plot_pareto_front(gen, records, OUTPUT_DIR)
@@ -88,6 +96,7 @@ def main():
             log['n_parents'], log['n_offspring'], log['n_collided'],
             len(population), best['objectives']['f2_forward_velocity_folded'],
         )
+        logger.info("Generation %d finished in %.2f s", gen, time.time() - gen_start_time)
 
     logger.info("Done. Artifacts written to %s", os.path.abspath(OUTPUT_DIR))
 

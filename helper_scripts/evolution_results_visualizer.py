@@ -332,29 +332,42 @@ class EvolutionResultsVisualizer(QMainWindow):
     # ------------------------------------------------------------------
 
     def populate_screenshots_tab(self, generation_idx: int) -> None:
+        """Mirrors the Population tab exactly: the SAME individuals, in
+        the SAME fitness-sorted order (see populate_graph_cards's
+        sorted_entries) - just rendered as the real MuJoCo screenshot
+        instead of a graph-topology diagram.
+
+        Previously this only showed newly-bred offspring (filtered by
+        ind_id), in a separate ad-hoc order - a different set AND a
+        different order than the Population tab, so #N here didn't
+        correspond to #N there. Reading the exact same population.json
+        list, with the exact same sort key, guarantees both tabs agree.
+
+        A gray placeholder means that survivor's own simulation failed
+        (roblet_simulator.run_headless only saves a screenshot when
+        success=True) - moo_api.run_generation's survival selection is now
+        feasibility-first, so a failed individual should only ever show up
+        here if there weren't enough feasible ones to fill the population.
+        """
         self._clear_layout(self.screenshots_grid)
-        data = load_breeding_events(generation_idx)
-        if data is None:
-            self._add_placeholder(self.screenshots_grid, "No breeding_events.json for this generation.")
+        population_path = OUTPUT_DIR / f"generation_{generation_idx}_population.json"
+        if not population_path.exists():
+            self._add_placeholder(self.screenshots_grid, "Population file not found.")
+            return
+        population = self._load_population(population_path)
+        if not population:
+            self._add_placeholder(self.screenshots_grid, "No population entries found.")
             return
 
-        n_parents = data.get("n_parents", 0)
-        n_total = n_parents + data.get("n_offspring", 0)
-        offspring_ids = list(range(n_parents, n_total))  # newly bred this generation only
-        if not offspring_ids:
-            self._add_placeholder(self.screenshots_grid, "No newly bred offspring this generation.")
-            return
+        sorted_entries = sorted(
+            population, key=lambda item: self._aggregate_fitness(item["objectives"]), reverse=True
+        )
 
-        for position, ind_idx in enumerate(offspring_ids):
-            # This grid only ever lists offspring_ids (parents are
-            # excluded by design), but caption by role rather than the
-            # raw batch index either way, in case that ever changes.
-            role = "Parent" if ind_idx < n_parents else "Offspring"
-            caption = f"{role} {position if role == 'Offspring' else ind_idx}"
-            card = self._image_card(
-                screenshot_path(generation_idx, ind_idx), width=SCREENSHOT_CARD_WIDTH, caption=caption
-            )
-            row, col = divmod(position, SCREENSHOTS_COLUMNS)
+        for position, entry in enumerate(sorted_entries, start=1):
+            ind_id = entry.get("ind_id")
+            path = screenshot_path(generation_idx, ind_id) if ind_id is not None else None
+            card = self._image_card(path, width=SCREENSHOT_CARD_WIDTH, caption=f"#{position}")
+            row, col = divmod(position - 1, SCREENSHOTS_COLUMNS)
             self.screenshots_grid.addWidget(card, row, col)
 
     def populate_mutations_tab(self, generation_idx: int) -> None:

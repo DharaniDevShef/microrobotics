@@ -17,11 +17,21 @@ import objectives_api as obj_api
 
 
 def save_generation_population(gen_idx, records, out_dir):
-    """records: list of dict(graph=nx.DiGraph, objectives=dict). Saves the
-    full graph topology + objectives for every surviving individual."""
+    """records: list of dict(graph=nx.DiGraph, objectives=dict, ind_id=int).
+    Saves the full graph topology + objectives for every surviving
+    individual. `ind_id` (optional - None if a caller doesn't have one) is
+    the survivor's index into this generation's flat ind0..indN evaluated
+    batch - lets helper_scripts/evolution_results_visualizer.py match a
+    survivor back to its exact screenshot/XML/stats.json, and tell newly
+    bred offspring (ind_id >= that generation's breeding_events.json
+    n_parents) apart from carried-over parents."""
     os.makedirs(out_dir, exist_ok=True)
     payload = [
-        {"graph": nx.node_link_data(r["graph"], edges="edges"), "objectives": r["objectives"]}
+        {
+            "graph": nx.node_link_data(r["graph"], edges="edges"),
+            "objectives": r["objectives"],
+            "ind_id": r.get("ind_id"),
+        }
         for r in records
     ]
     path = os.path.join(out_dir, f"generation_{gen_idx}_population.json")

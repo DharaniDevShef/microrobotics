@@ -11,7 +11,7 @@ Design variables (per the design doc):
     1. Module Type (Vi)      - categorical {non-foldable, Mountain fold, valley fold}
     2. Graph Adjacency (Aij) - port-to-port connectivity, ports in {1, 2, 3}
     3. Module Count (N)      - N in [2, 40]
-    4. Hinge Angle (theta_i) - continuous, [0, 90] degrees
+    4. Hinge Angle (theta_i) - continuous, [0, 45] degrees
 """
 
 import copy
@@ -26,7 +26,7 @@ PORTS = (1, 2, 3)
 MIN_MODULES = 2
 MAX_MODULES = 40
 MIN_HINGE_ANGLE = 0.0
-MAX_HINGE_ANGLE = 90.0
+MAX_HINGE_ANGLE = 45.0
 
 
 class Action(Enum):

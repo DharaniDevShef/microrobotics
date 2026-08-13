@@ -454,6 +454,9 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
     <option timestep="0.01" integrator="implicitfast">
         <flag contact="enable"/>
     </option>
+    <visual>
+        <global offwidth="1920" offheight="1080"/>
+    </visual>
     <asset>
         <mesh name="bodyBase" file="BodyFoldedSide1.stl" scale="0.001 0.001 0.001"/>
         <mesh name="bodyLink" file="BodyFoldedSide2.stl" scale="0.001 0.001 0.001"/>

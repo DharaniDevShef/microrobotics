@@ -20,6 +20,20 @@ logger = logging.getLogger(__name__)
 _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROBLET_SIMULATOR = os.path.join(_SRC_DIR, "roblet_simulator.py")
 
+# Each simulation is a single-threaded physics loop, but NumPy/MuJoCo's
+# BLAS backend still defaults to spawning one thread per CPU core. With
+# max_workers processes launched at once, that's max_workers x core_count
+# threads fighting over core_count cores, which was inflating wall-clock
+# time well past the sim-time budget. Pinning each subprocess to a single
+# BLAS thread lets them run genuinely in parallel instead of thrashing.
+_SUBPROCESS_ENV = {
+    **os.environ,
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+}
+
 
 def run_batch(jobs, max_workers=None, max_sim_time=7.0):
     """jobs: list of (xml_path, stats_path) pairs.
@@ -48,13 +62,13 @@ def run_batch(jobs, max_workers=None, max_sim_time=7.0):
                 "--headless", "--sweep_b", "--max_sim_time", str(max_sim_time),
                 "--capture_img", "--log-file", log_path,
             ]
-            p = subprocess.Popen(cmd, cwd=_SRC_DIR)
+            p = subprocess.Popen(cmd, cwd=_SRC_DIR, env=_SUBPROCESS_ENV)
             processes.append((p, xml_path, stats_path))
 
         # Wait for each process with a safe timeout and handle failures
         for p, xml_path, stats_path in processes:
             try:
-                p.wait(timeout=max_sim_time + 5)
+                p.wait(timeout=max_sim_time + 20)  # extra buffer for setup/teardown
             except subprocess.TimeoutExpired:
                 logger.error("Simulation timed out for %s, killing process", xml_path)
                 try:

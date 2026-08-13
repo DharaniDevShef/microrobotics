@@ -636,3 +636,34 @@ class PPOTrainer:
             self.history["entropy"].append(entropy_bonus.item())
 
         self.buffer.clear()
+
+    def state_dict(self):
+        """Everything needed to resume training exactly where it left off:
+        both networks' weights, both optimizers' internal state (Adam's
+        running moment estimates - resuming without these would silently
+        restart Adam's warmup), the training-diagnostics history (so
+        plotting_api's RL diagnostics plot stays continuous across a
+        resume instead of resetting to empty), and this trainer's own rng
+        (used for RECONNECT_PORT's old_port tie-break - separate from the
+        rng moo_api.py passes into select_action's caller). The buffer is
+        NOT included: update() always clears it before returning, so it's
+        empty at every point a checkpoint could be taken (end of a
+        generation) anyway. See checkpoint.py for how this gets saved/
+        loaded alongside the population and RNG state."""
+        return dict(
+            actor=self.actor.state_dict(),
+            critic=self.critic.state_dict(),
+            actor_optimizer=self.actor_optimizer.state_dict(),
+            critic_optimizer=self.critic_optimizer.state_dict(),
+            history=self.history,
+            rng_state=self.rng.getstate(),
+        )
+
+    def load_state_dict(self, state):
+        self.actor.load_state_dict(state["actor"])
+        self.critic.load_state_dict(state["critic"])
+        self.actor_optimizer.load_state_dict(state["actor_optimizer"])
+        self.critic_optimizer.load_state_dict(state["critic_optimizer"])
+        self.history = state.get("history", self.history)
+        if "rng_state" in state:
+            self.rng.setstate(state["rng_state"])

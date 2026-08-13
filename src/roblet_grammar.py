@@ -198,7 +198,7 @@ def _new_node_attrs(module_type, hinge_angle, parent, depth):
     return dict(
         module_type=module_type,
         connectors={1: None, 2: None, 3: None},
-        hinge_angle=float(hinge_angle),
+        hinge_angle=round(float(hinge_angle), 2),
         depth=depth,
         parent=parent,
         type_id=MODULE_TYPE_IDS[module_type],
@@ -271,7 +271,8 @@ def mutate_hinge_angle(G, target_node, new_angle):
     if not compute_node_action_mask(G, target_node)[Action.MUTATE_HINGE_ANGLE]:
         raise ValueError(f"MUTATE_HINGE_ANGLE not allowed on {target_node}")
     G2 = copy.deepcopy(G)
-    G2.nodes[target_node]["hinge_angle"] = float(min(max(new_angle, MIN_HINGE_ANGLE), MAX_HINGE_ANGLE))
+    clipped = min(max(new_angle, MIN_HINGE_ANGLE), MAX_HINGE_ANGLE)
+    G2.nodes[target_node]["hinge_angle"] = round(float(clipped), 2)
     return G2
 
 

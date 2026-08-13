@@ -119,8 +119,12 @@ def _action_type_mask(mutation_masks, graft_host_mask, swap_a_mask, swap_b_mask,
 
 
 def _port_mask(G, node_id):
+    """Which ports are legal as an ADD_NODE/RECONNECT_PORT target - i.e.
+    growable_ports(), not free_ports(): the root's port 3 is always
+    structurally free but reserved for the auto-mirrored symmetric half
+    (see roblet_grammar.growable_ports / symmetry.py)."""
     mask = torch.zeros(3, dtype=torch.bool)
-    for p in rg.free_ports(G, node_id):
+    for p in rg.growable_ports(G, node_id):
         mask[p - 1] = True
     return mask
 

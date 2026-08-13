@@ -24,7 +24,15 @@ MODULE_TYPES = ["non-foldable", "Mountain fold", "valley fold"]
 MODULE_TYPE_IDS = {name: idx for idx, name in enumerate(MODULE_TYPES)}
 PORTS = (1, 2, 3)
 MIN_MODULES = 2
-MAX_MODULES = 40
+# Every genotype evolved here is only HALF the final shape - the root's
+# port 3 is reserved for an auto-mirrored clone of whatever grows on port
+# 2 (see growable_ports() below and symmetry.py's build_symmetric_graph),
+# built only at MJCF-generation time. So this bounds the HALF, not the
+# final module count: a half of MAX_MODULES yields a final shape of up to
+# 2*MAX_MODULES - 1 modules (root shared, port-2 subtree + its mirror on
+# port 3) - kept at 20 here so that stays within the design doc's original
+# N in [2, 40] for the physical robot.
+MAX_MODULES = 20
 MIN_HINGE_ANGLE = 0.0
 MAX_HINGE_ANGLE = 45.0
 
@@ -77,6 +85,22 @@ def occupied_ports(G, node_id):
     return [p for p in PORTS if p not in free_ports(G, node_id)]
 
 
+def growable_ports(G, node_id):
+    """Ports on `node_id` available for NEW growth (ADD_NODE, or the
+    new_port side of RECONNECT_PORT) - same as free_ports(), except the
+    graph's root additionally never offers port 3, which is reserved
+    exclusively for the auto-mirrored symmetric half (see symmetry.py's
+    build_symmetric_graph - it's the only thing that ever populates
+    port 3). Structural queries about what's ACTUALLY attached
+    (occupied_ports, or reading .connectors directly) are untouched by
+    this - port 3 genuinely IS unoccupied in the genotype until build
+    time, this just stops evolution from growing onto it itself."""
+    ports = free_ports(G, node_id)
+    if is_root(G, node_id) and 3 in ports:
+        ports.remove(3)
+    return ports
+
+
 def is_leaf(G, node_id):
     """Degree-1 in the undirected sense (exactly one grammar connection)."""
     return (G.in_degree(node_id) + G.out_degree(node_id)) == 1
@@ -113,13 +137,14 @@ def subtree_nodes(G, node_id):
 def compute_node_action_mask(G, node_id):
     """dict[Action -> bool], True meaning the action IS ALLOWED on this node."""
     n_modules = G.number_of_nodes()
-    has_free_port = len(free_ports(G, node_id)) > 0
+    has_growable_port = len(growable_ports(G, node_id)) > 0
     at_module_limit = n_modules >= MAX_MODULES
     module_type = G.nodes[node_id]["module_type"]
 
     mask = {
-        # Port Availability Mask: needs a free port to attach to.
-        Action.ADD_NODE: has_free_port and not at_module_limit,
+        # Port Availability Mask: needs a growable port to attach to (see
+        # growable_ports() - excludes the root's reserved port 3).
+        Action.ADD_NODE: has_growable_port and not at_module_limit,
         # Leaf Node Protection Mask + Root Protection Mask.
         Action.DELETE_NODE: is_leaf(G, node_id) and not is_root(G, node_id),
         # Root Protection Mask.
@@ -131,10 +156,10 @@ def compute_node_action_mask(G, node_id):
         Action.MUTATE_FOLD_TYPE: not is_root(G, node_id),
         # Fold Consistency Mask: only foldable modules have a hinge.
         Action.MUTATE_HINGE_ANGLE: module_type != "non-foldable",
-        # RECONNECT_PORT needs a free port to move the connection to, and
-        # at least one occupied non-root-parent port to move (a root has no
-        # incoming connector). Port Availability Mask applies to the target.
-        Action.RECONNECT_PORT: has_free_port and len(occupied_ports(G, node_id)) > 0,
+        # RECONNECT_PORT needs a growable port to move the connection to,
+        # and at least one occupied port to move it from. Port
+        # Availability Mask applies to the (growable) target port.
+        Action.RECONNECT_PORT: has_growable_port and len(occupied_ports(G, node_id)) > 0,
     }
     return mask
     # NOTE: the "2D Planar Overlap Mask" from the design doc (new module
@@ -183,8 +208,8 @@ def _new_node_attrs(module_type, hinge_angle, parent, depth):
 def add_node(G, target_node, port, module_type, hinge_angle=0.0, rng=None):
     if not compute_node_action_mask(G, target_node)[Action.ADD_NODE]:
         raise ValueError(f"ADD_NODE not allowed on {target_node}")
-    if port not in free_ports(G, target_node):
-        raise ValueError(f"Port {port} on {target_node} is occupied")
+    if port not in growable_ports(G, target_node):
+        raise ValueError(f"Port {port} on {target_node} is occupied or reserved")
 
     # deepcopy, not G.copy(): networkx's shallow copy shares each node's
     # `connectors` dict OBJECT with the original graph, so mutating G2's
@@ -255,8 +280,8 @@ def reconnect_port(G, target_node, old_port, new_port):
         raise ValueError(f"RECONNECT_PORT not allowed on {target_node}")
     if old_port not in occupied_ports(G, target_node):
         raise ValueError(f"Port {old_port} on {target_node} is not occupied")
-    if new_port not in free_ports(G, target_node):
-        raise ValueError(f"Port {new_port} on {target_node} is occupied")
+    if new_port not in growable_ports(G, target_node):
+        raise ValueError(f"Port {new_port} on {target_node} is occupied or reserved")
 
     G2 = copy.deepcopy(G)
     nbr = G2.nodes[target_node]["connectors"][old_port]
@@ -402,11 +427,11 @@ def random_seed_graph(rng, n_modules, module_type_choices=None, hinge_angle_fn=N
     G.add_node("module_1", id="module_1", **_new_node_attrs(root_type, root_angle, None, 0))
 
     for i in range(1, n_modules):
-        candidates = [n for n in G.nodes if free_ports(G, n)]
+        candidates = [n for n in G.nodes if growable_ports(G, n)]
         if not candidates:
             break
         parent = rng.choice(candidates)
-        port = rng.choice(free_ports(G, parent))
+        port = rng.choice(growable_ports(G, parent))
         m_type = pick_type(i)
         angle = 0.0 if m_type == "non-foldable" else hinge_angle_fn()
         G = add_node(G, parent, port, m_type, hinge_angle=angle, rng=rng)

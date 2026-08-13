@@ -15,6 +15,11 @@ separate OS processes (sim_executor.py, generalizing
 parallel_executor.py's subprocess.Popen pattern), and only then reads
 back each individual's stats.json - see evaluate_population().
 
+Every genotype here is only HALF the final shape - symmetry.py mirrors
+it into the full bilaterally-symmetric morphology right before an
+assembly is built (see _prepare_assembly), so evolution itself (mutation,
+crossover, the RL policy, NSGA-III) only ever sees/touches the half.
+
 pymoo's `Problem`/`Algorithm` classes assume a fixed-length real/int
 decision vector, which doesn't fit a variable-size graph genotype - so
 this module drives NSGA-III "by hand": genotypes are plain nx.DiGraph
@@ -45,6 +50,7 @@ import objectives_api as obj_api
 import rl_api
 import roblet_grammar as rg
 import sim_executor
+import symmetry
 
 logger = logging.getLogger(__name__)
 
@@ -67,18 +73,23 @@ _FAILED_STATS = {"success": 0, "physics_ok": 0, "is_stable": 0, "average_velocit
 
 
 def _is_collision_free(G, scratch_dir):
-    """True if `G` builds cleanly through mjcf_generator.build_assembly's
-    own 3D collision check (check_collisions=True - the same check
+    """True if the FULL mirrored graph (symmetry.build_symmetric_graph(G))
+    builds cleanly through mjcf_generator.build_assembly's own 3D
+    collision check (check_collisions=True - the same check
     evaluate_population() relies on): no un-mated module overlaps in
-    either the flat or fully-folded pose. Used to GATE a graph before
-    it's accepted into the population at all - see sobol_seed_population()
-    and make_children_collision_free() - rather than just detecting and
-    penalizing the collision after the fact during evaluation."""
+    either the flat or fully-folded pose. Checking the mirrored graph, not
+    just the half `G`, matters - the two mirrored halves can collide with
+    EACH OTHER even when the half alone is fine on its own. Used to GATE a
+    graph before it's accepted into the population at all - see
+    sobol_seed_population() and make_children_collision_free() - rather
+    than just detecting and penalizing the collision after the fact
+    during evaluation."""
     os.makedirs(scratch_dir, exist_ok=True)
+    full_G = symmetry.build_symmetric_graph(G)
     graph_json_path = os.path.join(scratch_dir, "_collision_check_graph.json")
     xml_path = os.path.join(scratch_dir, "_collision_check_assembly.xml")
     with open(graph_json_path, "w", encoding="utf-8") as f:
-        json.dump(nx.node_link_data(G, edges="edges"), f)
+        json.dump(nx.node_link_data(full_G, edges="edges"), f)
     try:
         build_assembly(graph_json_path, xml_path, meshdir=_MESHDIR)
         return True
@@ -144,14 +155,19 @@ def sobol_seed_population(pop_size, seed=0, scratch_dir=None, max_attempts=15):
 
 
 def _prepare_assembly(G, work_dir, tag):
-    """Writes graph JSON + calls build_assembly. Returns an xml_path, or
-    None if the graph is geometrically invalid (ModuleCollisionError) -
-    callers treat that the same as a failed simulation, without wasting a
-    subprocess on a model that can't even compile."""
+    """Mirrors the half-genotype `G` into the full symmetric shape
+    (symmetry.py), writes its graph JSON, and calls build_assembly.
+    Returns an xml_path, or None if the FULL (mirrored) graph is
+    geometrically invalid (ModuleCollisionError) - callers treat that the
+    same as a failed simulation, without wasting a subprocess on a model
+    that can't even compile. Checking the mirrored graph (not just the
+    half) matters: the two mirrored halves can collide with EACH OTHER
+    even when the half alone is perfectly valid on its own."""
+    full_G = symmetry.build_symmetric_graph(G)
     graph_json_path = os.path.join(work_dir, f"{tag}_graph.json")
     xml_path = os.path.join(work_dir, f"{tag}_assembly.xml")
     with open(graph_json_path, "w", encoding="utf-8") as f:
-        json.dump(nx.node_link_data(G, edges="edges"), f)
+        json.dump(nx.node_link_data(full_G, edges="edges"), f)
     try:
         build_assembly(graph_json_path, xml_path, meshdir=_MESHDIR)
     except ModuleCollisionError:

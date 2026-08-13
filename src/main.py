@@ -20,6 +20,7 @@ import random
 import time
 
 import moo_api
+import objectives_api
 import plotting_api
 import rl_api
 
@@ -87,14 +88,20 @@ def main():
         plotting_api.plot_convergence(OUTPUT_DIR)
         plotting_api.plot_rl_diagnostics(ppo_trainer.history, OUTPUT_DIR)
 
-        # f1 (flat-state velocity) is ignored for now - see objectives_api.py -
-        # so f2 (the single evolved-gait velocity) is the real signal to watch.
-        best = max(records, key=lambda r: r["objectives"]["f2_forward_velocity_folded"])
+        # objectives_api.scalarize() - the SAME function moo_api.py uses
+        # for the RL reward, and evolution_results_visualizer.py's
+        # _aggregate_fitness() now calls too - so "Individual index" below
+        # always names the exact ind_id whose XML/screenshot is the UI's
+        # #1 Population card, not just whichever happens to have the best
+        # f2 (velocity) alone. Sign-corrects "minimize" objectives (per
+        # MAXIMIZE) before summing, unlike a raw sum, so this stays correct
+        # once f3/f4/f5 stop being placeholder zeros.
+        best = max(records, key=lambda r: objectives_api.scalarize(r["objectives"]))
         logger.info(
             "parents=%d offspring=%d collided=%d | survivors=%d | "
-            "best f2 (velocity)=%.4f m/s",
+            "best f2 (velocity)=%.4f m/s | Individual index: %d",
             log['n_parents'], log['n_offspring'], log['n_collided'],
-            len(population), best['objectives']['f2_forward_velocity_folded'],
+            len(population), best['objectives']['f2_forward_velocity_folded'], best['ind_id'],
         )
         logger.info("Generation %d finished in %.2f s", gen, time.time() - gen_start_time)
 

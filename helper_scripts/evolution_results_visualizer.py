@@ -29,8 +29,17 @@ from PyQt6.QtWidgets import (
 
 from graph_visualizer import draw_graph_to_figure
 
-
 ROOT_DIR = Path(__file__).resolve().parent.parent
+_SRC_DIR = str(ROOT_DIR / "src")
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
+import objectives_api  # noqa: E402 - the single source of truth for "combined
+# fitness", also used for the RL reward signal (moo_api.py) and now
+# main.py's per-generation "Individual index" log line. _aggregate_fitness
+# below calls this instead of its own sum() so all three never drift apart
+# again - see scalarize()'s docstring for why raw summation is wrong once
+# a "minimize" objective (like f4) stops being a placeholder zero.
 OUTPUT_DIR = ROOT_DIR / "output" / "evolution_run"
 SCRATCH_DIR = OUTPUT_DIR / "_scratch" / "generated_graphs"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
@@ -564,7 +573,13 @@ class EvolutionResultsVisualizer(QMainWindow):
         return label
 
     def _aggregate_fitness(self, objectives: dict) -> float:
-        return sum(float(value) for value in objectives.values())
+        """objectives_api.scalarize(), not a raw sum: it sign-corrects
+        "minimize" objectives (per objectives_api.MAXIMIZE) before summing,
+        so this stays correct once f3/f4/f5 stop being placeholder zeros -
+        and stays identical to what main.py logs as "Individual index" and
+        what moo_api.py uses for the RL reward, since all three now call
+        this same function instead of each reimplementing it."""
+        return objectives_api.scalarize(objectives)
 
     def _format_objective_summary(self, objectives: dict) -> str:
         values = [f"{name}={value:.4f}" for name, value in objectives.items()]

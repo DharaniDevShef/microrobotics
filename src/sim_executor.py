@@ -15,10 +15,25 @@ import subprocess
 import sys
 import json
 
+import roblet_simulator as rs
+
 logger = logging.getLogger(__name__)
 
 _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROBLET_SIMULATOR = os.path.join(_SRC_DIR, "roblet_simulator.py")
+
+# --sweep_b (always passed below) makes each subprocess run
+# len(B_SWEEP_VALUES) candidate passes PLUS one final "winner" re-run -
+# up to max_sim_time simulated seconds each - not just one run's worth.
+# The subprocess timeout has to cover that whole multiplier or individuals
+# get killed mid-sweep before ever finishing (which is exactly what a
+# flat "+20s" buffer was doing: sized for 1 run, actually needed for up
+# to 5). Read from roblet_simulator.py itself so this stays in sync if
+# B_SWEEP_VALUES ever changes.
+_SWEEP_RUNS_PER_JOB = len(rs.B_SWEEP_VALUES) + 1
+# Per-run overhead beyond raw sim-time: process startup, model
+# load/compile, the pre-gait settle phase, screenshot/JSON I/O.
+_PER_RUN_OVERHEAD_S = 8.0
 
 # Each simulation is a single-threaded physics loop, but NumPy/MuJoCo's
 # BLAS backend still defaults to spawning one thread per CPU core. With
@@ -48,7 +63,12 @@ def run_batch(jobs, max_workers=None, max_sim_time=7.0):
         logger.info("No simulation jobs to run.")
         return
     max_workers = max_workers or os.cpu_count() or 4
-    logger.info("Running %d simulation jobs in batches of %d workers", len(jobs), max_workers)
+    process_timeout = _SWEEP_RUNS_PER_JOB * (max_sim_time + _PER_RUN_OVERHEAD_S)
+    logger.info(
+        "Running %d simulation jobs in batches of %d workers (per-job timeout=%.1fs, "
+        "covering %d sweep runs of up to %.1fs each)",
+        len(jobs), max_workers, process_timeout, _SWEEP_RUNS_PER_JOB, max_sim_time,
+    )
 
     for batch_start in range(0, len(jobs), max_workers):
         batch = jobs[batch_start:batch_start + max_workers]
@@ -68,7 +88,7 @@ def run_batch(jobs, max_workers=None, max_sim_time=7.0):
         # Wait for each process with a safe timeout and handle failures
         for p, xml_path, stats_path in processes:
             try:
-                p.wait(timeout=max_sim_time + 20)  # extra buffer for setup/teardown
+                p.wait(timeout=process_timeout)
             except subprocess.TimeoutExpired:
                 logger.error("Simulation timed out for %s, killing process", xml_path)
                 try:

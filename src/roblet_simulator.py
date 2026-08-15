@@ -37,7 +37,7 @@ B_INTENSITY = 0.01  # 10 mT
 # morphology needs to overcome stiction and walk (rather than stall, or
 # over-drive into a rolling/tumbling gait) is morphology-dependent, so
 # this is swept per run rather than assumed fixed.
-B_SWEEP_VALUES = (0.001, 0.005, 0.01, 0.05)
+B_SWEEP_VALUES = (0.001, 0.008, 0.05)
 # 6.5 x 10^-3 Am^2 - 2mm x 2mm neodymium magnet cylinder (N42SH)
 M_MOMENT = 6.5e-3
 # Maximum torque multiplier
@@ -836,7 +836,7 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
     dt = model.opt.timestep
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        viewer.cam.distance = 0.25  # zoom
+        viewer.cam.distance = 1  # zoom
         viewer.cam.lookat[:] = [0, 0, 0]
         last_print = -1
         avg_velocity = 0.0

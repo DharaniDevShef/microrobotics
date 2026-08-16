@@ -18,6 +18,8 @@ import mujoco.viewer
 import numpy as np
 from PIL import Image
 
+import entropy_api
+
 # Global dictionaries mapping Parent Body ID -> List of (Magnet Geom ID, Polarity Sign)
 parent_body_magnet_map = {}
 
@@ -66,6 +68,12 @@ RENDER_HEIGHT = 480
 # hard cap on that in case a configuration never quite stops jittering.
 SETTLE_MAX_STEPS = 300  # 10 steps * 0.01s timestep = 0.1s settle phase
 SETTLE_VELOCITY_THRESHOLD = 1e-3  # rad/s or m/s - "basically stopped moving"
+
+# 2D/3D shape entropy (entropy_api.py) window sizes, in "radius r" hex-cell
+# units per the reference thesis - window_size = 2r + 1. Kept small since
+# assemblies here are modest-sized (a handful to a few dozen modules), so
+# a window has to stay small to see multiple independent samples of it.
+SHAPE_ENTROPY_WINDOW_SIZES = (3, 5, 7)  # r = 1, 2, 3
 
 # Wall geoms are tagged group=1 in the model (see mjcf_generator.py) so this
 # raycast can be filtered to see ONLY them.
@@ -198,6 +206,17 @@ def find_module_labels(model):
         if body_name and body_name.startswith("module_"):
             module_labels[body_id] = body_name
     return module_labels
+
+
+def _module_positions(data, module_labels):
+    """{module_name: world position (m)} for every top-level module body,
+    read from `data.xpos` as of whatever pose `data` currently holds (the
+    caller is responsible for having called mj_forward/mj_step to resolve
+    it first). Each module is its own freejoint-rooted body - see
+    mjcf_generator.py - so this position already reflects wherever the
+    weld-constraint solver has settled that module, not just a fold
+    joint's local rotation."""
+    return {name: data.xpos[body_id].copy() for body_id, name in module_labels.items()}
 
 
 def read_joint_target_angles_from_xml(model_path):
@@ -354,7 +373,7 @@ def _detect_instability(window_velocities, cv_threshold=0.60):
 
 def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
                            filename="simulation_stats.json", physics_ok=True, is_stable=True,
-                           b_intensity=None):
+                           b_intensity=None, shape_entropy_2d=0.0, shape_entropy_3d=0.0):
     """Calculates masses and average torque, then saves to a JSON file.
 
     physics_ok=False means a MuJoCo physics warning (bad qpos/qvel/qacc, a
@@ -371,7 +390,12 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
 
     b_intensity is the magnetic field strength (Tesla) this particular run
     used -- recorded so a B sweep (see run_headless_b_sweep()) can tell
-    which candidate B produced the reported stats."""
+    which candidate B produced the reported stats.
+
+    shape_entropy_2d/3d (entropy_api.py) are the flat/folded normalized
+    shape-entropy scalars computed in run_headless - objectives_api.py's
+    f5 is their delta. Defaulted to 0.0 (not None) here so a failed run's
+    JSON always has the same schema as a successful one."""
 
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     if not physics_ok:
@@ -385,6 +409,8 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
             "total_simulated_steps": 0,
             "average_velocity_mmps": 0,
             "total_distance_mm": 0,
+            "shape_entropy_2d": round(shape_entropy_2d, 6),
+            "shape_entropy_3d": round(shape_entropy_3d, 6),
         }
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(stats, f, indent=4)
@@ -421,6 +447,8 @@ def save_simulation_stats(model, avg_velocity, total_distance, module_labels,
         "total_simulated_steps": len(torque_history),
         "average_velocity_mmps": round(avg_velocity * 1000, 4),
         "total_distance_mm": round(total_distance * 1000, 4),
+        "shape_entropy_2d": round(shape_entropy_2d, 6),
+        "shape_entropy_3d": round(shape_entropy_3d, 6),
     }
 
     with open(filename, "w", encoding="utf-8") as f:
@@ -509,6 +537,20 @@ def run_headless(
     parent_body_magnet_map.update(find_all_magnets(model))
     module_labels = find_module_labels(model)
 
+    # 2D shape entropy (entropy_api.py): from the model's own flat/
+    # unfolded layout. mjcf_generator.py places every module body's XML
+    # pos/quat to already satisfy the weld-mate geometry at zero fold, so
+    # a single forward-kinematics pass at the default qpos (no stepping/
+    # settling needed - unlike the folded pose below, nothing has to be
+    # solved into place) gives correct flat positions.
+    mujoco.mj_forward(model, data)
+    flat_positions = _module_positions(data, module_labels)
+    entropy_cell_size = entropy_api.adaptive_cell_size(flat_positions)
+    shape_entropy_2d = entropy_api.multiscale_shape_entropy(
+        [pos[:2] for pos in flat_positions.values()], dims=2,
+        window_sizes=SHAPE_ENTROPY_WINDOW_SIZES, cell_size=entropy_cell_size,
+    )
+    shape_entropy_3d = 0.0  # filled in below once the folded pose is settled
 
     model_name = os.path.splitext(os.path.basename(model_path))[0]
 
@@ -554,9 +596,12 @@ def run_headless(
     window_time = None
 
     try:
-        # Save screenshot if requested
-        if capture_img and renderer is not None:
-            # Run a short settle phase to let the hinge position actuators reach their
+        # Settle to the folded pose (used for BOTH the screenshot and 3D
+        # shape entropy below) - kept on `capture_img` alone, not
+        # `capture_img and renderer is not None`, so a renderer/GPU
+        # failure only costs the screenshot, never the entropy computation
+        # (they need the same settled pose, but are otherwise independent).
+        if capture_img:
             for _ in range(SETTLE_MAX_STEPS):
                 set_angle_to_joint(model, data, target_angle_deg=target_angles)
                 mujoco.mj_step(model, data)
@@ -575,7 +620,21 @@ def run_headless(
             # phase had never happened.
             data.time = 0.0
 
+            # 3D shape entropy (entropy_api.py): from this now-settled
+            # folded pose - the weld-constraint solver has actually
+            # repositioned every module relative to its neighbors as the
+            # fold hinges rotated (modules are only rigidly linked via weld
+            # equality constraints, not a kinematic tree, so this couldn't
+            # be read off from a plain forward-kinematics pass - it needs
+            # the real stepped-and-settled `data` the screenshot also uses).
             if physics_ok:
+                folded_positions = _module_positions(data, module_labels)
+                shape_entropy_3d = entropy_api.multiscale_shape_entropy(
+                    list(folded_positions.values()), dims=3,
+                    window_sizes=SHAPE_ENTROPY_WINDOW_SIZES, cell_size=entropy_cell_size,
+                )
+
+            if physics_ok and renderer is not None:
                 try:
                     os.makedirs(media_dir, exist_ok=True)
                     renderer.update_scene(data, camera=camera)
@@ -676,7 +735,8 @@ def run_headless(
 
     save_simulation_stats(model, avg_velocity, displacement, module_labels,
                            filename=stats_output_path, physics_ok=physics_ok, is_stable=is_stable,
-                           b_intensity=B_INTENSITY)
+                           b_intensity=B_INTENSITY, shape_entropy_2d=shape_entropy_2d,
+                           shape_entropy_3d=shape_entropy_3d)
 
     return {
         "model": model_name,

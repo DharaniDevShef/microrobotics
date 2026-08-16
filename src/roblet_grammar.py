@@ -36,6 +36,18 @@ MAX_MODULES = 20
 MIN_HINGE_ANGLE = 0.0
 MAX_HINGE_ANGLE = 45.0
 
+# Hinge Angle mode for Design Variable 4 (theta_i, see module docstring
+# above). "uniform" (default): every foldable module in an assembly is
+# locked to the SAME hinge angle - mutating one, or adding a new foldable
+# module, moves/sets them all together, so the RL policy / Sobol seeding
+# effectively controls one shared design variable instead of one per
+# foldable module. Flip to "per_module" to restore full per-module
+# independence for future use - the per-node hinge_angle field and all the
+# machinery around it never goes away, this flag just decides whether
+# add_node/mutate_hinge_angle/mutate_fold_type/graft_subtree fan a single
+# value out to every foldable node or touch just the one node involved.
+HINGE_ANGLE_MODE = "uniform"  # "uniform" | "per_module"
+
 
 class Action(Enum):
     """Grammar actions. rl_api.py's policy selects among ALL of these
@@ -194,6 +206,25 @@ def swap_eligible(G, node_id):
 # the action (callers should check the mask first; this is a safety net).
 # ---------------------------------------------------------------------
 
+def _shared_hinge_angle(G, exclude=None):
+    """The single hinge angle every foldable module shares under
+    HINGE_ANGLE_MODE == "uniform" - whichever foldable module (other than
+    `exclude`, if given) comes first, or None if there isn't one yet."""
+    for n in G.nodes:
+        if n == exclude:
+            continue
+        if G.nodes[n]["module_type"] != "non-foldable":
+            return G.nodes[n]["hinge_angle"]
+    return None
+
+
+def _broadcast_hinge_angle(G, angle):
+    """In place: locks every foldable module in G to `angle`."""
+    for n in G.nodes:
+        if G.nodes[n]["module_type"] != "non-foldable":
+            G.nodes[n]["hinge_angle"] = angle
+
+
 def _new_node_attrs(module_type, hinge_angle, parent, depth):
     return dict(
         module_type=module_type,
@@ -216,6 +247,10 @@ def add_node(G, target_node, port, module_type, hinge_angle=0.0, rng=None):
     # connectors below would silently corrupt every parent still holding
     # a reference to `G` (e.g. the population list in moo_api.py).
     G2 = copy.deepcopy(G)
+    if HINGE_ANGLE_MODE == "uniform" and module_type != "non-foldable":
+        shared = _shared_hinge_angle(G2)
+        if shared is not None:
+            hinge_angle = shared
     new_id = next_free_id(G2)
     depth = G2.nodes[target_node]["depth"] + 1
     G2.add_node(new_id, id=new_id, **_new_node_attrs(module_type, hinge_angle, target_node, depth))
@@ -264,6 +299,10 @@ def mutate_fold_type(G, target_node, new_fold_type):
     G2.nodes[target_node]["type_id"] = MODULE_TYPE_IDS[new_fold_type]
     if new_fold_type == "non-foldable":
         G2.nodes[target_node]["hinge_angle"] = 0.0
+    elif HINGE_ANGLE_MODE == "uniform":
+        shared = _shared_hinge_angle(G2, exclude=target_node)
+        if shared is not None:
+            G2.nodes[target_node]["hinge_angle"] = shared
     return G2
 
 
@@ -271,8 +310,11 @@ def mutate_hinge_angle(G, target_node, new_angle):
     if not compute_node_action_mask(G, target_node)[Action.MUTATE_HINGE_ANGLE]:
         raise ValueError(f"MUTATE_HINGE_ANGLE not allowed on {target_node}")
     G2 = copy.deepcopy(G)
-    clipped = min(max(new_angle, MIN_HINGE_ANGLE), MAX_HINGE_ANGLE)
-    G2.nodes[target_node]["hinge_angle"] = round(float(clipped), 2)
+    clipped = round(float(min(max(new_angle, MIN_HINGE_ANGLE), MAX_HINGE_ANGLE)), 2)
+    if HINGE_ANGLE_MODE == "uniform":
+        _broadcast_hinge_angle(G2, clipped)
+    else:
+        G2.nodes[target_node]["hinge_angle"] = clipped
     return G2
 
 
@@ -312,6 +354,7 @@ def graft_subtree(host_G, host_node, host_port, donor_G, donor_root, rng=None):
         raise ValueError(f"GRAFT_SUBTREE not allowed on {host_node} (port/limit mask)")
 
     G2 = copy.deepcopy(host_G)
+    host_shared_angle = _shared_hinge_angle(G2) if HINGE_ANGLE_MODE == "uniform" else None
     donor_nodes = subtree_nodes(donor_G, donor_root)
     remaining_capacity = MAX_MODULES - G2.number_of_nodes()
     if remaining_capacity <= 0:
@@ -347,6 +390,16 @@ def graft_subtree(host_G, host_node, host_port, donor_G, donor_root, rng=None):
     G2.nodes[new_root]["parent"] = host_node
 
     _recompute_depths(G2, root_node(G2))
+    if HINGE_ANGLE_MODE == "uniform":
+        # Reconcile: the donor subtree may have carried its own
+        # (independently-uniform) angle that differs from the host's -
+        # prefer the host's pre-existing shared angle so grafting doesn't
+        # silently change the rest of the host; only fall back to
+        # whatever the donor contributed if the host had no foldable
+        # module of its own yet.
+        target = host_shared_angle if host_shared_angle is not None else _shared_hinge_angle(G2)
+        if target is not None:
+            _broadcast_hinge_angle(G2, target)
     return G2
 
 

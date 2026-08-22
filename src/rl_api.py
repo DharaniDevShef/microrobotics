@@ -371,10 +371,11 @@ def act(actor, critic, G_a, G_b, rng=None):
                 port_dist = _masked_categorical(actor.port_head(h_v).squeeze(0), port_mask)
                 port_idx = port_dist.sample()
                 logprob = logprob + port_dist.log_prob(port_idx)
-                # old_port is an unlearned uniform pick among occupied ports
-                # (usually only 1-2 candidates) - documented simplification,
-                # not part of the PPO logprob.
-                old_port = rng.choice(rg.occupied_ports(G_a, node_id_a))
+                # old_port is an unlearned uniform pick among reconnectable
+                # ports (usually only 1-2 candidates, and never the node's
+                # own link to its parent - see reconnectable_ports())
+                # - documented simplification, not part of the PPO logprob.
+                old_port = rng.choice(rg.reconnectable_ports(G_a, node_id_a))
                 params = dict(old_port=old_port, new_port=port_idx.item() + 1)
                 port_idx = port_idx.item()
 

@@ -8,8 +8,11 @@ Loop, per generation:
     moo_api.evaluate_population  -> mjcf_generator.build_assembly (XML per individual)
                                   -> sim_executor.run_batch (roblet_simulator.py --headless, N parallel OS processes)
                                   -> objectives_api.compute_objectives (reads each stats.json)
-    moo_api.make_children_collision_free -> rl_api.PPOTrainer.select_action (mutation AND crossover)
-                                  -> roblet_grammar, gated on mjcf_generator's 3D collision check
+    moo_api.make_children_collision_free -> RL_ASSISTED_GENETIC_OPERATIONS switches this between
+                                  rl_api.PPOTrainer.select_action (learned policy, mutation AND
+                                  crossover) and random_baseline.act (uniform-random choice over the
+                                  identical grammar-legal action space - the classic-GA comparison
+                                  arm) - gated either way on mjcf_generator's 3D collision check
     moo_api NSGA-III survival    -> pymoo ReferenceDirectionSurvival
     plotting_api                 -> generation JSON + Pareto plot + RL diagnostics
     checkpoint.save               -> RL weights/optimizers/history + population + RNG state,
@@ -20,6 +23,12 @@ and picks up right after the last generation that finished (no flag
 needed) - see checkpoint.py. So a crash, a manual Ctrl-C, or any
 unhandled exception loses at most the generation that was in progress;
 just run `python main.py` again to continue.
+
+RL_ASSISTED_GENETIC_OPERATIONS = False runs the identical pipeline with
+random_baseline.py driving breeding instead of the trained policy,
+writing to a SEPARATE output dir (evolution_run_norl/) so it never
+collides with (or overwrites the checkpoint of) a True run - see
+plotting_api.plot_rl_vs_baseline_comparison for comparing the two.
 """
 
 import logging
@@ -40,6 +49,14 @@ N_GENERATIONS = 5
 SIM_SECONDS = 7
 SEED = 42  # reproducible Sobol-seeding of initial population (fresh runs only - a resumed run's RNG/seed come from the checkpoint)
 
+# True (default): breeding uses rl_api's trained policy, as it always has.
+# False: breeding uses random_baseline.py's uniform-random choice over the
+# SAME grammar-legal action space instead - a classic-GA "blind variation
+# + NSGA-III selection" comparison arm, for measuring what the learned
+# policy actually contributes. Writes to a different OUTPUT_DIR (below) so
+# toggling this never disturbs an in-progress True run's checkpoint/data.
+RL_ASSISTED_GENETIC_OPERATIONS = False
+
 
 def configure_logging(log_file, level=logging.INFO):
     handlers = [logging.StreamHandler()]
@@ -54,7 +71,15 @@ def configure_logging(log_file, level=logging.INFO):
     )
 
 _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_DIR = os.path.join(_SRC_DIR, "..", "output", "evolution_run")
+# RL_ASSISTED_GENETIC_OPERATIONS=True keeps the EXACT same path this has
+# always been ("evolution_run", no suffix) - so flipping the switch back
+# to True (the default) never orphans or resets an existing run's
+# checkpoint/progress. Only the False/baseline arm gets a new directory,
+# since it has no prior data to preserve.
+OUTPUT_DIR = os.path.join(
+    _SRC_DIR, "..", "output",
+    "evolution_run" if RL_ASSISTED_GENETIC_OPERATIONS else "evolution_run_norl",
+)
 CHECKPOINT_PATH = os.path.join(OUTPUT_DIR, "checkpoint.pt")
 
 
@@ -104,6 +129,7 @@ def main():
             os.makedirs(gen_dir, exist_ok=True)
             population, log = moo_api.run_generation(
                 population, ppo_trainer, rng, work_dir=gen_dir, sim_seconds=SIM_SECONDS,
+                rl_assisted=RL_ASSISTED_GENETIC_OPERATIONS,
             )
 
             records = [
@@ -131,6 +157,13 @@ def main():
                 log['n_parents'], log['n_offspring'], log['n_collided'],
                 len(population), best['objectives']['f2_forward_velocity_folded'], best['ind_id'],
             )
+
+            # Per-generation n_parents/n_offspring/n_collided, appended
+            # generation by generation - not reconstructable from
+            # generation_*_population.json alone (that only has survivors),
+            # and it's what plot_rl_vs_baseline_comparison's collision-rate
+            # panel reads.
+            plotting_api.append_generation_stats(gen, log, OUTPUT_DIR)
 
             # Only reached once generation `gen` has fully finished (evaluation,
             # NSGA-III survival, plotting all succeeded) - so a checkpoint on

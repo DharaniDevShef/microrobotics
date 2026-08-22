@@ -47,6 +47,7 @@ from pymoo.core.population import Population
 from pymoo.util.ref_dirs import get_reference_directions
 
 import objectives_api as obj_api
+import random_baseline
 import rl_api
 import roblet_grammar as rg
 import sim_executor
@@ -231,10 +232,14 @@ def evaluate_individual(G, work_dir=None, sim_seconds=7.0):
     return result
 
 
-def make_children(parent_a, parent_b, ppo_trainer, rng):
-    """One breeding step: the RL policy itself picks mutation vs.
-    crossover (and every parameter of whichever it picks) from
-    (parent_a, parent_b) - see rl_api.py's ActorNet. Returns
+def make_children(parent_a, parent_b, ppo_trainer, rng, rl_assisted=True):
+    """One breeding step. When `rl_assisted` (main.py's
+    RL_ASSISTED_GENETIC_OPERATIONS), the RL policy itself picks mutation
+    vs. crossover (and every parameter of whichever it picks) from
+    (parent_a, parent_b) - see rl_api.py's ActorNet. When not, the exact
+    same grammar-legal action space is used but every choice is drawn
+    uniformly at random instead (random_baseline.py) - the classic-GA
+    "blind variation + NSGA-III selection" comparison arm. Returns
     (children, decision_or_None): `children` is a list of 1 graph for a
     mutation/GRAFT_SUBTREE, or 2 graphs for a SWAP_SUBTREES (one
     recombined offspring per parent); `decision` is None only in the rare
@@ -242,30 +247,47 @@ def make_children(parent_a, parent_b, ppo_trainer, rng):
     if not rl_api.has_any_legal_action(parent_a, parent_b):
         return [parent_a.copy()], None
 
-    decision = ppo_trainer.select_action(parent_a, parent_b)
+    if rl_assisted:
+        decision = ppo_trainer.select_action(parent_a, parent_b)
+    else:
+        decision = random_baseline.act(parent_a, parent_b, rng)
     children = rl_api.apply_decision(parent_a, parent_b, decision)
     return children, decision
 
 
-def make_children_collision_free(parent_a, parent_b, ppo_trainer, rng, scratch_dir, max_attempts=8):
+def make_children_collision_free(parent_a, parent_b, ppo_trainer, rng, scratch_dir,
+                                  max_attempts=8, rl_assisted=True):
     """Wraps make_children() with a 3D collision gate: if the proposed
     child/children fail mjcf_generator.py's collision check
-    (_is_collision_free), the decision is rejected - recording a flat
-    COLLISION_PENALTY reward so the policy still gets a learning signal
-    against it - and a fresh decision is re-sampled from the RL policy.
+    (_is_collision_free), the decision is rejected and a fresh one is
+    re-sampled. When `rl_assisted`, a rejected attempt also records a flat
+    COLLISION_PENALTY reward so the policy gets a learning signal against
+    it (the random baseline has no policy to train, so it just re-draws).
     Falls back to a guaranteed-valid no-op copy of parent_a (parent_a is
     already known collision-free, by induction from this same gate) if
     every attempt still collides.
 
     This is what keeps every individual entering a generation already
-    validated: parents start collision-free (sobol_seed_population), and
-    this function is the only source of new offspring, so the invariant
-    holds by construction for every later generation too."""
+    validated - true for BOTH arms of the RL-vs-baseline comparison,
+    since collision-gating is a controlled variable, not part of what's
+    being compared: parents start collision-free (sobol_seed_population),
+    and this function is the only source of new offspring, so the
+    invariant holds by construction for every later generation too.
+
+    Also absorbs roblet_grammar.GraftPortConflict, which apply_decision's
+    GRAFT_SUBTREE/SWAP_SUBTREES can raise (see its docstring) - there's no
+    way to mask that one in advance (it depends on the donor's internal
+    structure, only known once both the host and donor node are already
+    sampled), so it's treated the same as a rejected/colliding attempt
+    here rather than escaping as a crash."""
     for _ in range(max_attempts):
-        children, decision = make_children(parent_a, parent_b, ppo_trainer, rng)
+        try:
+            children, decision = make_children(parent_a, parent_b, ppo_trainer, rng, rl_assisted=rl_assisted)
+        except rg.GraftPortConflict:
+            continue
         if all(_is_collision_free(child, scratch_dir) for child in children):
             return children, decision
-        if decision is not None:
+        if rl_assisted and decision is not None:
             ppo_trainer.record(decision, COLLISION_PENALTY)
     return [parent_a.copy()], None
 
@@ -289,9 +311,16 @@ def _reference_directions(n_obj, n_partitions=2):
 
 
 def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_seconds=7.0,
-                    n_offspring=None, ref_partitions=2, max_workers=None):
+                    n_offspring=None, ref_partitions=2, max_workers=None, rl_assisted=True):
     """One NSGA-III generation. Returns (next_generation_graphs, log) where
     `log` carries per-survivor objectives/rank for plotting_api.py.
+
+    `rl_assisted` (main.py's RL_ASSISTED_GENETIC_OPERATIONS) switches the
+    breeding operator between the trained RL policy and random_baseline.py's
+    uniform-random choice over the identical grammar-legal action space -
+    see make_children()'s docstring. Everything else (collision-gating,
+    evaluation, NSGA-III survival) is unchanged between the two, so this
+    is the one knob a RL-vs-classic-GA comparison run should toggle.
 
     `n_offspring` is the number of breeding STEPS (parent-pair draws), not
     the final offspring count: most decisions (mutation, GRAFT_SUBTREE)
@@ -321,7 +350,7 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
         pa_idx = population_graphs.index(pa)
         pb_idx = population_graphs.index(pb)
 
-        children, decision = make_children_collision_free(pa, pb, ppo_trainer, rng, work_dir)
+        children, decision = make_children_collision_free(pa, pb, ppo_trainer, rng, work_dir, rl_assisted=rl_assisted)
         # Which parent each child's improvement is measured against: a
         # mutation/GRAFT_SUBTREE child is a single offspring bred from
         # parent_a, but SWAP_SUBTREES returns one recombined offspring
@@ -357,7 +386,11 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
             offspring_records.append(dict(graph=child, objectives=objectives, F=f_vec, constraint=constraint))
 
         if decision is not None:
-            ppo_trainer.record(decision, float(np.mean(improvements)))
+            if rl_assisted:
+                ppo_trainer.record(decision, float(np.mean(improvements)))
+            # Logged for BOTH arms regardless (evolution_results_visualizer.py's
+            # Mutations/Crossover tabs work identically either way) - only the
+            # PPO training call above is RL-specific.
             breeding_events.append(dict(
                 type=("mutation" if decision.action in rg.MUTATION_ACTIONS else "crossover"),
                 action=decision.action.name,
@@ -365,7 +398,8 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
                 child_ids=child_ids,
             ))
 
-    ppo_trainer.update()
+    if rl_assisted:
+        ppo_trainer.update()
     _write_breeding_events(work_dir, pop_size, len(offspring_records), breeding_events)
 
     all_records = parent_records + offspring_records

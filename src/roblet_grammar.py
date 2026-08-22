@@ -99,6 +99,38 @@ def occupied_ports(G, node_id):
     return [p for p in PORTS if p not in free_ports(G, node_id)]
 
 
+def own_parent_port(G, node_id):
+    """The port on `node_id` itself used for its own edge to its parent,
+    or None for the root. Reads the real edge rather than assuming port 1
+    - every node SHOULD use port 1 for this by convention (add_node
+    always does), but this is also what reconnectable_ports() uses to
+    make sure that stays true, so it can't just assume its own
+    conclusion."""
+    parent = G.nodes[node_id]["parent"]
+    if parent is None:
+        return None
+    if G.has_edge(parent, node_id):
+        return G.edges[parent, node_id]["connector2"]
+    return G.edges[node_id, parent]["connector1"]
+
+
+def reconnectable_ports(G, node_id):
+    """Occupied ports RECONNECT_PORT may legally move (its `old_port`):
+    every occupied port except `node_id`'s own link to its parent.
+
+    That link has to stay wherever it is. Port 1 is, by convention
+    relied on throughout this module (add_node) and by symmetry.py's
+    mirror math (only port 1's geometry is symmetric under reflection -
+    ports 2/3 are mirror images of EACH OTHER, never individually "on
+    axis"), always the parent-facing port - move a node's own parent
+    link off port 1 and any subtree hanging under it can no longer be
+    validly mirrored later, plus it desyncs is_mirror_anchor() (which
+    reads the ROOT's port 1 specifically to find its spine child) the
+    moment it happens to the root's spine child itself."""
+    parent_port = own_parent_port(G, node_id)
+    return [p for p in occupied_ports(G, node_id) if p != parent_port]
+
+
 def is_mirror_anchor(G, node_id):
     """True for every node that sits exactly ON the bilateral mirror plane:
     the root, and the root's port-1 child if one has been grown (the
@@ -188,9 +220,20 @@ def compute_node_action_mask(G, node_id):
         # Fold Consistency Mask: only foldable modules have a hinge.
         Action.MUTATE_HINGE_ANGLE: module_type != "non-foldable",
         # RECONNECT_PORT needs a growable port to move the connection to,
-        # and at least one occupied port to move it from. Port
-        # Availability Mask applies to the (growable) target port.
-        Action.RECONNECT_PORT: has_growable_port and len(occupied_ports(G, node_id)) > 0,
+        # and at least one RECONNECTABLE port to move it from - occupied,
+        # but not the node's own link to its parent (reconnectable_ports -
+        # that port has to stay put, see its docstring). Root Protection
+        # Mask (extended): the root has no parent link to protect that
+        # way, but its two occupied ports (port 1 "spine", port 2
+        # "evolvable") carry the same kind of fixed, load-bearing meaning
+        # for is_mirror_anchor()/symmetry.py - relabeling which is which
+        # would silently swap which subtree does and doesn't get
+        # auto-mirrored, so the root is excluded outright rather than
+        # trying to say "keep whichever of 1/2 you already have".
+        Action.RECONNECT_PORT: (
+            has_growable_port and not is_root(G, node_id)
+            and len(reconnectable_ports(G, node_id)) > 0
+        ),
     }
     return mask
     # NOTE: the "2D Planar Overlap Mask" from the design doc (new module
@@ -340,8 +383,12 @@ def mutate_hinge_angle(G, target_node, new_angle):
 def reconnect_port(G, target_node, old_port, new_port):
     if not compute_node_action_mask(G, target_node)[Action.RECONNECT_PORT]:
         raise ValueError(f"RECONNECT_PORT not allowed on {target_node}")
-    if old_port not in occupied_ports(G, target_node):
-        raise ValueError(f"Port {old_port} on {target_node} is not occupied")
+    if old_port not in reconnectable_ports(G, target_node):
+        raise ValueError(
+            f"Port {old_port} on {target_node} is not occupied, or is its own "
+            "link to its parent (reconnectable_ports() never offers that one - "
+            "see its docstring)"
+        )
     if new_port not in growable_ports(G, target_node):
         raise ValueError(f"Port {new_port} on {target_node} is occupied or reserved")
 
@@ -366,8 +413,39 @@ def reconnect_port(G, target_node, old_port, new_port):
 # the donor/partner nodes that get passed in here)
 # ---------------------------------------------------------------------
 
+class GraftPortConflict(ValueError):
+    """Raised when donor_root's own port 1 is already used by one of its
+    real (copied) children, so graft_subtree can't also point it at the
+    new host - see graft_subtree's docstring. Callers should treat this
+    like any other invalid-genotype rejection (mjcf_generator.
+    ModuleCollisionError, symmetry.MirrorAnchorViolation): reject the
+    graft and let the caller retry with a different action, not crash."""
+
+
 def graft_subtree(host_G, host_node, host_port, donor_G, donor_root, rng=None):
-    """Copy donor_G's subtree rooted at donor_root onto host_G at host_node/host_port."""
+    """Copy donor_G's subtree rooted at donor_root onto host_G at host_node/host_port.
+
+    donor_root itself is free to be donor_G's own root (or any other
+    node) - rl_api.py's crossover donor pick has no restriction against
+    it. That case needs care: every node's port 1 is, by strong
+    convention relied on throughout this module (see add_node) and by
+    symmetry.py's mirror math (only port 1's geometry is self-symmetric
+    under reflection - ports 2/3 are only mirror images of EACH OTHER,
+    never individually "on axis"), always the link back to its parent.
+    An ordinary donor_root has port 1 free in the copy (its real parent
+    lives outside the copied subtree, so the edge-copying loop below
+    never touches port 1), so pointing it at the new host preserves that
+    convention for free. But donor_G's OWN root has no parent edge to
+    exclude that way - its port 1 may already be a real internal child
+    (e.g. its own "spine"), which the edge-copying loop faithfully
+    carries over. Forcing port 1 to the new host in that case would
+    require either clobbering that already-set connectors-dict entry
+    (silently splitting the port between two different neighbors
+    depending whether you trust connectors or the graph edges - exactly
+    the corruption this used to produce) or attaching via a different
+    port (which breaks the "port 1 = parent" convention this graph
+    leans on elsewhere). Neither is safe, so this specific graft is
+    rejected instead - see GraftPortConflict."""
     rng = rng or random
     if not compute_node_action_mask(host_G, host_node)[Action.ADD_NODE]:
         raise ValueError(f"GRAFT_SUBTREE not allowed on {host_node} (port/limit mask)")
@@ -403,6 +481,14 @@ def graft_subtree(host_G, host_node, host_port, donor_G, donor_root, rng=None):
             G2.nodes[new_v]["connectors"][d["connector2"]] = new_u
 
     new_root = id_map[donor_root]
+    if G2.nodes[new_root]["connectors"].get(1) is not None:
+        raise GraftPortConflict(
+            f"Donor root {donor_root}'s port 1 is already used by one of its "
+            "own copied children (it must itself be donor_G's root, with no "
+            "external parent edge to exclude it) - can't also attach it to "
+            "the host via port 1 without breaking the port-1-is-always-the-"
+            "parent-link convention. See GraftPortConflict's docstring."
+        )
     G2.nodes[new_root]["connectors"][1] = host_node
     G2.nodes[host_node]["connectors"][host_port] = new_root
     G2.add_edge(host_node, new_root, connector1=host_port, connector2=1)

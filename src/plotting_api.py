@@ -153,6 +153,112 @@ def plot_convergence(out_dir):
     return path
 
 
+def append_generation_stats(gen_idx, log, out_dir):
+    """Appends {generation, n_parents, n_offspring, n_collided} to
+    out_dir/generation_stats.json - the per-generation breeding/collision
+    counts from moo_api.run_generation's `log`, which aren't reconstructable
+    from generation_*_population.json alone (that only has survivors, not
+    how many offspring were bred or how many collided). Feeds
+    plot_rl_vs_baseline_comparison's collision-rate panel.
+
+    Idempotent by generation index (replaces rather than duplicates an
+    existing entry for the same `gen_idx`) so re-running a generation
+    after a resume doesn't double-count it."""
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, "generation_stats.json")
+    stats = _load_generation_stats(out_dir)
+    stats = [s for s in stats if s["generation"] != gen_idx]
+    stats.append(dict(
+        generation=gen_idx,
+        n_parents=log["n_parents"],
+        n_offspring=log["n_offspring"],
+        n_collided=log["n_collided"],
+    ))
+    stats.sort(key=lambda s: s["generation"])
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(stats, f, indent=2)
+    return path
+
+
+def _load_generation_stats(out_dir):
+    path = os.path.join(out_dir, "generation_stats.json")
+    if not os.path.exists(path):
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def plot_rl_vs_baseline_comparison(run_dirs, comparison_out_dir, filename="rl_vs_baseline_comparison.png"):
+    """The RL_ASSISTED_GENETIC_OPERATIONS comparison plot: overlays each
+    run's f2 (locomotion), f5 (shape-entropy delta), scalarized fitness
+    (convergence), and collision rate, one line per run, so the effect of
+    the learned policy vs. random_baseline.py's blind variation is visible
+    directly, generation by generation.
+
+    `run_dirs`: dict[label -> OUTPUT_DIR] - e.g.
+    {"RL-assisted": ".../evolution_run", "Random baseline": ".../evolution_run_norl"}.
+    Runs with no data yet are silently skipped (so this is safe to call
+    while one arm is still in progress)."""
+    os.makedirs(comparison_out_dir, exist_ok=True)
+
+    runs = {}
+    for label, out_dir in run_dirs.items():
+        generations = _load_all_generations(out_dir)
+        if not generations:
+            continue
+        gen_stats = {s["generation"]: s for s in _load_generation_stats(out_dir)}
+        runs[label] = (generations, gen_stats)
+    if not runs:
+        return None
+
+    fig, axes = plt.subplots(4, 1, figsize=(8, 14), sharex=True)
+    ax_f2, ax_f5, ax_conv, ax_collision = axes
+
+    for label, (generations, gen_stats) in runs.items():
+        gen_indices = [g for g, _ in generations]
+
+        best_f2 = [max(e["objectives"]["f2_forward_velocity_folded"] for e in pop) for _, pop in generations]
+        mean_f2 = [float(np.mean([e["objectives"]["f2_forward_velocity_folded"] for e in pop])) for _, pop in generations]
+        ax_f2.plot(gen_indices, best_f2, marker="o", label=f"{label} (best)")
+        ax_f2.plot(gen_indices, mean_f2, marker="o", linestyle="--", label=f"{label} (mean)")
+
+        mean_f5 = [float(np.mean([e["objectives"]["f5_entropy"] for e in pop])) for _, pop in generations]
+        ax_f5.plot(gen_indices, mean_f5, marker="o", label=f"{label} (mean)")
+
+        scalarized_best = [max(obj_api.scalarize(e["objectives"]) for e in pop) for _, pop in generations]
+        ax_conv.plot(gen_indices, scalarized_best, marker="o", label=label)
+
+        collision_rate = [
+            gen_stats[g]["n_collided"] / gen_stats[g]["n_offspring"]
+            if g in gen_stats and gen_stats[g]["n_offspring"] else None
+            for g in gen_indices
+        ]
+        if any(v is not None for v in collision_rate):
+            xs = [g for g, v in zip(gen_indices, collision_rate) if v is not None]
+            ys = [v for v in collision_rate if v is not None]
+            ax_collision.plot(xs, ys, marker="o", label=label)
+
+    ax_f2.set_title("f2: forward velocity (locomotion)")
+    ax_f2.set_ylabel("m/s")
+    ax_f2.legend(loc="best", fontsize=8)
+
+    ax_f5.set_title("f5: shape-entropy delta (folding complexity gain)")
+    ax_f5.legend(loc="best", fontsize=8)
+
+    ax_conv.set_title("Convergence: best scalarized fitness")
+    ax_conv.legend(loc="best", fontsize=8)
+
+    ax_collision.set_title("Collision rate (n_collided / n_offspring)")
+    ax_collision.set_xlabel("generation")
+    ax_collision.legend(loc="best", fontsize=8)
+
+    fig.tight_layout()
+    path = os.path.join(comparison_out_dir, filename)
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
 def plot_rl_diagnostics(history, out_dir, filename="rl_diagnostics.png"):
     """history: rl_api.PPOTrainer.history (dict of lists: policy_loss,
     value_loss, entropy, reward)."""
@@ -173,3 +279,4 @@ def plot_rl_diagnostics(history, out_dir, filename="rl_diagnostics.png"):
     fig.savefig(path, dpi=150)
     plt.close(fig)
     return path
+

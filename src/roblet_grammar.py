@@ -24,14 +24,16 @@ MODULE_TYPES = ["non-foldable", "Mountain fold", "valley fold"]
 MODULE_TYPE_IDS = {name: idx for idx, name in enumerate(MODULE_TYPES)}
 PORTS = (1, 2, 3)
 MIN_MODULES = 2
-# Every genotype evolved here is only HALF the final shape - the root's
-# port 3 is reserved for an auto-mirrored clone of whatever grows on port
-# 2 (see growable_ports() below and symmetry.py's build_symmetric_graph),
-# built only at MJCF-generation time. So this bounds the HALF, not the
-# final module count: a half of MAX_MODULES yields a final shape of up to
-# 2*MAX_MODULES - 1 modules (root shared, port-2 subtree + its mirror on
-# port 3) - kept at 20 here so that stays within the design doc's original
-# N in [2, 40] for the physical robot.
+# Every genotype evolved here is only HALF the final shape - each mirror
+# anchor's (is_mirror_anchor() below - the root, and its port-1 "spine"
+# child if grown) port 3 is reserved for an auto-mirrored clone of
+# whatever grows on its port 2 (see growable_ports() and symmetry.py's
+# build_symmetric_graph), built only at MJCF-generation time. So this
+# bounds the HALF, not the final module count: a half of MAX_MODULES
+# yields a final shape of up to roughly 2*MAX_MODULES modules (the two
+# anchors shared, everything else mirrored in pairs) - kept at 20 here so
+# that stays within the design doc's original N in [2, 40] for the
+# physical robot.
 MAX_MODULES = 20
 MIN_HINGE_ANGLE = 0.0
 MAX_HINGE_ANGLE = 45.0
@@ -97,18 +99,35 @@ def occupied_ports(G, node_id):
     return [p for p in PORTS if p not in free_ports(G, node_id)]
 
 
+def is_mirror_anchor(G, node_id):
+    """True for every node that sits exactly ON the bilateral mirror plane:
+    the root, and the root's port-1 child if one has been grown (the
+    "spine" - see the module docstring in symmetry.py). Port 1 is only
+    ever free on the root itself (every other node's port 1 is already
+    spoken for, linking back to its own parent), so the spine can never
+    extend past that one child - anything grown from THAT child's port 2
+    or 3 has already rotated off the mirror plane and is an ordinary
+    (non-anchor) node whose whole subtree gets reflected as a block by
+    build_symmetric_graph, same as the root's port-2 subtree is."""
+    if is_root(G, node_id):
+        return True
+    root = root_node(G)
+    return G.nodes[root]["connectors"].get(1) == node_id
+
+
 def growable_ports(G, node_id):
     """Ports on `node_id` available for NEW growth (ADD_NODE, or the
-    new_port side of RECONNECT_PORT) - same as free_ports(), except the
-    graph's root additionally never offers port 3, which is reserved
-    exclusively for the auto-mirrored symmetric half (see symmetry.py's
+    new_port side of RECONNECT_PORT) - same as free_ports(), except a
+    mirror-anchor node (is_mirror_anchor() - the root, and its port-1
+    child if any) additionally never offers port 3, which is reserved
+    exclusively for its auto-mirrored symmetric half (see symmetry.py's
     build_symmetric_graph - it's the only thing that ever populates
-    port 3). Structural queries about what's ACTUALLY attached
+    an anchor's port 3). Structural queries about what's ACTUALLY attached
     (occupied_ports, or reading .connectors directly) are untouched by
     this - port 3 genuinely IS unoccupied in the genotype until build
     time, this just stops evolution from growing onto it itself."""
     ports = free_ports(G, node_id)
-    if is_root(G, node_id) and 3 in ports:
+    if is_mirror_anchor(G, node_id) and 3 in ports:
         ports.remove(3)
     return ports
 

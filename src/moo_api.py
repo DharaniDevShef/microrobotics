@@ -79,13 +79,19 @@ def _is_collision_free(G, scratch_dir):
     evaluate_population() relies on): no un-mated module overlaps in
     either the flat or fully-folded pose. Checking the mirrored graph, not
     just the half `G`, matters - the two mirrored halves can collide with
-    EACH OTHER even when the half alone is fine on its own. Used to GATE a
-    graph before it's accepted into the population at all - see
-    sobol_seed_population() and make_children_collision_free() - rather
-    than just detecting and penalizing the collision after the fact
-    during evaluation."""
+    EACH OTHER even when the half alone is fine on its own. Also rejects
+    (False) a half-graph build_symmetric_graph can't even mirror -
+    symmetry.MirrorAnchorViolation, which GRAFT_SUBTREE/SWAP_SUBTREES can
+    produce (see its docstring) - same "invalid genotype" bucket as a
+    geometric collision, not a crash. Used to GATE a graph before it's
+    accepted into the population at all - see sobol_seed_population() and
+    make_children_collision_free() - rather than just detecting and
+    penalizing the collision after the fact during evaluation."""
     os.makedirs(scratch_dir, exist_ok=True)
-    full_G = symmetry.build_symmetric_graph(G)
+    try:
+        full_G = symmetry.build_symmetric_graph(G)
+    except symmetry.MirrorAnchorViolation:
+        return False
     graph_json_path = os.path.join(scratch_dir, "_collision_check_graph.json")
     xml_path = os.path.join(scratch_dir, "_collision_check_assembly.xml")
     with open(graph_json_path, "w", encoding="utf-8") as f:
@@ -157,13 +163,20 @@ def sobol_seed_population(pop_size, seed=0, scratch_dir=None, max_attempts=15):
 def _prepare_assembly(G, work_dir, tag):
     """Mirrors the half-genotype `G` into the full symmetric shape
     (symmetry.py), writes its graph JSON, and calls build_assembly.
-    Returns an xml_path, or None if the FULL (mirrored) graph is
-    geometrically invalid (ModuleCollisionError) - callers treat that the
-    same as a failed simulation, without wasting a subprocess on a model
-    that can't even compile. Checking the mirrored graph (not just the
-    half) matters: the two mirrored halves can collide with EACH OTHER
-    even when the half alone is perfectly valid on its own."""
-    full_G = symmetry.build_symmetric_graph(G)
+    Returns an xml_path, or None if the FULL (mirrored) graph is invalid
+    - geometrically (ModuleCollisionError) or structurally
+    (symmetry.MirrorAnchorViolation, see its docstring) - callers treat
+    that the same as a failed simulation, without wasting a subprocess on
+    a model that can't even compile. Checking the mirrored graph (not
+    just the half) matters: the two mirrored halves can collide with EACH
+    OTHER even when the half alone is perfectly valid on its own.
+    Shouldn't actually trigger in practice - every graph reaching here
+    already passed _is_collision_free() at creation time - but is kept as
+    a defensive backstop, same as the ModuleCollisionError catch below."""
+    try:
+        full_G = symmetry.build_symmetric_graph(G)
+    except symmetry.MirrorAnchorViolation:
+        return None
     graph_json_path = os.path.join(work_dir, f"{tag}_graph.json")
     xml_path = os.path.join(work_dir, f"{tag}_assembly.xml")
     with open(graph_json_path, "w", encoding="utf-8") as f:

@@ -16,17 +16,25 @@ import numpy as np
 import objectives_api as obj_api
 
 
-def save_generation_population(gen_idx, records, out_dir):
+def append_generation_population(gen_idx, records, out_dir):
     """records: list of dict(graph=nx.DiGraph, objectives=dict, ind_id=int).
-    Saves the full graph topology + objectives for every surviving
-    individual. `ind_id` (optional - None if a caller doesn't have one) is
-    the survivor's index into this generation's flat ind0..indN evaluated
+    Appends the full graph topology + objectives for every surviving
+    individual to out_dir/population_history.json - one growing file for
+    the whole run instead of a separate generation_{gen}_population.json
+    per generation (which cluttered OUTPUT_DIR and made
+    _load_all_generations re-open every prior generation's file on every
+    call). `ind_id` (optional - None if a caller doesn't have one) is the
+    survivor's index into this generation's flat ind0..indN evaluated
     batch - lets helper_scripts/evolution_results_visualizer.py match a
     survivor back to its exact screenshot/XML/stats.json, and tell newly
     bred offspring (ind_id >= that generation's breeding_events.json
-    n_parents) apart from carried-over parents."""
+    n_parents) apart from carried-over parents.
+
+    Idempotent by generation index (replaces rather than duplicates an
+    existing entry for the same `gen_idx`), matching
+    append_generation_stats()'s resume-safe behavior."""
     os.makedirs(out_dir, exist_ok=True)
-    payload = [
+    population = [
         {
             "graph": nx.node_link_data(r["graph"], edges="edges"),
             "objectives": r["objectives"],
@@ -34,10 +42,22 @@ def save_generation_population(gen_idx, records, out_dir):
         }
         for r in records
     ]
-    path = os.path.join(out_dir, f"generation_{gen_idx}_population.json")
+    path = os.path.join(out_dir, "population_history.json")
+    history = _load_population_history(out_dir)
+    history = [h for h in history if h["generation"] != gen_idx]
+    history.append(dict(generation=gen_idx, population=population))
+    history.sort(key=lambda h: h["generation"])
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+        json.dump(history, f, indent=2)
     return path
+
+
+def _load_population_history(out_dir):
+    path = os.path.join(out_dir, "population_history.json")
+    if not os.path.exists(path):
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def plot_pareto_front(gen_idx, records, out_dir):
@@ -69,25 +89,15 @@ def plot_pareto_front(gen_idx, records, out_dir):
 
 
 def _load_all_generations(out_dir):
-    """Scans out_dir for every generation_*_population.json (written by
-    save_generation_population), returning [(gen_idx, population)] sorted
-    by generation index - the shared data source for the cross-generation
-    trend plots below. Re-scans from disk each call (rather than taking
-    an accumulated in-memory history) so these plots stay correct even if
-    a run is resumed or these functions are called standalone."""
-    generations = []
-    for name in os.listdir(out_dir):
-        if not (name.startswith("generation_") and name.endswith("_population.json")):
-            continue
-        try:
-            gen_idx = int(name[len("generation_"):-len("_population.json")])
-        except ValueError:
-            continue
-        with open(os.path.join(out_dir, name), "r", encoding="utf-8") as f:
-            population = json.load(f)
-        generations.append((gen_idx, population))
-    generations.sort(key=lambda item: item[0])
-    return generations
+    """Reads out_dir/population_history.json (written by
+    append_generation_population), returning [(gen_idx, population)]
+    sorted by generation index - the shared data source for the
+    cross-generation trend plots below. Re-reads from disk each call
+    (rather than taking an accumulated in-memory history) so these plots
+    stay correct even if a run is resumed or these functions are called
+    standalone."""
+    history = _load_population_history(out_dir)
+    return [(h["generation"], h["population"]) for h in sorted(history, key=lambda h: h["generation"])]
 
 
 def plot_fitness_trends(out_dir):
@@ -157,7 +167,7 @@ def append_generation_stats(gen_idx, log, out_dir):
     """Appends {generation, n_parents, n_offspring, n_collided} to
     out_dir/generation_stats.json - the per-generation breeding/collision
     counts from moo_api.run_generation's `log`, which aren't reconstructable
-    from generation_*_population.json alone (that only has survivors, not
+    from population_history.json alone (that only has survivors, not
     how many offspring were bred or how many collided). Feeds
     plot_rl_vs_baseline_comparison's collision-rate panel.
 

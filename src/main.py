@@ -136,7 +136,7 @@ def main():
                 dict(graph=g, objectives=obj, ind_id=ind_id)
                 for g, obj, ind_id in zip(population, log["survivor_objectives"], log["survivor_ind_ids"])
             ]
-            plotting_api.save_generation_population(gen, records, OUTPUT_DIR)
+            plotting_api.append_generation_population(gen, records, OUTPUT_DIR)
             plotting_api.plot_pareto_front(gen, records, OUTPUT_DIR)
             plotting_api.plot_fitness_trends(OUTPUT_DIR)
             plotting_api.plot_convergence(OUTPUT_DIR)
@@ -160,7 +160,7 @@ def main():
 
             # Per-generation n_parents/n_offspring/n_collided, appended
             # generation by generation - not reconstructable from
-            # generation_*_population.json alone (that only has survivors),
+            # population_history.json alone (that only has survivors),
             # and it's what plot_rl_vs_baseline_comparison's collision-rate
             # panel reads.
             plotting_api.append_generation_stats(gen, log, OUTPUT_DIR)

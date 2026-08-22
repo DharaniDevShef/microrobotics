@@ -2,7 +2,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import matplotlib
 matplotlib.use("Agg")
@@ -63,6 +63,19 @@ def screenshot_path(generation_idx: int, ind_idx: int) -> Path:
     naming, where model_name is the XML's basename - moo_api.py always
     names an individual's XML `ind{i}_assembly.xml`."""
     return generation_dir(generation_idx) / f"screenshot_ind{ind_idx}_assembly.png"
+
+
+def load_population_history() -> dict:
+    """out_dir/population_history.json (plotting_api.append_generation_population)
+    - one growing file for the whole run instead of a separate
+    generation_{gen}_population.json per generation. Returns
+    {generation_idx: [records...]}, {} if the run hasn't written one yet."""
+    path = OUTPUT_DIR / "population_history.json"
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as f:
+        history = json.load(f)
+    return {entry["generation"]: entry["population"] for entry in history}
 
 
 def load_breeding_events(generation_idx: int) -> Optional[dict]:
@@ -130,6 +143,7 @@ class EvolutionResultsVisualizer(QMainWindow):
 
         self.current_generation = None
         self.current_graph_entry = None
+        self.population_history = {}
 
         self.load_generations()
 
@@ -265,21 +279,12 @@ class EvolutionResultsVisualizer(QMainWindow):
             self.generation_combo.addItem("No output directory found")
             return
 
-        generation_files = sorted(OUTPUT_DIR.glob("generation_*_population.json"))
-        generations = []
-        for path in generation_files:
-            try:
-                generation_idx = int(path.stem.split("generation_")[1].split("_population")[0])
-            except (IndexError, ValueError):
-                continue
-            generations.append((generation_idx, path))
-
-        generations.sort(key=lambda item: item[0])
-        if not generations:
-            self.generation_combo.addItem("No population files found")
+        self.population_history = load_population_history()
+        if not self.population_history:
+            self.generation_combo.addItem("No population_history.json found")
             return
 
-        for generation_idx, _ in generations:
+        for generation_idx in sorted(self.population_history):
             self.generation_combo.addItem(f"Generation {generation_idx}", generation_idx)
 
         self.generation_combo.setCurrentIndex(0)
@@ -298,12 +303,7 @@ class EvolutionResultsVisualizer(QMainWindow):
 
     def populate_graph_cards(self, generation_idx: int) -> None:
         self._clear_graph_cards()
-        population_path = OUTPUT_DIR / f"generation_{generation_idx}_population.json"
-        if not population_path.exists():
-            self._set_metrics_text("Population file not found.")
-            return
-
-        population = self._load_population(population_path)
+        population = self.population_history.get(generation_idx)
         if not population:
             self._set_metrics_text("No population entries found.")
             return
@@ -359,11 +359,7 @@ class EvolutionResultsVisualizer(QMainWindow):
         here if there weren't enough feasible ones to fill the population.
         """
         self._clear_layout(self.screenshots_grid)
-        population_path = OUTPUT_DIR / f"generation_{generation_idx}_population.json"
-        if not population_path.exists():
-            self._add_placeholder(self.screenshots_grid, "Population file not found.")
-            return
-        population = self._load_population(population_path)
+        population = self.population_history.get(generation_idx)
         if not population:
             self._add_placeholder(self.screenshots_grid, "No population entries found.")
             return
@@ -440,7 +436,7 @@ class EvolutionResultsVisualizer(QMainWindow):
         rendering the Population tab's cards use) from the per-generation
         `ind{i}_graph.json` moo_api.py writes for EVERY individual it
         evaluates - not just the survivors in
-        generation_{g}_population.json, which is all breeding_events.json's
+        population_history.json, which is all breeding_events.json's
         ids can otherwise point to (a bred-but-not-selected offspring, or a
         parent that didn't survive, won't be in that file). Cached inside
         that generation's own folder so it only renders once."""
@@ -515,11 +511,6 @@ class EvolutionResultsVisualizer(QMainWindow):
 
     def _set_metrics_text(self, text: str) -> None:
         self.metrics_label.setText(text)
-
-    def _load_population(self, population_path: Path) -> List[dict]:
-        with population_path.open("r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-        return payload
 
     def _ensure_graph_preview(self, generation_idx: int, entry_idx: int, entry: dict) -> Path:
         SCRATCH_DIR.mkdir(parents=True, exist_ok=True)

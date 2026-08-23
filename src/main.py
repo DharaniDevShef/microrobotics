@@ -55,7 +55,7 @@ SEED = 42  # reproducible Sobol-seeding of initial population (fresh runs only -
 # + NSGA-III selection" comparison arm, for measuring what the learned
 # policy actually contributes. Writes to a different OUTPUT_DIR (below) so
 # toggling this never disturbs an in-progress True run's checkpoint/data.
-RL_ASSISTED_GENETIC_OPERATIONS = False
+RL_ASSISTED_GENETIC_OPERATIONS = True
 
 
 def configure_logging(log_file, level=logging.INFO):

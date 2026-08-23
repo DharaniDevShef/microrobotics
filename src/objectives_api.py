@@ -100,6 +100,39 @@ _OBJECTIVE_FUNCS = {
     "f5_entropy": _f5_entropy,
 }
 
+# Running (monotonically widening) min/max per objective, observed across
+# every individual compute_objectives() has ever been called on this run -
+# scalarize()'s normalization reference. Module-level (one process = one
+# run) and persisted via get_normalization_state()/set_normalization_state()
+# so a checkpoint resume doesn't reset it - see checkpoint.py.
+_RUNNING_MIN = {}
+_RUNNING_MAX = {}
+
+
+def _update_running_range(objectives):
+    for n in OBJECTIVE_NAMES:
+        v = objectives[n]
+        if n not in _RUNNING_MIN or v < _RUNNING_MIN[n]:
+            _RUNNING_MIN[n] = v
+        if n not in _RUNNING_MAX or v > _RUNNING_MAX[n]:
+            _RUNNING_MAX[n] = v
+
+
+def get_normalization_state():
+    """For checkpoint.py: a plain-dict snapshot of the running min/max."""
+    return dict(min=dict(_RUNNING_MIN), max=dict(_RUNNING_MAX))
+
+
+def set_normalization_state(state):
+    """For checkpoint.py: restores the running min/max on resume. `state`
+    may be None (checkpoints saved before this existed) - leaves the
+    (empty) running range to rebuild itself from this process's own
+    evaluations instead of crashing."""
+    global _RUNNING_MIN, _RUNNING_MAX
+    if state:
+        _RUNNING_MIN = dict(state.get("min", {}))
+        _RUNNING_MAX = dict(state.get("max", {}))
+
 
 def compute_objectives(stats):
     """stats: the dict loaded from a roblet_simulator.py stats.json (or an
@@ -108,10 +141,17 @@ def compute_objectives(stats):
     dict[name -> float] in natural ("MAXIMIZE says which way is good")
     units - the 5 core objectives (f1..f5) PLUS shape_entropy_2d/3d
     (f5's raw components, for AO-2 analysis only - see this module's
-    docstring for why they're not separately optimized)."""
+    docstring for why they're not separately optimized).
+
+    Also feeds the new objectives into _update_running_range() - this is
+    the one place every individual (parent or offspring) ever gets its
+    objectives computed (see moo_api.evaluate_individual), so it's the
+    natural hook for keeping scalarize()'s normalization reference
+    current without touching any other call site."""
     objectives = {name: fn(stats) for name, fn in _OBJECTIVE_FUNCS.items()}
     objectives["shape_entropy_2d"] = float(stats.get("shape_entropy_2d", 0.0))
     objectives["shape_entropy_3d"] = float(stats.get("shape_entropy_3d", 0.0))
+    _update_running_range(objectives)
     return objectives
 
 
@@ -124,22 +164,52 @@ def to_minimization_vector(objectives_dict):
 
 
 def scalarize(objectives_dict):
-    """Single 'higher is better' scalar (equal-weighted sum, each term
-    sign-flipped to a common maximize direction). Used by moo_api.py as
-    the RL reward signal (child improvement vs. parent), not for NSGA-III
-    selection itself (which uses the full 5-vector) - also what main.py's
-    "Individual index" log line and the visualizer's Population-tab
-    ranking use, so they all agree (see evolution_results_visualizer.py's
-    _aggregate_fitness).
+    """Single 'higher is better' scalar: each objective is min-max
+    normalized against its running observed range (_RUNNING_MIN/MAX,
+    updated by every compute_objectives() call this run - see there) into
+    a common [0, 1] "higher is better" scale, then averaged with equal
+    weight. Used by moo_api.py as the RL reward signal (child improvement
+    vs. parent), not for NSGA-III selection itself (which uses the full
+    5-vector) - also what main.py's "Individual index" log line and the
+    visualizer's Population-tab ranking use, so they all agree (see
+    evolution_results_visualizer.py's _aggregate_fitness).
+
+    Raw equal-COEFFICIENT summing (the previous behavior) is not actually
+    equal WEIGHT when objectives live on very different scales - e.g. f2
+    (~0.01-0.1 m/s) vs f5 (~0.001-0.01 entropy delta) - f2 would dominate
+    every score regardless of f5's value. Normalizing first is what makes
+    "equal weight" meaningful. An objective that hasn't shown any
+    variation yet (zero range - this is what f1/f3/f4's dummy 0.0
+    placeholders look like) is excluded from the average rather than
+    forced to a fake 0/0 normalized value, so only genuinely "active"
+    objectives share the weight; if NONE have shown variation yet (e.g.
+    the very first individual ever scored this run), falls back to the
+    old raw signed sum so this never divides by zero.
+
+    Note: because the normalization range widens as the run progresses,
+    replotting an earlier generation's scalarized score later in the same
+    run can shift it slightly (it's normalized against the fuller range
+    now known) - this is the standard tradeoff of online-normalized
+    reward (e.g. RL's running reward normalization), not a bug.
 
     Iterates OBJECTIVE_NAMES explicitly, NOT objectives_dict.items() -
     compute_objectives() returns extra logging-only fields
     (shape_entropy_2d/3d, f5's raw components) alongside the 5 core
     objectives; summing "whatever's in the dict" would silently double
     that entropy delta's weight in every score this function drives."""
-    return float(sum(
-        objectives_dict[n] if MAXIMIZE[n] else -objectives_dict[n] for n in OBJECTIVE_NAMES
-    ))
+    contributions = []
+    for n in OBJECTIVE_NAMES:
+        lo, hi = _RUNNING_MIN.get(n), _RUNNING_MAX.get(n)
+        if lo is None or (hi - lo) < 1e-9:
+            continue
+        norm = (objectives_dict[n] - lo) / (hi - lo)
+        contributions.append(norm if MAXIMIZE[n] else (1.0 - norm))
+
+    if not contributions:
+        return float(sum(
+            objectives_dict[n] if MAXIMIZE[n] else -objectives_dict[n] for n in OBJECTIVE_NAMES
+        ))
+    return float(np.mean(contributions))
 
 
 def collision_constraint(stats):

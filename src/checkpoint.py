@@ -19,6 +19,8 @@ import tempfile
 import networkx as nx
 import torch
 
+import objectives_api as obj_api
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,6 +33,10 @@ def save(path, generation, seed, rng, population, ppo_trainer):
         rng_state=rng.getstate(),
         population=[nx.node_link_data(g, edges="edges") for g in population],
         ppo=ppo_trainer.state_dict(),
+        # scalarize()'s per-objective running min/max - without this, a
+        # resumed run would start normalizing from an empty range again
+        # (briefly treating every objective as "no variation yet").
+        obj_norm=obj_api.get_normalization_state(),
     )
 
     directory = os.path.dirname(os.path.abspath(path)) or "."
@@ -67,6 +73,7 @@ def load(path, ppo_trainer):
     # wrote, not an untrusted third-party file.
     payload = torch.load(path, weights_only=False)
     ppo_trainer.load_state_dict(payload["ppo"])
+    obj_api.set_normalization_state(payload.get("obj_norm"))  # None for pre-existing checkpoints
 
     rng = random.Random()
     rng.setstate(payload["rng_state"])

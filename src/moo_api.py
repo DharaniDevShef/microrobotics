@@ -31,10 +31,12 @@ it's exactly the piece the design doc wants (avoids hand-engineering a
 scalar fitness formula).
 """
 
+import hashlib
 import json
 import logging
 import os
 import random
+import shutil
 import sys
 import tempfile
 
@@ -71,6 +73,26 @@ COLLISION_PENALTY = -10.0  # subtracted from the RL reward when a child collides
 # (ModuleCollisionError), so it never wastes a simulation slot but still
 # scores as a failed/infeasible individual like any other collision.
 _FAILED_STATS = {"success": 0, "physics_ok": 0, "is_stable": 0, "average_velocity_mmps": 0.0, "total_distance_mm": 0.0}
+
+# graph content-hash -> {"stats": <stats.json dict>, "screenshot_path": <path or None>}.
+# run_generation() re-evaluates every carried-over survivor alongside new
+# offspring each generation (see evaluate_population()'s docstring), but
+# roblet_simulator.py's physics is fully deterministic (fixed B-sweep
+# values, no RNG) - an unchanged genotype produces byte-identical results
+# every time, so re-running the whole MuJoCo B-sweep for it is pure waste.
+# Keyed by content hash (see _graph_hash), not Python id() - a discarded
+# graph's id() can be reused by an unrelated later object once garbage
+# collected, which would silently return the WRONG graph's cached result.
+_EVAL_CACHE = {}
+
+
+def _graph_hash(G):
+    """Deterministic content hash of a genotype (full structure + node/edge
+    attributes) - _EVAL_CACHE's key. Two graphs that serialize identically
+    WILL simulate identically, so a hit here is always a correct reuse,
+    never an approximation."""
+    payload = json.dumps(nx.node_link_data(G, edges="edges"), sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _is_collision_free(G, scratch_dir):
@@ -194,29 +216,68 @@ def evaluate_population(graphs, work_dir, sim_seconds=7.0, max_workers=None):
     through roblet_simulator.py --headless in parallel OS processes
     (sim_executor.py), then scores each from its stats.json via
     objectives_api. Returns a list of (objectives, f_vec, constraint)
-    aligned to `graphs`' order."""
+    aligned to `graphs`' order.
+
+    Individuals whose exact genotype (_graph_hash) was already simulated
+    in an earlier generation (typically a carried-over NSGA-III survivor,
+    re-appearing in `graphs` unchanged) skip the MuJoCo run entirely -
+    see _EVAL_CACHE - since the physics is deterministic and would just
+    reproduce the same stats.json. Its stats.json is still (re)written and
+    its previous screenshot copied forward into THIS generation's
+    work_dir, so every downstream reader (objectives_api,
+    evolution_results_visualizer.py) sees the same per-generation file
+    layout as before, just without paying for a redundant simulation."""
     os.makedirs(work_dir, exist_ok=True)
-    logger.info("Evaluating population: %d graphs, work_dir=%s", len(graphs), work_dir)
 
     stats_paths = [None] * len(graphs)
+    hashes = [None] * len(graphs)
     jobs = []
+    cache_hits = 0
     for i, G in enumerate(graphs):
         xml_path = _prepare_assembly(G, work_dir, tag=f"ind{i}")
         if xml_path is None:
             continue
-        stats_paths[i] = os.path.join(work_dir, f"ind{i}_stats.json")
-        jobs.append((xml_path, stats_paths[i]))
+        stats_path = os.path.join(work_dir, f"ind{i}_stats.json")
+        stats_paths[i] = stats_path
+        h = _graph_hash(G)
+        hashes[i] = h
 
+        cached = _EVAL_CACHE.get(h)
+        if cached is None:
+            jobs.append((xml_path, stats_path))
+            continue
+
+        cache_hits += 1
+        with open(stats_path, "w", encoding="utf-8") as f:
+            json.dump(cached["stats"], f, indent=4)
+        src_screenshot = cached.get("screenshot_path")
+        if src_screenshot and os.path.exists(src_screenshot):
+            try:
+                shutil.copyfile(src_screenshot, os.path.join(work_dir, f"screenshot_ind{i}_assembly.png"))
+            except OSError:
+                logger.warning("Could not copy forward cached screenshot for ind%d", i)
+
+    logger.info(
+        "Evaluating population: %d graphs, work_dir=%s (%d cache hits, %d simulated)",
+        len(graphs), work_dir, cache_hits, len(jobs),
+    )
     sim_executor.run_batch(jobs, max_workers=max_workers, max_sim_time=sim_seconds)
     logger.info("Finished simulation batch: %d jobs", len(jobs))
 
     results = []
-    for stats_path in stats_paths:
+    for i, stats_path in enumerate(stats_paths):
         if stats_path is None:
             stats = dict(_FAILED_STATS)
         else:
             with open(stats_path, "r", encoding="utf-8") as f:
                 stats = json.load(f)
+            h = hashes[i]
+            if h is not None and h not in _EVAL_CACHE:
+                screenshot_path = os.path.join(work_dir, f"screenshot_ind{i}_assembly.png")
+                _EVAL_CACHE[h] = dict(
+                    stats=stats,
+                    screenshot_path=screenshot_path if os.path.exists(screenshot_path) else None,
+                )
         objectives = obj_api.compute_objectives(stats)
         f_vec = obj_api.to_minimization_vector(objectives)
         constraint = obj_api.collision_constraint(stats)

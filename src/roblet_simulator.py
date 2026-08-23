@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # Physics constants
 # Magnetic field intensity (Tesla)
-B_INTENSITY = 0.01  # 10 mT
+B_INTENSITY = 0.05  # 10 mT
 # Candidate drive strengths for run_headless_b_sweep() -- the field a
 # morphology needs to overcome stiction and walk (rather than stall, or
 # over-drive into a rolling/tumbling gait) is morphology-dependent, so
@@ -506,6 +506,7 @@ def _offscreen_camera(distance=0.25, lookat=(0, 0, 0)):
 def run_headless(
     model_path, stats_output_path, max_sim_time=None,
     capture_img=False, capture_gif=False, media_dir="../output", gif_fps=15,
+    model=None, target_angles=None,
 ):
     """Runs one closed-loop simulation to completion with no viewer and no
     real-time pacing, so it steps as fast as the CPU allows.
@@ -520,17 +521,27 @@ def run_headless(
     strength) to the end of the run, via mujoco.Renderer - an offscreen
     renderer that needs no visible window, so this works in a headless
     worker process just like the rest of this function.
-    """
+
+    `model`/`target_angles` let a caller that's about to run this SAME
+    model_path multiple times (run_headless_b_sweep's 3 B candidates + 1
+    winner re-run) compile the MJCF and parse its target angles ONCE and
+    pass them in here, instead of paying that cost 4x for byte-identical
+    XML - MjModel compilation is the dominant fixed cost for a model this
+    small, often more than the actual mj_step loop below. A fresh MjData
+    is always created regardless, so per-run state never leaks even when
+    `model` is reused across calls."""
     parent_body_magnet_map.clear()
     torque_history.clear()
     b_field_history.clear()
     time_history.clear()
 
-    model = mujoco.MjModel.from_xml_path(model_path)
+    if model is None:
+        model = mujoco.MjModel.from_xml_path(model_path)
     data = mujoco.MjData(model)
     model.opt.timestep = 0.01
 
-    target_angles = read_joint_target_angles_from_xml(model_path)
+    if target_angles is None:
+        target_angles = read_joint_target_angles_from_xml(model_path)
     if not target_angles:
         target_angles = [45.0] * model.nu
 
@@ -776,6 +787,14 @@ def run_headless_b_sweep(
     global B_INTENSITY
     original_b = B_INTENSITY
 
+    # Every candidate B (and the winner re-run below) simulates the exact
+    # same XML - only B_INTENSITY (a runtime/callback parameter, never
+    # baked into the compiled model) differs between them - so compile
+    # once here and hand this same `model`/`target_angles` into every
+    # run_headless call instead of re-parsing the MJCF 4 times over.
+    model = mujoco.MjModel.from_xml_path(model_path)
+    target_angles = read_joint_target_angles_from_xml(model_path)
+
     results = []  # (result_dict, b_value)
     tmp_paths = []
     try:
@@ -787,6 +806,7 @@ def run_headless_b_sweep(
             result = run_headless(
                 model_path, tmp_path, max_sim_time=max_sim_time,
                 capture_img=False, capture_gif=False, media_dir=media_dir, gif_fps=gif_fps,
+                model=model, target_angles=target_angles,
             )
             results.append((result, b))
             logger.debug(
@@ -834,6 +854,7 @@ def run_headless_b_sweep(
                 model_path, stats_output_path, max_sim_time=max_sim_time,
                 capture_img=capture_img, capture_gif=capture_gif,
                 media_dir=media_dir, gif_fps=gif_fps,
+                model=model, target_angles=target_angles,
             )
         finally:
             B_INTENSITY = original_b
@@ -1025,6 +1046,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--m", type=str, default="../models/assembly.xml",
+        # "--m", type=str, default="D:\\microrobotics\\output\\evolution_run\\generation_59\\ind0_assembly.xml",
         help="MJCF model path to run in the live viewer",
     )
 
@@ -1034,7 +1056,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--max_sim_time", type=float, default=7.0,
+        "--max_sim_time", type=float, default=300.0,
         help="Maximum simulation time in seconds (for headless runs)",
     )
 

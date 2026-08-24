@@ -91,6 +91,10 @@ def _random_mutation_params(G, node_id, action, rng):
         return dict(new_fold_type=rng.choice(rg.MODULE_TYPES))
     if action == rg.Action.MUTATE_HINGE_ANGLE:
         return dict(new_angle=rng.uniform(rg.MIN_HINGE_ANGLE, rg.MAX_HINGE_ANGLE))
+    if action == rg.Action.TOGGLE_LIGHT_SENSOR:
+        return {}
+    if action == rg.Action.MUTATE_LIGHT_HINGE_ANGLE:
+        return dict(new_angle=rng.uniform(rg.MIN_HINGE_ANGLE, rg.MAX_HINGE_ANGLE))
     if action == rg.Action.RECONNECT_PORT:
         old_port = rng.choice(rg.reconnectable_ports(G, node_id))
         new_port = rng.choice(rg.growable_ports(G, node_id))

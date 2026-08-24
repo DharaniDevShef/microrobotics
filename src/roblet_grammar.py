@@ -12,6 +12,13 @@ Design variables (per the design doc):
     2. Graph Adjacency (Aij) - port-to-port connectivity, ports in {1, 2, 3}
     3. Module Count (N)      - N in [2, 40]
     4. Hinge Angle (theta_i) - continuous, [0, 45] degrees
+    5. Light-Sensitive Joint Selection - which foldable modules carry a
+       light-sensitive on their own hinge (bool per foldable
+       module - see TOGGLE_LIGHT_SENSOR/toggle_light_sensor below)
+    6. Hinge Angle on Light Detection (theta_light) - continuous, [0, 45]
+       degrees, the angle a light-sensitive joint moves to once ITS OWN
+       sensor is triggered (see MUTATE_LIGHT_HINGE_ANGLE/
+       mutate_light_hinge_angle below)
 """
 
 import copy
@@ -50,6 +57,29 @@ MAX_HINGE_ANGLE = 45.0
 # value out to every foldable node or touch just the one node involved.
 HINGE_ANGLE_MODE = "uniform"  # "uniform" | "per_module"
 
+# Design Variable 5 (light-sensitive joint selection, per the pheromone-
+# response design): each foldable module's joint physically doubles as its
+# own light-sensitive PVC strip or not - `light_sensitive` (bool). This is
+# a per-node SELECTION variable (which foldable joints get the light-
+# sensitive hinge), never broadcast the way hinge_angle is - the whole
+# point is that it can vary joint-to-joint. Only ever True on a foldable
+# module (module_type != "non-foldable") - a rigid module has no hinge to
+# mount the strip on. symmetry.py's build_symmetric_graph mirrors this
+# field 1:1 alongside module_type/hinge_angle, so a mirrored joint pair is
+# always either both sensitive or both not - the "symmetry API" that keeps
+# any selection here even and bilaterally symmetric for free.
+#
+# Design Variable 6 (hinge_angle_on_light_detection, theta_light) - the
+# angle a light-sensitive joint moves to once ITS OWN sensor is triggered
+# (continuous, same [0, 45] range as theta_i). LIGHT_HINGE_ANGLE_MODE below
+# mirrors HINGE_ANGLE_MODE's uniform/per_module split, but scoped to just
+# the light_sensitive nodes: under "uniform", every light-sensitive joint
+# in an assembly shares the one evolved trigger angle. Whether that shared
+# angle sits above or below the joint's own (also shared, under
+# HINGE_ANGLE_MODE) baseline hinge_angle is what determines attracted vs.
+# repulsive turning/speed response - see objectives_api.configure_pheromone_response.
+LIGHT_HINGE_ANGLE_MODE = "uniform"  # "uniform" | "per_module"
+
 
 class Action(Enum):
     """Grammar actions. rl_api.py's policy selects among ALL of these
@@ -60,6 +90,8 @@ class Action(Enum):
     MUTATE_FOLD_TYPE = auto()
     MUTATE_HINGE_ANGLE = auto()
     RECONNECT_PORT = auto()
+    TOGGLE_LIGHT_SENSOR = auto()
+    MUTATE_LIGHT_HINGE_ANGLE = auto()
     GRAFT_SUBTREE = auto()
     SWAP_SUBTREES = auto()
 
@@ -71,6 +103,8 @@ MUTATION_ACTIONS = [
     Action.MUTATE_FOLD_TYPE,
     Action.MUTATE_HINGE_ANGLE,
     Action.RECONNECT_PORT,
+    Action.TOGGLE_LIGHT_SENSOR,
+    Action.MUTATE_LIGHT_HINGE_ANGLE,
 ]
 
 # Crossover needs a second parent graph (donor/partner), unlike the
@@ -219,6 +253,13 @@ def compute_node_action_mask(G, node_id):
         Action.MUTATE_FOLD_TYPE: not is_root(G, node_id),
         # Fold Consistency Mask: only foldable modules have a hinge.
         Action.MUTATE_HINGE_ANGLE: module_type != "non-foldable",
+        # Fold Consistency Mask: the light-sensitive PVC strip is mounted
+        # on the joint itself, so only a foldable module can carry one.
+        Action.TOGGLE_LIGHT_SENSOR: module_type != "non-foldable",
+        # Only mutate the shared light-triggered angle on a node that
+        # currently carries the sensor (TOGGLE_LIGHT_SENSOR is what turns
+        # this on in the first place).
+        Action.MUTATE_LIGHT_HINGE_ANGLE: bool(G.nodes[node_id].get("light_sensitive", False)),
         # RECONNECT_PORT needs a growable port to move the connection to,
         # and at least one RECONNECTABLE port to move it from - occupied,
         # but not the node's own link to its parent (reconnectable_ports -
@@ -287,11 +328,35 @@ def _broadcast_hinge_angle(G, angle):
             G.nodes[n]["hinge_angle"] = angle
 
 
-def _new_node_attrs(module_type, hinge_angle, parent, depth):
+def _shared_light_hinge_angle(G, exclude=None):
+    """The single light-triggered hinge angle every light_sensitive module
+    shares under LIGHT_HINGE_ANGLE_MODE == "uniform" - whichever
+    light_sensitive module (other than `exclude`, if given) comes first, or
+    None if there isn't one yet."""
+    for n in G.nodes:
+        if n == exclude:
+            continue
+        if G.nodes[n].get("light_sensitive", False):
+            return G.nodes[n]["light_hinge_angle"]
+    return None
+
+
+def _broadcast_light_hinge_angle(G, angle):
+    """In place: locks every CURRENTLY light_sensitive module in G to
+    `angle`. Non-sensitive modules are left alone (their light_hinge_angle
+    is meaningless until TOGGLE_LIGHT_SENSOR turns them on)."""
+    for n in G.nodes:
+        if G.nodes[n].get("light_sensitive", False):
+            G.nodes[n]["light_hinge_angle"] = angle
+
+
+def _new_node_attrs(module_type, hinge_angle, parent, depth, light_sensitive=False, light_hinge_angle=0.0):
     return dict(
         module_type=module_type,
         connectors={1: None, 2: None, 3: None},
         hinge_angle=round(float(hinge_angle), 2),
+        light_sensitive=bool(light_sensitive),
+        light_hinge_angle=round(float(light_hinge_angle), 2),
         depth=depth,
         parent=parent,
         type_id=MODULE_TYPE_IDS[module_type],
@@ -313,9 +378,21 @@ def add_node(G, target_node, port, module_type, hinge_angle=0.0, rng=None):
         shared = _shared_hinge_angle(G2)
         if shared is not None:
             hinge_angle = shared
+    # A new node never starts light_sensitive (TOGGLE_LIGHT_SENSOR is the
+    # only thing that turns it on - see that function's docstring), but if
+    # it's foldable and the assembly already has a shared light-triggered
+    # angle, pre-sync it so toggling this node on later doesn't need a
+    # separate resync.
+    light_hinge_angle = 0.0
+    if LIGHT_HINGE_ANGLE_MODE == "uniform" and module_type != "non-foldable":
+        shared_light = _shared_light_hinge_angle(G2)
+        if shared_light is not None:
+            light_hinge_angle = shared_light
     new_id = next_free_id(G2)
     depth = G2.nodes[target_node]["depth"] + 1
-    G2.add_node(new_id, id=new_id, **_new_node_attrs(module_type, hinge_angle, target_node, depth))
+    G2.add_node(new_id, id=new_id,
+                **_new_node_attrs(module_type, hinge_angle, target_node, depth,
+                                   light_hinge_angle=light_hinge_angle))
     # New node's connectors[1] mates back to the parent's chosen port; this
     # mirrors the "connector1 is always the incoming/parent connector"
     # convention used throughout graphs/*.json.
@@ -361,6 +438,12 @@ def mutate_fold_type(G, target_node, new_fold_type):
     G2.nodes[target_node]["type_id"] = MODULE_TYPE_IDS[new_fold_type]
     if new_fold_type == "non-foldable":
         G2.nodes[target_node]["hinge_angle"] = 0.0
+        # A rigid module has no hinge to mount the light-sensitive PVC
+        # strip on (see TOGGLE_LIGHT_SENSOR's Fold Consistency Mask) - drop
+        # it here too so a MUTATE_FOLD_TYPE away from foldable can't leave
+        # a "light_sensitive" module with no joint behind it.
+        G2.nodes[target_node]["light_sensitive"] = False
+        G2.nodes[target_node]["light_hinge_angle"] = 0.0
     elif HINGE_ANGLE_MODE == "uniform":
         shared = _shared_hinge_angle(G2, exclude=target_node)
         if shared is not None:
@@ -377,6 +460,46 @@ def mutate_hinge_angle(G, target_node, new_angle):
         _broadcast_hinge_angle(G2, clipped)
     else:
         G2.nodes[target_node]["hinge_angle"] = clipped
+    return G2
+
+
+def toggle_light_sensor(G, target_node):
+    """Flips whether `target_node` carries the light-sensitive PVC strip
+    (Design Variable 5 - see the module docstring). Since the sensor and
+    the joint it actuates are the same physical hinge (per the hardware
+    model), this is the ONLY way a module gains or loses a light sensor -
+    ADD_NODE never creates one directly. Turning one on syncs it to the
+    assembly's existing shared light_hinge_angle (LIGHT_HINGE_ANGLE_MODE
+    == "uniform"), if one is already established, so the new sensor
+    reacts consistently with every other one instead of at a stale 0.0."""
+    if not compute_node_action_mask(G, target_node)[Action.TOGGLE_LIGHT_SENSOR]:
+        raise ValueError(f"TOGGLE_LIGHT_SENSOR not allowed on {target_node}")
+    G2 = copy.deepcopy(G)
+    turning_on = not G2.nodes[target_node].get("light_sensitive", False)
+    G2.nodes[target_node]["light_sensitive"] = turning_on
+    if turning_on and LIGHT_HINGE_ANGLE_MODE == "uniform":
+        shared = _shared_light_hinge_angle(G2, exclude=target_node)
+        if shared is not None:
+            G2.nodes[target_node]["light_hinge_angle"] = shared
+    return G2
+
+
+def mutate_light_hinge_angle(G, target_node, new_angle):
+    """Mutates Design Variable 6 (hinge_angle_on_light_detection). Whether
+    the result lands above or below the module's own (shared) baseline
+    hinge_angle is what governs attracted-vs-repulsive behavior - see
+    objectives_api.configure_pheromone_response - so this is intentionally
+    left free to land on either side; picking a run's optimization
+    direction (main.py's PHEROMONE_RESPONSE_TYPE) is what steers evolution
+    to one side or the other, not a constraint enforced here."""
+    if not compute_node_action_mask(G, target_node)[Action.MUTATE_LIGHT_HINGE_ANGLE]:
+        raise ValueError(f"MUTATE_LIGHT_HINGE_ANGLE not allowed on {target_node}")
+    G2 = copy.deepcopy(G)
+    clipped = round(float(min(max(new_angle, MIN_HINGE_ANGLE), MAX_HINGE_ANGLE)), 2)
+    if LIGHT_HINGE_ANGLE_MODE == "uniform":
+        _broadcast_light_hinge_angle(G2, clipped)
+    else:
+        G2.nodes[target_node]["light_hinge_angle"] = clipped
     return G2
 
 
@@ -452,6 +575,7 @@ def graft_subtree(host_G, host_node, host_port, donor_G, donor_root, rng=None):
 
     G2 = copy.deepcopy(host_G)
     host_shared_angle = _shared_hinge_angle(G2) if HINGE_ANGLE_MODE == "uniform" else None
+    host_shared_light_angle = _shared_light_hinge_angle(G2) if LIGHT_HINGE_ANGLE_MODE == "uniform" else None
     donor_nodes = subtree_nodes(donor_G, donor_root)
     remaining_capacity = MAX_MODULES - G2.number_of_nodes()
     if remaining_capacity <= 0:
@@ -468,6 +592,8 @@ def graft_subtree(host_G, host_node, host_port, donor_G, donor_root, rng=None):
             module_type=attrs["module_type"],
             connectors={1: None, 2: None, 3: None},
             hinge_angle=attrs["hinge_angle"],
+            light_sensitive=attrs.get("light_sensitive", False),
+            light_hinge_angle=attrs.get("light_hinge_angle", 0.0),
             depth=None, parent=None,
             type_id=attrs["type_id"],
         )
@@ -505,6 +631,13 @@ def graft_subtree(host_G, host_node, host_port, donor_G, donor_root, rng=None):
         target = host_shared_angle if host_shared_angle is not None else _shared_hinge_angle(G2)
         if target is not None:
             _broadcast_hinge_angle(G2, target)
+    if LIGHT_HINGE_ANGLE_MODE == "uniform":
+        # Same reconciliation as hinge_angle just above, scoped to whatever
+        # light_sensitive nodes ended up in the merged graph (host's own,
+        # the donor's copied-over ones, or both).
+        light_target = host_shared_light_angle if host_shared_light_angle is not None else _shared_light_hinge_angle(G2)
+        if light_target is not None:
+            _broadcast_light_hinge_angle(G2, light_target)
     return G2
 
 
@@ -560,16 +693,28 @@ def _recompute_depths(G, root):
 # Seed graph construction (used by moo_api.py's Sobol-seeded initial pop)
 # ---------------------------------------------------------------------
 
-def random_seed_graph(rng, n_modules, module_type_choices=None, hinge_angle_fn=None):
+def random_seed_graph(rng, n_modules, module_type_choices=None, hinge_angle_fn=None,
+                       light_sensitive_fn=None, light_hinge_angle_fn=None):
     """Builds a random grammar-legal tree with `n_modules` nodes.
 
     `module_type_choices`: optional list of MODULE_TYPES values, one per
     node in build order (root first); sampled uniformly if not given.
     `hinge_angle_fn`: optional callable() -> float in [0, 90]; defaults to
     a uniform draw.
+    `light_sensitive_fn`: optional callable() -> bool, rolled once per
+    foldable module to decide Design Variable 5 (which foldable joints get
+    a light-sensitive PVC strip); defaults to a fair coin flip, so a Sobol-
+    seeded initial population still gets a genuine spread over this
+    variable instead of starting with zero sensors everywhere.
+    `light_hinge_angle_fn`: optional callable() -> float in [0, 45] for
+    Design Variable 6 (hinge_angle_on_light_detection), drawn once and
+    shared by every module light_sensitive_fn() selected (see
+    LIGHT_HINGE_ANGLE_MODE's docstring); defaults to a uniform draw.
     """
     n_modules = max(MIN_MODULES, min(MAX_MODULES, int(n_modules)))
     hinge_angle_fn = hinge_angle_fn or (lambda: rng.uniform(MIN_HINGE_ANGLE, MAX_HINGE_ANGLE))
+    light_sensitive_fn = light_sensitive_fn or (lambda: rng.random() < 0.5)
+    light_hinge_angle_fn = light_hinge_angle_fn or (lambda: rng.uniform(MIN_HINGE_ANGLE, MAX_HINGE_ANGLE))
 
     def pick_type(i):
         if module_type_choices and i < len(module_type_choices):
@@ -594,4 +739,21 @@ def random_seed_graph(rng, n_modules, module_type_choices=None, hinge_angle_fn=N
         m_type = pick_type(i)
         angle = 0.0 if m_type == "non-foldable" else hinge_angle_fn()
         G = add_node(G, parent, port, m_type, hinge_angle=angle, rng=rng)
+
+    # Design Variables 5/6: roll light-sensitivity per foldable module,
+    # then (if LIGHT_HINGE_ANGLE_MODE == "uniform") pick ONE shared
+    # trigger angle for every module that came up sensitive - same
+    # uniform-broadcast pattern as hinge_angle itself.
+    foldable = [n for n in G.nodes if G.nodes[n]["module_type"] != "non-foldable"]
+    selected = [n for n in foldable if light_sensitive_fn()]
+    if selected:
+        if LIGHT_HINGE_ANGLE_MODE == "uniform":
+            shared_light_angle = round(float(light_hinge_angle_fn()), 2)
+            for n in selected:
+                G.nodes[n]["light_sensitive"] = True
+                G.nodes[n]["light_hinge_angle"] = shared_light_angle
+        else:
+            for n in selected:
+                G.nodes[n]["light_sensitive"] = True
+                G.nodes[n]["light_hinge_angle"] = round(float(light_hinge_angle_fn()), 2)
     return G

@@ -72,7 +72,25 @@ def load(path, ppo_trainer):
     # tensors - safe here since it's a checkpoint this same codebase
     # wrote, not an untrusted third-party file.
     payload = torch.load(path, weights_only=False)
-    ppo_trainer.load_state_dict(payload["ppo"])
+    try:
+        ppo_trainer.load_state_dict(payload["ppo"])
+    except RuntimeError:
+        # nn.Module.load_state_dict is shape-strict: a checkpoint saved
+        # before the RL action space or node feature vector grew (e.g.
+        # adding the light-sensitive-joint design variables' new
+        # TOGGLE_LIGHT_SENSOR/MUTATE_LIGHT_HINGE_ANGLE actions and their
+        # two new per-node features - see rl_api.py) has ActorNet/CriticNet
+        # tensors of the WRONG size for the current architecture. There's
+        # no safe partial-load here (the mismatched layers are exactly the
+        # ones every other layer's weights were jointly trained against),
+        # so treat this the same as "no checkpoint" - a full fresh
+        # Sobol-reseeded start - rather than crashing main.py outright.
+        logger.warning(
+            "Checkpoint at %s has RL weights that don't match the current network "
+            "architecture (likely from before a design-variable/action-space change) - "
+            "starting a fresh run instead of resuming.", path,
+        )
+        return None
     obj_api.set_normalization_state(payload.get("obj_norm"))  # None for pre-existing checkpoints
 
     rng = random.Random()

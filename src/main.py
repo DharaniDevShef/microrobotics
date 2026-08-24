@@ -44,8 +44,8 @@ import rl_api
 
 logger = logging.getLogger(__name__)
 
-POP_SIZE = 4
-N_GENERATIONS = 5
+POP_SIZE = 10
+N_GENERATIONS = 10
 SIM_SECONDS = 7
 SEED = 42  # reproducible Sobol-seeding of initial population (fresh runs only - a resumed run's RNG/seed come from the checkpoint)
 
@@ -56,6 +56,19 @@ SEED = 42  # reproducible Sobol-seeding of initial population (fresh runs only -
 # policy actually contributes. Writes to a different OUTPUT_DIR (below) so
 # toggling this never disturbs an in-progress True run's checkpoint/data.
 RL_ASSISTED_GENETIC_OPERATIONS = True
+
+# Which of the two pheromone-response evolution runs this is (Week 2's
+# Reaction Primitives 2.1-3.2 - see objectives_api.configure_pheromone_
+# response for the full reasoning): "attractive" optimizes turning TOWARD
+# a one-sided light stimulus and speeding up under a full-width one (RPs
+# 2.1/3.2); "repulsive" optimizes turning away and slowing down (RPs
+# 2.2/3.1). These are two SEPARATE evolution runs, not two objectives
+# added to one run - sharing hinge_angle_on_light_detection as one scalar
+# design-variable lever in opposite directions within a single run would
+# be a self-contradictory objective pair. Each writes to its own
+# OUTPUT_DIR (below) so switching this never disturbs the other's
+# checkpoint/data, same principle as RL_ASSISTED_GENETIC_OPERATIONS above.
+PHEROMONE_RESPONSE_TYPE = "repulsive"  # "attractive" | "repulsive"
 
 
 def configure_logging(log_file, level=logging.INFO):
@@ -75,10 +88,15 @@ _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 # always been ("evolution_run", no suffix) - so flipping the switch back
 # to True (the default) never orphans or resets an existing run's
 # checkpoint/progress. Only the False/baseline arm gets a new directory,
-# since it has no prior data to preserve.
+# since it has no prior data to preserve. Same principle for
+# PHEROMONE_RESPONSE_TYPE: "attractive" (the default) adds no suffix, so
+# an existing pre-pheromone checkpoint's directory name is unchanged;
+# "repulsive" gets its own "_repulsive" suffixed directory instead of
+# reusing "attractive"'s.
+_pheromone_suffix = "" if PHEROMONE_RESPONSE_TYPE == "attractive" else f"_{PHEROMONE_RESPONSE_TYPE}"
 OUTPUT_DIR = os.path.join(
     _SRC_DIR, "..", "output",
-    "evolution_run" if RL_ASSISTED_GENETIC_OPERATIONS else "evolution_run_norl",
+    ("evolution_run" if RL_ASSISTED_GENETIC_OPERATIONS else "evolution_run_norl") + _pheromone_suffix,
 )
 CHECKPOINT_PATH = os.path.join(OUTPUT_DIR, "checkpoint.pt")
 
@@ -86,6 +104,8 @@ CHECKPOINT_PATH = os.path.join(OUTPUT_DIR, "checkpoint.pt")
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     configure_logging(os.path.join(OUTPUT_DIR, "main.log"))
+    objectives_api.configure_pheromone_response(PHEROMONE_RESPONSE_TYPE)
+    logger.info("Pheromone response mode: %s", PHEROMONE_RESPONSE_TYPE)
 
     ppo_trainer = rl_api.PPOTrainer(seed=SEED)
 

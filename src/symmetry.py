@@ -118,6 +118,14 @@ def _mirror_anchor_port2(full_G, half_G, anchor):
             module_type=mirrored_type,
             connectors={1: None, 2: None, 3: None},
             hinge_angle=attrs["hinge_angle"],
+            # Design Variables 5/6 (light-sensitive joint selection + its
+            # trigger angle) mirror straight across, same as hinge_angle
+            # just above and for the same reason (see _MIRROR_FOLD_TYPE's
+            # comment: a mirrored module needs the SAME hinge behavior, not
+            # a flipped one) - this is what keeps any sensor-placement
+            # choice automatically even and bilaterally symmetric.
+            light_sensitive=attrs.get("light_sensitive", False),
+            light_hinge_angle=attrs.get("light_hinge_angle", 0.0),
             depth=None, parent=None,
             type_id=rg.MODULE_TYPE_IDS[mirrored_type],
         )

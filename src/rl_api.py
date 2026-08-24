@@ -45,7 +45,7 @@ from torch_geometric.nn import TransformerConv, global_mean_pool
 
 import roblet_grammar as rg
 
-NODE_FEATURE_DIM = 7
+NODE_FEATURE_DIM = 9
 HIDDEN_DIM = 32
 NEG_INF = -1e9
 
@@ -56,8 +56,10 @@ NEG_INF = -1e9
 
 def graph_to_pyg_data(G):
     """nx.DiGraph -> torch_geometric.data.Data, with node feature layout:
-    [one-hot module_type (3), hinge_angle/90, depth/10 (clipped), free-port
-    fraction, is_root]. Edges are added in both directions so message
+    [one-hot module_type (3), hinge_angle/45, depth/10 (clipped), free-port
+    fraction, is_root, light_sensitive (Design Variable 5), light_hinge_angle
+    /45 (Design Variable 6 - hinge_angle_on_light_detection, 0.0 when not
+    light_sensitive)]. Edges are added in both directions so message
     passing isn't limited to the parent->child tree orientation."""
     node_ids = list(G.nodes)
     index_of = {n: i for i, n in enumerate(node_ids)}
@@ -70,6 +72,8 @@ def graph_to_pyg_data(G):
         feats[i, 4] = min(attrs["depth"], 10) / 10.0
         feats[i, 5] = len(rg.free_ports(G, n)) / 3.0
         feats[i, 6] = 1.0 if rg.is_root(G, n) else 0.0
+        feats[i, 7] = 1.0 if attrs.get("light_sensitive", False) else 0.0
+        feats[i, 8] = attrs.get("light_hinge_angle", 0.0) / rg.MAX_HINGE_ANGLE
 
     edges = []
     for u, v in G.edges:
@@ -366,6 +370,25 @@ def act(actor, critic, G_a, G_b, rng=None):
                 params = dict(new_angle=angle)
                 hinge_raw_sample = hinge_raw_sample.item()
 
+            elif action == rg.Action.TOGGLE_LIGHT_SENSOR:
+                # No extra params - just flips node_id's own light_sensitive
+                # flag (Design Variable 5); node_a_idx alone already fully
+                # determines the effect.
+                params = {}
+
+            elif action == rg.Action.MUTATE_LIGHT_HINGE_ANGLE:
+                # Reuses hinge_angle_head: Design Variable 6 (hinge_angle_on_
+                # light_detection) is the SAME continuous [0, MAX_HINGE_ANGLE]
+                # parameterization as MUTATE_HINGE_ANGLE's theta_i above, just
+                # applied to roblet_grammar.mutate_light_hinge_angle instead.
+                mu_raw, log_std_raw = actor.hinge_angle_head(h_v).squeeze(0)
+                hdist = _hinge_angle_dist(mu_raw, log_std_raw)
+                hinge_raw_sample = hdist.sample()
+                logprob = logprob + hdist.log_prob(hinge_raw_sample)
+                angle = (rg.MAX_HINGE_ANGLE * torch.sigmoid(hinge_raw_sample)).item()
+                params = dict(new_angle=angle)
+                hinge_raw_sample = hinge_raw_sample.item()
+
             elif action == rg.Action.RECONNECT_PORT:
                 port_mask = _port_mask(G_a, node_id_a)
                 port_dist = _masked_categorical(actor.port_head(h_v).squeeze(0), port_mask)
@@ -451,6 +474,10 @@ def apply_decision(G_a, G_b, decision):
         return [rg.mutate_fold_type(G_a, n_a, p["new_fold_type"])]
     if a == rg.Action.MUTATE_HINGE_ANGLE:
         return [rg.mutate_hinge_angle(G_a, n_a, p["new_angle"])]
+    if a == rg.Action.TOGGLE_LIGHT_SENSOR:
+        return [rg.toggle_light_sensor(G_a, n_a)]
+    if a == rg.Action.MUTATE_LIGHT_HINGE_ANGLE:
+        return [rg.mutate_light_hinge_angle(G_a, n_a, p["new_angle"])]
     if a == rg.Action.RECONNECT_PORT:
         return [rg.reconnect_port(G_a, n_a, p["old_port"], p["new_port"])]
     if a == rg.Action.GRAFT_SUBTREE:
@@ -502,6 +529,15 @@ def _recompute_actor(actor, decision):
             entropy = entropy + ft_dist.entropy()
 
         elif action == rg.Action.MUTATE_HINGE_ANGLE:
+            mu_raw, log_std_raw = actor.hinge_angle_head(h_v).squeeze(0)
+            hdist = _hinge_angle_dist(mu_raw, log_std_raw)
+            logprob = logprob + hdist.log_prob(torch.tensor(decision.hinge_raw_sample))
+            entropy = entropy + hdist.entropy()
+
+        elif action == rg.Action.TOGGLE_LIGHT_SENSOR:
+            pass  # no extra params sampled - node_a_idx alone determines the effect
+
+        elif action == rg.Action.MUTATE_LIGHT_HINGE_ANGLE:
             mu_raw, log_std_raw = actor.hinge_angle_head(h_v).squeeze(0)
             hdist = _hinge_angle_dist(mu_raw, log_std_raw)
             logprob = logprob + hdist.log_prob(torch.tensor(decision.hinge_raw_sample))

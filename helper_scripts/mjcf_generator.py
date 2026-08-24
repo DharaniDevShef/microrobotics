@@ -126,6 +126,24 @@ MAGNET_INERTIA = np.diag([
     0.5 * MAGNET_MASS * MAGNET_RADIUS ** 2,
 ])
 
+# Photometric calibration for the scene's directional light, stored in
+# MuJoCo's own <light intensity="..."> field (candela for point/spot lights;
+# for a directional source there's no distance falloff, so this is read
+# directly as the illuminance -- in lux -- a light_sensor_* site would
+# report while facing it head-on with a clear line of sight. Roughly a dim
+# indoor-lighting level; see get_light_sensor_values() in roblet_simulator.py
+# for the cosine/occlusion falloff applied on top of this.
+LIGHT_INTENSITY_LUX = 500
+
+# bodyLink's own z-extent (m, local/body frame -- see BodyFoldedSide2.stl's
+# bounding box) at the two points its hinge crease can physically sit: right
+# at the top face for a valley fold, right at the bottom face for a mountain
+# fold. joint_z below picks between them for the <joint> itself; each
+# module's light_sensor_joint_N site reuses that same value so it always
+# sits on the correct face for its fold type without extra logic.
+JOINT_Z_VALLEY_TOP = 0.0005
+JOINT_Z_MOUNTAIN_BOTTOM = -0.0055
+
 
 def _combine_rigid_bodies(m1, com1, I1, m2, com2, I2):
     """Merge two (mass, CoM, inertia-about-CoM) rigid parts into one,
@@ -166,11 +184,20 @@ def connector_inertial(mesh_name, mount_site):
 
 
 def _write_joint_target_angles(root, graph, fold_joints):
-    """Write per-joint hinge angles from the graph JSON into XML metadata."""
+    """Write per-joint hinge angles from the graph JSON into XML metadata,
+    plus (for every light-sensitive joint - Design Variable 5) its
+    light-triggered target angle (Design Variable 6,
+    hinge_angle_on_light_detection), under the matching
+    "light_ctrl_joint{idx}" name so roblet_simulator.py's
+    set_angle_to_joint can look one up from the other by just swapping the
+    "ctrl_joint"/"light_ctrl_joint" prefix on an actuator's own name. Only
+    written for joints that are actually light_sensitive - a joint with no
+    sensor has no meaningful trigger angle to record."""
     custom_elem = ET.SubElement(root, "custom")
     for idx, num_id in enumerate(fold_joints, start=1):
         module_id = f"module_{num_id}"
-        hinge_angle = graph.nodes[module_id].get("hinge_angle", 0.0)
+        node = graph.nodes[module_id]
+        hinge_angle = node.get("hinge_angle", 0.0)
         actuator_name = f"ctrl_joint{idx}"
         ET.SubElement(
             custom_elem,
@@ -178,6 +205,14 @@ def _write_joint_target_angles(root, graph, fold_joints):
             name=actuator_name,
             data=f"{float(hinge_angle):.6f}",
         )
+        if node.get("light_sensitive", False):
+            light_hinge_angle = node.get("light_hinge_angle", 0.0)
+            ET.SubElement(
+                custom_elem,
+                "numeric",
+                name=f"light_ctrl_joint{idx}",
+                data=f"{float(light_hinge_angle):.6f}",
+            )
 
 
 class ModuleCollisionError(ValueError):
@@ -410,6 +445,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
             {bodyLink_inertial}
             <joint name="joint_{module_id}" type="hinge" axis="1 0 0" pos="0 0.001 {joint_z}" range="{joint_range}" limited="true" armature="1e-04" damping="0"/>
             <!-- <geom name="joint_marker_bodyLink_{module_id}" type="cylinder" size="0.0002 0.008" pos="0 0.001 {joint_z}" quat="0.7071 0 0.7071 0" rgba="0 1 0 1" mass="0"/> -->
+            {light_sensor_site}
             <geom name="geom_bodyLink_{module_id}" type="mesh" mesh="bodyLink" rgba="0.2 0.2 0.8 {trans_val}"/>
             <body name="connector1_{module_id}" pos="{connector1_pos}" quat="{connector1_quat}">
                 {connector1_inertial}
@@ -469,7 +505,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         <material name="glass" rgba="0.6 0.8 0.9 0.4" shininess="0.9" specular="1"/>
     </asset>
     <worldbody>
-        <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 1" dir="0 0 -1"/>
+        <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 1" dir="0 0 -1" intensity="{LIGHT_INTENSITY_LUX}"/>
         <geom name="glass_floor" type="plane" size="1 1 0.1" material="glass"
             friction="0.4 0.005 0.0001" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1" condim="3"/>
         <!-- Floor Boundaries / Perimeter Walls -->
@@ -504,7 +540,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         c3_mesh = connector_assignments[node_id][3]
 
         m_quat = "1 0 0 0"
-        joint_z = "0.0005" if m_type == "valley fold" else "-0.0055"
+        joint_z = JOINT_Z_VALLEY_TOP if m_type == "valley fold" else JOINT_Z_MOUNTAIN_BOTTOM
         joint_range = "0 90" if m_type == "valley fold" else "-90 0"
 
         g_pos, g_R = global_pose.get(node_id, (np.zeros(3), np.eye(3)))
@@ -514,6 +550,19 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         is_rigid = m_type == "non-foldable"
         site23 = "site23_rigid" if is_rigid else "site23_fold"
 
+        # Design Variable 5 (light-sensitive joint selection): only a
+        # foldable module carrying the light-sensitive PVC strip gets a
+        # light_sensor_joint_* site at all - a rigid module never can
+        # (no hinge, gated by is_rigid above), and a foldable module the
+        # graph didn't select gets no site either, so
+        # get_light_sensor_values()/set_angle_to_joint() simply never see
+        # (and can never react to) light at that joint.
+        is_light_sensitive = (not is_rigid) and G.nodes[node_id].get("light_sensitive", False)
+        light_sensor_site = (
+            f'<site name="light_sensor_joint_{num_id}" type="box" size="0.0008 0.0008 0.0001" '
+            f'pos="0 0.001 {joint_z}" rgba="0 1 0 1"/>'
+        ) if is_light_sensitive else ""
+
         tpl = rigid_body_tpl if is_rigid else fold_body_tpl
         body_xml = tpl.format(
             module_id=num_id, module_pos=module_pos, module_macro_quat=module_macro_quat,
@@ -522,6 +571,7 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
             connector2_pos=c2_pos, connector2_quat=c2_quat, connector2_mesh=c2_mesh,
             connector3_pos=c3_pos, connector3_quat=c3_quat, connector3_mesh=c3_mesh,
             trans_val=TRANSPARENCY, joint_z=joint_z, joint_range=joint_range,
+            light_sensor_site=light_sensor_site,
             bodyBase_inertial=body_inertial("bodyBase"),
             bodyLink_inertial=body_inertial("bodyLink"),
             bodyRigid_inertial=body_inertial("bodyRigid"),

@@ -35,18 +35,62 @@ OBJECTIVE_NAMES = [
     "f3_relative_yaw",
     "f4_gait_stability",
     "f5_entropy",
+    "f6_pheromone_yaw_response",
+    "f7_pheromone_speed_response",
 ]
 
 # True = higher is better (maximize), False = lower is better (minimize).
 # pymoo/NSGA-III minimizes everything, so moo_api flips sign on the
 # "maximize" objectives via to_minimization_vector() below.
+#
+# f6/f7's own entries here are just the "attractive" default - main.py
+# calls configure_pheromone_response() once at startup (from its
+# PHEROMONE_RESPONSE_TYPE switch) to flip them for a "repulsive" run - see
+# that function's docstring for why both objectives read the SAME signed
+# stats.json fields either way, with only the optimization direction
+# changing between the two.
 MAXIMIZE = {
     "f1_forward_velocity_flat": True,
     "f2_forward_velocity_folded": True,
     "f3_relative_yaw": True,
     "f4_gait_stability": False,
     "f5_entropy": True,
+    "f6_pheromone_yaw_response": True,
+    "f7_pheromone_speed_response": True,
 }
+
+# main.py's PHEROMONE_RESPONSE_TYPE must be one of these.
+PHEROMONE_RESPONSE_TYPES = ("attractive", "repulsive")
+
+
+def configure_pheromone_response(mode):
+    """Sets whether this run's two pheromone objectives (f6_pheromone_
+    yaw_response, f7_pheromone_speed_response) are optimized "attractive"
+    (turn TOWARD a one-sided light stimulus and speed up under a full-width
+    one - Reaction Primitives 2.1/3.2) or "repulsive" (turn away and slow
+    down - RPs 2.2/3.1). Call once at process startup (main.py does, from
+    its PHEROMONE_RESPONSE_TYPE constant) before any compute_objectives()
+    call.
+
+    Both objectives always read the SAME two signed stats.json fields
+    (pheromone_yaw_response_deg, pheromone_speed_response -
+    positive = toward the light / sped up, per
+    roblet_simulator.run_headless_light_tests) regardless of mode - sharing
+    one sign convention between the two runs is what keeps mirror symmetry
+    (left vs. right turning) "free" within EACH run, per the design
+    decided with the user: only the optimization DIRECTION flips here,
+    never the metric's own sign. Sharing hinge_angle_on_light_detection as
+    one scalar lever in two opposite directions within a SINGLE run would
+    be a self-contradictory objective pair (push it up AND down at once) -
+    that's exactly why "attractive" and "repulsive" are two separate
+    evolution runs (main.py's OUTPUT_DIR already varies by this switch),
+    not two objectives added to one run.
+    """
+    if mode not in PHEROMONE_RESPONSE_TYPES:
+        raise ValueError(f"Unknown pheromone_response_type {mode!r}; expected one of {PHEROMONE_RESPONSE_TYPES}")
+    is_attractive = mode == "attractive"
+    MAXIMIZE["f6_pheromone_yaw_response"] = is_attractive
+    MAXIMIZE["f7_pheromone_speed_response"] = is_attractive
 
 
 def _f1_forward_velocity_flat(stats):
@@ -92,12 +136,41 @@ def _f5_entropy(stats):
     return float(stats.get("shape_entropy_3d", 0.0)) - float(stats.get("shape_entropy_2d", 0.0))
 
 
+def _f6_pheromone_yaw_response(stats):
+    """Signed yaw rotation (deg) induced by a one-sided light stimulus
+    (roblet_simulator.run_headless_light_tests' "left" stage), relative to
+    this individual's own no-light baseline - positive = turned TOWARD the
+    stimulus, negative = away. Read straight from stats.json's
+    pheromone_yaw_response_deg. 0.0 whenever the run failed (light
+    tests are skipped for a failed run - see save_simulation_stats'
+    docstring) or include_light_tests wasn't requested (defaults to 0.0
+    either way, so this degrades to "no signal" rather than crashing)."""
+    if not stats.get("success", 0):
+        return 0.0
+    return float(stats.get("pheromone_yaw_response_deg", 0.0))
+
+
+def _f7_pheromone_speed_response(stats):
+    """Signed (avg_speed_under_stimulus - baseline) / baseline, from a
+    full-width light stimulus (run_headless_light_tests' "front" stage) -
+    positive = sped up, negative = slowed down. Read straight from
+    stats.json's pheromone_speed_response (signed both ways - a
+    "repulsive" run drives this negative, an "attractive" one positive,
+    see objectives_api.configure_pheromone_response). 0.0 under the same
+    conditions as f6 above."""
+    if not stats.get("success", 0):
+        return 0.0
+    return float(stats.get("pheromone_speed_response", 0.0))
+
+
 _OBJECTIVE_FUNCS = {
     "f1_forward_velocity_flat": _f1_forward_velocity_flat,
     "f2_forward_velocity_folded": _f2_forward_velocity_folded,
     "f3_relative_yaw": _f3_relative_yaw,
     "f4_gait_stability": _f4_gait_stability,
     "f5_entropy": _f5_entropy,
+    "f6_pheromone_yaw_response": _f6_pheromone_yaw_response,
+    "f7_pheromone_speed_response": _f7_pheromone_speed_response,
 }
 
 # Running (monotonically widening) min/max per objective, observed across

@@ -4,3 +4,5 @@
 */MUJOCO_LOG.TXT
 *.log
 /old_output
+/*output*
+/paper

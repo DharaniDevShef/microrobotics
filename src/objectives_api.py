@@ -229,9 +229,19 @@ def compute_objectives(stats):
 
 
 def to_minimization_vector(objectives_dict):
-    """np.ndarray[5] in pymoo's minimize-everything convention."""
+    """np.ndarray[len(OBJECTIVE_NAMES)] in pymoo's minimize-everything
+    convention. objectives_dict.get(n, 0.0), not objectives_dict[n]: a
+    live run's compute_objectives() always fills every current
+    OBJECTIVE_NAMES key, but a dict loaded from an OLDER run's stored JSON
+    (e.g. population_history.json, read by evolution_results_visualizer.py)
+    can predate an objective added since - such as f6_pheromone_yaw_response/
+    f7_pheromone_speed_response - and simply won't have that key at all.
+    Treating a missing objective as 0.0 is the same convention already used
+    for a failed rollout's f6/f7 (see objectives_api's f6/f7 docstrings), so
+    an old individual just reads as "no signal for this objective" rather
+    than crashing."""
     return np.array(
-        [(-objectives_dict[n] if MAXIMIZE[n] else objectives_dict[n]) for n in OBJECTIVE_NAMES],
+        [(-objectives_dict.get(n, 0.0) if MAXIMIZE[n] else objectives_dict.get(n, 0.0)) for n in OBJECTIVE_NAMES],
         dtype=float,
     )
 
@@ -269,18 +279,24 @@ def scalarize(objectives_dict):
     compute_objectives() returns extra logging-only fields
     (shape_entropy_2d/3d, f5's raw components) alongside the 5 core
     objectives; summing "whatever's in the dict" would silently double
-    that entropy delta's weight in every score this function drives."""
+    that entropy delta's weight in every score this function drives.
+
+    objectives_dict.get(n, 0.0), not objectives_dict[n] - see
+    to_minimization_vector's docstring: an objectives dict loaded from an
+    older run's stored JSON can simply be missing a key added since (e.g.
+    f6_pheromone_yaw_response/f7_pheromone_speed_response), and 0.0 is the
+    same "no signal" convention already used for a failed rollout's f6/f7."""
     contributions = []
     for n in OBJECTIVE_NAMES:
         lo, hi = _RUNNING_MIN.get(n), _RUNNING_MAX.get(n)
         if lo is None or (hi - lo) < 1e-9:
             continue
-        norm = (objectives_dict[n] - lo) / (hi - lo)
+        norm = (objectives_dict.get(n, 0.0) - lo) / (hi - lo)
         contributions.append(norm if MAXIMIZE[n] else (1.0 - norm))
 
     if not contributions:
         return float(sum(
-            objectives_dict[n] if MAXIMIZE[n] else -objectives_dict[n] for n in OBJECTIVE_NAMES
+            objectives_dict.get(n, 0.0) if MAXIMIZE[n] else -objectives_dict.get(n, 0.0) for n in OBJECTIVE_NAMES
         ))
     return float(np.mean(contributions))
 

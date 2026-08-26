@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # Physics constants
 # Magnetic field intensity (Tesla)
-B_INTENSITY = 0.05  # 10 mT
+B_INTENSITY = 0.01  # 10 mT
 # Candidate drive strengths for run_headless_b_sweep() -- the field a
 # morphology needs to overcome stiction and walk (rather than stall, or
 # over-drive into a rolling/tumbling gait) is morphology-dependent, so
@@ -88,21 +88,26 @@ LIGHT_TEST_DEFAULT_DISTANCE = 0.1
 # How long (s) run_light_tests() moves the assembly with no light active at
 # all, before the light stages start, to get a baseline avg linear velocity.
 LIGHT_TEST_BASELINE_DURATION = 7.0
-# Extra distance (m) each stage's light is pushed beyond its half-region's
-# own centroid, further out to that side -- e.g. "left" stage's light sits
-# this much further left (more negative X) than the left half's midpoint.
+# Extra distance (m) the "left" stage's light is pushed beyond the left
+# half-region's own centroid, further out to that side.
 LIGHT_TEST_LEFT_EXTRA_OFFSET = 0.01
+# Gap (m) the "front" stage's lit patch is pushed beyond the robot's own
+# front edge (xy_max[1] in the travel-aligned local frame), rather than
+# starting at the robot's own front-half midpoint -- so the robot starts
+# entirely in the dark and has to actually walk forward into the light,
+# instead of already having its front half lit at t=0.
 LIGHT_TEST_FRONT_EXTRA_OFFSET = 0
 # Minimum net baseline (no-light) displacement (m) run_light_tests() needs
 # before its direction is trustworthy enough to reorient the assembly by --
 # below this, "which way did it travel" is dominated by settle/numerical
-# noise, not a real heading, so the camera-facing reorientation is skipped.
+# noise, not a real heading, so the reorientation is skipped.
 LIGHT_TEST_MIN_BASELINE_TRAVEL = 0.0005
 # run_light_tests() reactive fold: a joint whose own light_sensor_joint_*
-# reading exceeds this (lux) gets driven to LIGHT_TRIGGER_ANGLE_DEG -- every
-# other joint is left exactly as it was.
+# reading exceeds this (lux) gets driven to ITS OWN evolved light_ctrl_jointN
+# angle (read_light_target_angles_from_xml) -- every other joint (including
+# one with no such metadata at all) is left exactly as it was.
 LIGHT_TRIGGER_LUX_THRESHOLD = 10000.0
-LIGHT_TRIGGER_ANGLE_DEG = 60.0
+
 
 
 def magnetic_field_callback(model, data):
@@ -278,7 +283,7 @@ def read_light_target_angles_from_xml(model_path):
     return light_target_angles
 
 
-def set_angle_to_joint(model, data, target_angle_deg, light_bounds=None, light_target_angles=None):
+def set_angle_to_joint(model, data, target_angle_deg, light_bounds=None, light_target_angles=None, frame=None):
     """Set actuator position targets from a scalar, ordered sequence, or name map.
 
     light_target_angles: optional {"light_ctrl_jointN": angle_deg} map
@@ -286,9 +291,14 @@ def set_angle_to_joint(model, data, target_angle_deg, light_bounds=None, light_t
     Design Variable 6 (hinge_angle_on_light_detection) for each
     light-sensitive joint. When a joint's own light_sensor_* reading
     exceeds LIGHT_TRIGGER_LUX_THRESHOLD, its actuator target is overridden
-    to THIS joint's own evolved value if present, falling back to the flat
-    LIGHT_TRIGGER_ANGLE_DEG default otherwise (e.g. a hand-built model with
-    no evolved metadata at all)."""
+    to THIS joint's own evolved value - and ONLY if that value is actually
+    present in light_target_angles; a joint with no evolved metadata at all
+    (e.g. a hand-built model missing that custom numeric) is left at
+    whatever the baseline pass already set, never a made-up flat angle.
+
+    frame: optional (origin_xy, forward) forwarded to
+    get_light_sensor_values() - see there - so light_bounds can be
+    expressed in a travel-aligned local frame instead of raw world XY."""
     if model.nu == 0:
         return
 
@@ -321,16 +331,20 @@ def set_angle_to_joint(model, data, target_angle_deg, light_bounds=None, light_t
             if joint_name:
                 joint_to_actuator[joint_name] = actuator
 
-        readings = get_light_sensor_values(model, data, verbose=False, light_bounds=light_bounds)
+        readings = get_light_sensor_values(model, data, verbose=False, light_bounds=light_bounds, frame=frame)
         for site_name, lux in readings.items():
             actuator_idx = joint_to_actuator.get(site_name.replace("light_sensor_", "", 1))
-            if actuator_idx is not None and lux > LIGHT_TRIGGER_LUX_THRESHOLD:
-                trigger_angle = LIGHT_TRIGGER_ANGLE_DEG
-                if light_target_angles:
-                    actuator_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, actuator_idx)
-                    light_key = (actuator_name or "").replace("ctrl_joint", "light_ctrl_joint", 1)
-                    trigger_angle = light_target_angles.get(light_key, LIGHT_TRIGGER_ANGLE_DEG)
-                target_values[actuator_idx] = trigger_angle
+            if actuator_idx is None or lux <= LIGHT_TRIGGER_LUX_THRESHOLD:
+                continue
+            actuator_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, actuator_idx)
+            light_key = (actuator_name or "").replace("ctrl_joint", "light_ctrl_joint", 1)
+            if light_target_angles and light_key in light_target_angles:
+                target_values[actuator_idx] = light_target_angles[light_key]
+            # else: this joint has no evolved light_ctrl_jointN of its own
+            # (e.g. a hand-built model missing that metadata) - leave its
+            # target exactly as the baseline pass already set it, rather
+            # than guessing a made-up trigger angle. No reactive fold
+            # happens for it, on either the interactive or headless path.
 
     for i in range(model.nu):
         target_deg = float(target_values[i])
@@ -373,28 +387,64 @@ def distance_to_nearest_wall(model, data):
     return min(readings) if readings else None
 
 
-def assembly_xy_bounds(model, data):
-    """Axis-aligned world-XY bounding box, as (mins, maxs) each [x, y], of
-    every robot geom -- i.e. every geom whose body is *not* the worldbody
-    (body 0). The floor and perimeter walls are declared directly under
-    <worldbody> in mjcf_generator.py (no wrapping <body>), so they're body 0
-    too and get excluded automatically; every module_* geom is nested under
-    its own body, so it's included. Used to size/center a ceiling light's
-    square coverage footprint over a specific half of the assembly.
-    """
+def _travel_frame_axes(forward):
+    """(forward, right) unit vectors for a travel-direction-aligned local
+    frame: `right` is `forward` rotated -90 deg (clockwise), so when
+    forward already equals world +Y this reduces to (world +Y, world +X) -
+    i.e. every local-frame helper below is a strict generalization of the
+    old world-axis-aligned bounds, not a behavior change for that case."""
+    forward = np.asarray(forward, dtype=float)
+    return forward, np.array([forward[1], -forward[0]])
+
+
+def world_to_local_xy(point_xy, origin_xy, forward):
+    """World XY -> (local_x, local_y) in the travel-aligned frame anchored
+    at origin_xy: local_y grows along `forward` (e.g. front of travel),
+    local_x grows to the right of it (mirroring how, e.g., world +X was
+    "right" once the whole robot used to be physically rotated so its own
+    forward pointed along world +Y - see _travel_frame_axes)."""
+    forward, right = _travel_frame_axes(forward)
+    rel = np.asarray(point_xy, dtype=float) - np.asarray(origin_xy, dtype=float)
+    return float(np.dot(rel, right)), float(np.dot(rel, forward))
+
+
+def local_to_world_xy(local_xy, origin_xy, forward):
+    """Inverse of world_to_local_xy() - used to place a real MuJoCo <light>
+    (which only understands world coordinates) at a position chosen in the
+    travel-aligned local frame."""
+    forward, right = _travel_frame_axes(forward)
+    lx, ly = local_xy
+    return np.asarray(origin_xy, dtype=float) + lx * right + ly * forward
+
+
+def assembly_local_bounds(model, data, origin_xy, forward):
+    """Axis-aligned bounding box, as (mins, maxs) each [x, y], of every
+    robot geom -- i.e. every geom whose body is *not* the worldbody (body
+    0, which is where mjcf_generator.py declares the floor/perimeter walls
+    directly, with no wrapping <body>) -- expressed in the travel-aligned
+    local frame (world_to_local_xy) instead of raw world XY. So "left
+    half"/"front half" of the returned box actually mean left/front of the
+    robot's OWN measured travel direction, without ever having to
+    physically rotate the robot's (contact-consistent, already-settled)
+    pose to make world axes line up with it. Used to size/center a ceiling
+    light's square coverage footprint over a specific half of the
+    assembly."""
+    forward, right = _travel_frame_axes(forward)
     mins = np.array([np.inf, np.inf])
     maxs = np.array([-np.inf, -np.inf])
+    origin_xy = np.asarray(origin_xy, dtype=float)
     for g in range(model.ngeom):
         if model.geom_bodyid[g] == 0:
             continue
-        pos_xy = data.geom_xpos[g][:2]
+        rel = data.geom_xpos[g][:2] - origin_xy
+        local = np.array([np.dot(rel, right), np.dot(rel, forward)])
         r = model.geom_rbound[g]
-        mins = np.minimum(mins, pos_xy - r)
-        maxs = np.maximum(maxs, pos_xy + r)
+        mins = np.minimum(mins, local - r)
+        maxs = np.maximum(maxs, local + r)
     return mins, maxs
 
 
-def get_light_sensor_values(model, data, verbose=True, light_bounds=None):
+def get_light_sensor_values(model, data, verbose=True, light_bounds=None, frame=None):
     """Illuminance (lux) at each on-body light sensor (the `light_sensor_*`
     sites from mjcf_generator.py), summed over every <light> in the scene.
 
@@ -402,10 +452,16 @@ def get_light_sensor_values(model, data, verbose=True, light_bounds=None):
     up-to-date values but only needs to print occasionally).
 
     light_bounds: optional {light_id: (x_lo, x_hi, y_lo, y_hi)} restricting
-    a light to a rectangular world-XY footprint -- e.g. a square ceiling
-    panel that only covers one half of the assembly (see run_light_tests).
-    A sensor outside that footprint reads 0 lux from that light regardless
-    of angle or occlusion. Lights not present in the dict are unrestricted.
+    a light to a rectangular footprint -- e.g. a square ceiling panel that
+    only covers one half of the assembly (see run_light_tests). A sensor
+    outside that footprint reads 0 lux from that light regardless of angle
+    or occlusion. Lights not present in the dict are unrestricted.
+
+    frame: optional (origin_xy, forward) - when given, each sensor's world
+    XY is transformed via world_to_local_xy() before the bounds check
+    above, so `light_bounds` is interpreted in that travel-aligned local
+    frame instead of raw world XY (see assembly_local_bounds). None (the
+    default) keeps the original world-XY bounds check.
 
     MuJoCo has no native illuminance sensor/API -- <light> is a
     rendering-only construct, so this is a hand-rolled photometric estimate
@@ -445,7 +501,9 @@ def get_light_sensor_values(model, data, verbose=True, light_bounds=None):
             bounds = light_bounds.get(light_id) if light_bounds else None
             if bounds is not None:
                 x_lo, x_hi, y_lo, y_hi = bounds
-                if not (x_lo <= pnt[0] <= x_hi and y_lo <= pnt[1] <= y_hi):
+                px, py = (world_to_local_xy(pnt[:2], frame[0], frame[1]) if frame is not None
+                          else (pnt[0], pnt[1]))
+                if not (x_lo <= px <= x_hi and y_lo <= py <= y_hi):
                     continue
 
             if model.light_type[light_id] == mujoco.mjtLightType.mjLIGHT_DIRECTIONAL:
@@ -694,8 +752,7 @@ def _offscreen_camera(distance=0.25, lookat=(0, 0, 0)):
 
 
 def run_headless_light_tests(
-    model, target_angles, travel_xy, module1_qpos_adr, module1_dof_adr,
-    baseline_avg_velocity, baseline_yaw_rotation_deg,
+    model, target_angles, module1_qpos_adr,
     light_test_duration=LIGHT_TEST_DEFAULT_DURATION, light_distance=LIGHT_TEST_DEFAULT_DISTANCE,
     light_target_angles=None,
 ):
@@ -703,22 +760,21 @@ def run_headless_light_tests(
     pheromone_yaw_response_deg and pheromone_speed_response for
     run_headless()'s include_light_tests=True path.
 
-    Two things are cut relative to the interactive run_light_tests() to
-    keep this cheap enough to call from every successful evaluation in an
-    evolutionary run:
-
-      - No separate no-light "baseline" stage, and no "right" stage --
-        only "left" and "front" run. The "no light" reference these two
-        new metrics are measured against is instead the primary run's own
-        already-computed avg velocity and module_1 yaw rotation
-        (baseline_avg_velocity / baseline_yaw_rotation_deg), and the
-        reorientation below uses that same run's travel_xy -- all passed
-        in by run_headless() rather than re-measured here, since
-        run_headless() already paid for that simulated time once.
-      - No viewer, so nothing is real-time paced, printed, or camera-
-        facing -- "front" is fixed at world +Y (the same convention
-        left_bounds/front_bounds already use), and travel_xy is rotated
-        onto that instead of onto a camera direction.
+    Runs its OWN dedicated no-light baseline stage first (LIGHT_TEST_
+    BASELINE_DURATION seconds, light_bounds=None so no reactive fold can
+    trigger regardless of the scene light), then defines "left"/"front"
+    relative to THAT stage's own measured travel direction - not the
+    primary gait rollout's net displacement over its whole (possibly
+    curved/wandering) multi-second run, which turned out to be an
+    unreliable heading, nor by physically rotating the settled pose to
+    face any reference direction (world axis, camera, ...), which turned
+    out to risk tipping over an already-marginal design before the light
+    stages even start (a rigid Z-rotation of a contact-settled pose is not
+    guaranteed to still be as stable). Instead the light-patch bounds
+    themselves are expressed in a travel-aligned LOCAL frame (see
+    assembly_local_bounds/world_to_local_xy) while the robot's own
+    qpos is never touched after settling - see run_light_tests() for the
+    live-viewer sibling using the identical approach.
 
     `model` is reused as-is (no reload from disk -- the caller already
     paid the compile cost); a fresh MjData is created so this starts from
@@ -729,17 +785,17 @@ def run_headless_light_tests(
     is this model's own evolved Design Variable 6
     (hinge_angle_on_light_detection) per light-sensitive joint -- forwarded
     into set_angle_to_joint()'s reactive-fold branch below so a triggered
-    joint moves to ITS OWN evolved trigger angle, not the flat
-    LIGHT_TRIGGER_ANGLE_DEG default.
+    joint moves to ITS OWN evolved trigger angle (or doesn't trigger at all
+    if this model has none recorded for it - see set_angle_to_joint).
 
     Returns {"pheromone_yaw_response_deg": ..., "pheromone_speed_response": ...}
     -- pheromone_yaw_response_deg = yaw_rotation(left stage) -
-    baseline_yaw_rotation_deg (degrees); pheromone_speed_response =
-    (avg_linear_mps(front stage) - baseline_avg_velocity) /
-    baseline_avg_velocity (dimensionless; negative = slower than baseline
-    (deceleration), positive = faster (acceleration)). If
-    baseline_avg_velocity is 0, pheromone_speed_response is reported as 0.0
-    rather than dividing by zero.
+    yaw_rotation(baseline stage) (degrees); pheromone_speed_response =
+    (avg_linear_mps(front stage) - avg_linear_mps(baseline stage)) /
+    avg_linear_mps(baseline stage) (dimensionless; negative = slower than
+    baseline (deceleration), positive = faster (acceleration)). If the
+    baseline stage's avg_linear_mps is 0, pheromone_speed_response is
+    reported as 0.0 rather than dividing by zero.
     """
     fallback = {"pheromone_yaw_response_deg": 0.0, "pheromone_speed_response": 0.0}
 
@@ -774,56 +830,13 @@ def run_headless_light_tests(
         data.time = 0.0
         mujoco.mj_forward(model, data)
 
-    # ---- reorient using the primary run's own travel_xy, target = world
-    # +Y (the fixed "front" convention left_bounds/front_bounds already
-    # use below -- there's no viewer/camera to face here) ----
-    travel_dist = float(np.linalg.norm(travel_xy))
-    if travel_dist >= LIGHT_TEST_MIN_BASELINE_TRAVEL:
-        travel_dir = travel_xy / travel_dist
-        target_dir = np.array([0.0, 1.0])
-        angle = float(np.arctan2(
-            travel_dir[0] * target_dir[1] - travel_dir[1] * target_dir[0],
-            travel_dir[0] * target_dir[0] + travel_dir[1] * target_dir[1],
-        ))
-        c, s = np.cos(angle), np.sin(angle)
-        q_rot = np.array([np.cos(angle / 2.0), 0.0, 0.0, np.sin(angle / 2.0)])
-        new_quat = np.zeros(4)
-        for body_id in find_module_labels(model):
-            joint_id = model.body_jntadr[body_id]
-            qadr = model.jnt_qposadr[joint_id]
-            x, y = initial_qpos[qadr], initial_qpos[qadr + 1]
-            dx, dy = x - initial_com[0], y - initial_com[1]
-            initial_qpos[qadr] = initial_com[0] + dx * c - dy * s
-            initial_qpos[qadr + 1] = initial_com[1] + dx * s + dy * c
-            mujoco.mju_mulQuat(new_quat, q_rot, initial_qpos[qadr + 3:qadr + 7])
-            initial_qpos[qadr + 3:qadr + 7] = new_quat
-    else:
-        logger.debug(
-            "run_headless_light_tests(): primary run's travel distance too small (%.4f mm) to reorient by.",
-            travel_dist * 1000,
-        )
-
-    reset_to_initial_pose()
-
-    xy_min, xy_max = assembly_xy_bounds(model, data)
-    mid_x = (xy_min[0] + xy_max[0]) / 2.0
-    mid_y = (xy_min[1] + xy_max[1]) / 2.0
-
-    def spot_ceiling_light(center_xy):
-        # Only light_type/pos/dir matter here -- get_light_sensor_values()
-        # never reads light_cutoff/diffuse/specular, and there's no
-        # renderer for them to matter to either.
-        model.light_type[light_id] = mujoco.mjtLightType.mjLIGHT_SPOT
-        model.light_pos[light_id] = np.array([center_xy[0], center_xy[1], initial_com[2] + light_distance])
-        model.light_dir[light_id] = np.array([0.0, 0.0, -1.0])
-
-    def run_stage(duration, light_bounds, track_angular):
+    def run_stage(duration, light_bounds, track_angular, frame=None):
         com_start = get_com_position(data)
         yaw_start = module1_yaw_deg() if track_angular else None
         mujoco.set_mjcb_control(magnetic_field_callback)
         while data.time < duration:
             set_angle_to_joint(model, data, target_angle_deg=target_angles, light_bounds=light_bounds,
-                                light_target_angles=light_target_angles)
+                                light_target_angles=light_target_angles, frame=frame)
             mujoco.mj_step(model, data)
             mujoco.mj_subtreeVel(model, data)
             if int(np.sum(data.warning.number)) > 0:
@@ -838,21 +851,79 @@ def run_headless_light_tests(
             result["yaw_rotation_deg"] = float(((module1_yaw_deg() - yaw_start + 180) % 360) - 180)
         return result
 
+    # ---- dedicated no-light baseline stage (light_bounds=None already
+    # fully disables the reactive-fold branch in set_angle_to_joint,
+    # regardless of the scene <light>'s own active/inactive state) ----
+    reset_to_initial_pose()
+    baseline_result = run_stage(LIGHT_TEST_BASELINE_DURATION, light_bounds=None, track_angular=True)
+
+    # ---- travel-aligned local frame from the baseline stage's OWN
+    # measured direction (falls back to world +Y if that travel was too
+    # small to be a trustworthy heading) - the robot's qpos is NOT
+    # rotated; only the light-patch bounds/positions below are expressed
+    # in this frame (see assembly_local_bounds/world_to_local_xy/
+    # local_to_world_xy) ----
+    baseline_travel_xy = get_com_position(data)[:2] - initial_com[:2]
+    travel_dist = float(np.linalg.norm(baseline_travel_xy))
+    if travel_dist >= LIGHT_TEST_MIN_BASELINE_TRAVEL:
+        forward = baseline_travel_xy / travel_dist
+    else:
+        logger.debug(
+            "run_headless_light_tests(): baseline stage's travel distance too small (%.4f mm) - "
+            "defaulting light-patch frame to world +Y.",
+            travel_dist * 1000,
+        )
+        forward = np.array([0.0, 1.0])
+    origin_xy = initial_com[:2]
+
+    reset_to_initial_pose()
+
+    xy_min, xy_max = assembly_local_bounds(model, data, origin_xy, forward)
+    mid_x = (xy_min[0] + xy_max[0]) / 2.0
+    mid_y = (xy_min[1] + xy_max[1]) / 2.0
+
+    def spot_ceiling_light(center_local_xy):
+        # Only light_type/pos/dir matter here -- get_light_sensor_values()
+        # never reads light_cutoff/diffuse/specular, and there's no
+        # renderer for them to matter to either. MuJoCo only understands
+        # world coordinates, so the chosen local-frame center is converted
+        # back via local_to_world_xy() just for this light's placement.
+        center_xy = local_to_world_xy(center_local_xy, origin_xy, forward)
+        model.light_type[light_id] = mujoco.mjtLightType.mjLIGHT_SPOT
+        model.light_pos[light_id] = np.array([center_xy[0], center_xy[1], initial_com[2] + light_distance])
+        model.light_dir[light_id] = np.array([0.0, 0.0, -1.0])
+
+    frame = (origin_xy, forward)
+
     # ---- "left" stage ----
     reset_to_initial_pose()
     left_bounds = (xy_min[0], mid_x, xy_min[1], xy_max[1])
     spot_ceiling_light(((xy_min[0] + mid_x) / 2.0 - LIGHT_TEST_LEFT_EXTRA_OFFSET, mid_y))
-    left_result = run_stage(light_test_duration, {light_id: left_bounds}, track_angular=True)
+    left_result = run_stage(light_test_duration, {light_id: left_bounds}, track_angular=True, frame=frame)
 
-    # ---- "front" stage ----
+    # ---- "front" stage: lit patch starts LIGHT_TEST_FRONT_EXTRA_OFFSET
+    # beyond the robot's own front edge (not at its own front-half
+    # midpoint), same depth as the robot's front half, so it starts in the
+    # dark and has to walk into the light rather than already being lit.
+    # Hard light_bounds rectangle (same mechanism as "left") - a smooth
+    # inverse-square-only falloff here read as wrong in practice. ----
     reset_to_initial_pose()
-    front_bounds = (xy_min[0], xy_max[0], mid_y, xy_max[1])
-    spot_ceiling_light((mid_x, (mid_y + xy_max[1]) / 2.0 + LIGHT_TEST_FRONT_EXTRA_OFFSET))
-    front_result = run_stage(light_test_duration, {light_id: front_bounds}, track_angular=False)
+    front_depth = xy_max[1] - mid_y
+    front_y_lo = xy_max[1] + LIGHT_TEST_FRONT_EXTRA_OFFSET
+    front_y_hi = front_y_lo + front_depth
+    front_bounds = (xy_min[0], xy_max[0], front_y_lo, front_y_hi)
+    spot_ceiling_light((mid_x, (front_y_lo + front_y_hi) / 2.0))
+    front_result = run_stage(light_test_duration, {light_id: front_bounds}, track_angular=False, frame=frame)
 
     mujoco.set_mjcb_control(None)
 
-    pheromone_yaw_response_deg = left_result["yaw_rotation_deg"] - baseline_yaw_rotation_deg
+    baseline_avg_velocity = baseline_result["avg_linear_mps"]
+    # Re-wrap the difference of two already-wrapped angles into (-180, 180]
+    # - without this, a pair straddling the wraparound boundary (e.g.
+    # left=+170, baseline=-170) reports +340 instead of the true -20.
+    pheromone_yaw_response_deg = (
+        (left_result["yaw_rotation_deg"] - baseline_result["yaw_rotation_deg"] + 180) % 360
+    ) - 180
     if baseline_avg_velocity:
         pheromone_speed_response = (
             (front_result["avg_linear_mps"] - baseline_avg_velocity) / baseline_avg_velocity
@@ -896,11 +967,12 @@ def run_headless(
     `model` is reused across calls.
     include_light_tests=True additionally runs run_headless_light_tests()
     (see its docstring) after this run finishes, reusing this run's own
-    already-loaded model plus its own avg_velocity and module_1 yaw
-    rotation as the "no light" baseline those two new stats are measured
-    against -- so this only ever adds run_headless_light_tests()'s own
-    settle + "left" + "front" stages on top, never a redundant repeat of
-    the primary gait. Left False by default so run_headless_b_sweep()'s
+    already-loaded model. That function measures its own dedicated no-light
+    baseline stage internally (reusing this run's avg_velocity/yaw as a
+    baseline turned out to reorient the light rig by an unreliable
+    direction - see run_headless_light_tests' docstring), so this adds a
+    baseline + "left" + "front" stage on top, never a redundant repeat of
+    the primary gait itself. Left False by default so run_headless_b_sweep()'s
     per-candidate-B trial runs (which get thrown away except for their
     avg_velocity) don't pay for it -- only its final re-run of the winning
     B does. Skipped entirely (both new stats left at 0.0) whenever this
@@ -932,18 +1004,10 @@ def run_headless(
 
     # module_1 is this design's designated sensor/control module (see
     # build_module_element()'s IMU/rangefinder comment in mjcf_generator.py)
-    # -- used as the reference body for pheromone_yaw_response_deg's
-    # "no light" baseline yaw rotation below.
+    # -- forwarded to run_headless_light_tests() below as the reference
+    # body for its own yaw tracking.
     module1_joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "free_module_1")
-    if module1_joint_id < 0:
-        module1_qpos_adr = module1_dof_adr = None
-    else:
-        module1_qpos_adr = model.jnt_qposadr[module1_joint_id]
-        module1_dof_adr = model.jnt_dofadr[module1_joint_id]
-
-    def module1_yaw_deg():
-        qw, qx, qy, qz = data.qpos[module1_qpos_adr + 3: module1_qpos_adr + 7]
-        return float(np.degrees(np.arctan2(2 * (qw * qz + qx * qy), 1 - 2 * (qy * qy + qz * qz))))
+    module1_qpos_adr = model.jnt_qposadr[module1_joint_id] if module1_joint_id >= 0 else None
 
     # 2D shape entropy (entropy_api.py): from the model's own flat/
     # unfolded layout. mjcf_generator.py places every module body's XML
@@ -986,7 +1050,6 @@ def run_headless(
     initial_com = None
     displacement = 0.0
     steady_state_displacement = None
-    steady_state_yaw_deg = None  # captured alongside steady_state_displacement, same windowing
     magnets_active = True
     physics_ok = True
     step_count = 0
@@ -1091,8 +1154,6 @@ def run_headless(
                 steady_state_displacement = displacement
                 window_displacement = displacement
                 window_time = data.time
-                if module1_qpos_adr is not None:
-                    steady_state_yaw_deg = module1_yaw_deg()
             if steady_state_displacement is not None:
                 steady_elapsed = data.time - TORQUE_RAMP_TIME
                 avg_velocity = (
@@ -1149,16 +1210,16 @@ def run_headless(
     # pheromone_yaw_response_deg / pheromone_speed_response: only
     # meaningful relative to a real "no light" baseline, which a failed or
     # unstable run doesn't have -- see include_light_tests' docstring.
+    # run_headless_light_tests() measures its own dedicated baseline stage
+    # internally now (see its docstring for why reusing this primary run's
+    # own travel/yaw used to give an unreliable reorientation), so nothing
+    # from this run's own trajectory needs to be passed in beyond the model
+    # itself and where module_1's freejoint lives.
     pheromone_yaw_response_deg = 0.0
     pheromone_speed_response = 0.0
     if include_light_tests and success:
-        baseline_yaw_rotation_deg = 0.0
-        if module1_qpos_adr is not None and steady_state_yaw_deg is not None:
-            final_yaw_deg = module1_yaw_deg()
-            baseline_yaw_rotation_deg = ((final_yaw_deg - steady_state_yaw_deg + 180) % 360) - 180
         light_test_results = run_headless_light_tests(
-            model, target_angles, com[:2] - initial_com[:2], module1_qpos_adr, module1_dof_adr,
-            baseline_avg_velocity=avg_velocity, baseline_yaw_rotation_deg=baseline_yaw_rotation_deg,
+            model, target_angles, module1_qpos_adr,
             light_target_angles=light_target_angles,
         )
         pheromone_yaw_response_deg = light_test_results["pheromone_yaw_response_deg"]
@@ -1502,7 +1563,7 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
     get_light_sensor_values()'s inverse-square falloff over that height is
     actually exercised) and pointed straight down, never from the side --
     with its cutoff cone sized to just cover one symmetric half of the
-    assembly's own footprint (assembly_xy_bounds()):
+    assembly's own footprint (assembly_local_bounds()):
 
       Stage "left":  cone covers the left half in X, full depth in Y
         (symmetric front-to-back) -- i.e. a panel over just the left half.
@@ -1540,13 +1601,14 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
     Metrics collected per stage (see run_stage()):
       - Every stage: avg linear velocity (net COM displacement / elapsed
         stage time).
-      - "left" and "right" only: avg angular velocity and net yaw rotation
-        of module_1's own freejoint (module_1 is this design's designated
-        sensor/control module -- see its rangefinder/IMU comment further
-        down) -- skipped with a warning if the model has no "free_module_1"
-        joint.
-    All of it is printed in one summary after every stage completes, not
-    written to stats_output_path.
+      - "baseline" and "left" only: net yaw rotation of module_1's own
+        freejoint (module_1 is this design's designated sensor/control
+        module -- see its rangefinder/IMU comment further down) -- skipped
+        with a warning if the model has no "free_module_1" joint.
+    The final summary (printed, not written to stats_output_path) reports
+    pheromone_yaw_response_deg/pheromone_speed_response computed the same
+    way as objectives_api.py's f6/f7 (see run_headless_light_tests), but
+    against this run's own freshly-measured baseline stage.
 
     get_light_sensor_values() is called once per simulated second in each
     stage (prints only -- per-step light-sensor readings are not written to
@@ -1572,23 +1634,18 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
 
     # module_1 is this design's designated sensor/control module (see
     # build_module_element()'s IMU/rangefinder comment in mjcf_generator.py)
-    # -- used here as the reference body for angular velocity/yaw tracking.
+    # -- used here as the reference body for yaw tracking.
     module1_joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "free_module_1")
     if module1_joint_id < 0:
-        logger.warning("No 'free_module_1' joint found - angular velocity/yaw tracking will be skipped.")
-        module1_qpos_adr = module1_dof_adr = None
+        logger.warning("No 'free_module_1' joint found - yaw tracking will be skipped.")
+        module1_qpos_adr = None
     else:
         module1_qpos_adr = model.jnt_qposadr[module1_joint_id]
-        module1_dof_adr = model.jnt_dofadr[module1_joint_id]
 
     def module1_yaw_deg():
         qw, qx, qy, qz = data.qpos[module1_qpos_adr + 3: module1_qpos_adr + 7]
         yaw = np.arctan2(2 * (qw * qz + qx * qy), 1 - 2 * (qy * qy + qz * qz))
         return float(np.degrees(yaw))
-
-    def module1_angular_speed_degps():
-        wx, wy, wz = data.qvel[module1_dof_adr + 3: module1_dof_adr + 6]
-        return float(np.degrees(np.linalg.norm([wx, wy, wz])))
 
     target_angles = read_joint_target_angles_from_xml(model_path)
     if not target_angles:
@@ -1635,7 +1692,7 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
             viewer.sync()
 
         def run_stage(stage_name, duration, light_bounds=None, track_angular=False, track_acceleration=False,
-                      v_start_override=None):
+                      v_start_override=None, frame=None):
             """Runs `duration` seconds of magnetic actuation (light_bounds
             None means no light-triggered reactive fold, and if the scene
             light is also inactive -- see baseline below -- this is a
@@ -1663,7 +1720,6 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
             com_start = get_com_position(data)
             track_angular = track_angular and module1_qpos_adr is not None
             yaw_start = module1_yaw_deg() if track_angular else None
-            angspeed_samples = [] if track_angular else None
             if track_acceleration:
                 if v_start_override is not None:
                     v_start_y = float(v_start_override)
@@ -1675,7 +1731,7 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
             while viewer.is_running() and data.time < duration:
                 step_start = time.time()
                 set_angle_to_joint(model, data, target_angle_deg=target_angles, light_bounds=light_bounds,
-                                    light_target_angles=light_target_angles)
+                                    light_target_angles=light_target_angles, frame=frame)
                 mujoco.mj_step(model, data)
                 mujoco.mj_subtreeVel(model, data)
 
@@ -1683,14 +1739,11 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
                     logger.error("MuJoCo warning during '%s' stage - stopping it early.", stage_name)
                     break
 
-                if track_angular:
-                    angspeed_samples.append(module1_angular_speed_degps())
-
                 current_second = int(data.time)
                 if current_second != last_print:
                     last_print = current_second
                     if light_bounds is not None:
-                        get_light_sensor_values(model, data, light_bounds=light_bounds)
+                        get_light_sensor_values(model, data, light_bounds=light_bounds, frame=frame)
 
                 viewer.sync()
                 time_until_next_step = dt - (time.time() - step_start)
@@ -1701,18 +1754,24 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
             data.xfrc_applied.fill(0)
 
             elapsed = data.time if data.time > 0 else duration
+            displacement_xy = get_com_position(data)[:2] - com_start[:2]
             displacement = float(np.linalg.norm(get_com_position(data) - com_start))
             avg_linear_mps = displacement / elapsed if elapsed > 0 else 0.0
             logger.info("Light test stage '%s' done. Avg linear velocity: %.3f mm/s",
                         stage_name, avg_linear_mps * 1000)
-            result = {"avg_linear_mps": avg_linear_mps}
+            # Net XY displacement vector (not just speed magnitude) - lets
+            # the caller check whether the robot actually moved TOWARD or
+            # AWAY from the light's own position, independent of module_1's
+            # own yaw rotation (a body can rotate to face the light while
+            # its net translation still drifts the other way, e.g. from a
+            # non-driving-wheel-like stick-slip gait).
+            result = {"avg_linear_mps": avg_linear_mps, "displacement_xy": displacement_xy}
 
             if track_angular:
                 yaw_diff = ((module1_yaw_deg() - yaw_start + 180) % 360) - 180
-                result["avg_angular_degps"] = float(np.mean(angspeed_samples)) if angspeed_samples else 0.0
                 result["yaw_rotation_deg"] = float(yaw_diff)
-                logger.info("Light test stage '%s': avg angular velocity %.2f deg/s, net yaw rotation %.2f deg",
-                            stage_name, result["avg_angular_degps"], result["yaw_rotation_deg"])
+                logger.info("Light test stage '%s': net yaw rotation %.2f deg",
+                            stage_name, result["yaw_rotation_deg"])
 
             if track_acceleration:
                 v_end_y = float(get_com_velocity(data)[1])
@@ -1735,90 +1794,79 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
         # artificial at-rest 0 (reset_to_initial_pose() zeros qvel).
         model.light_active[light_id] = 0
         reset_to_initial_pose()
-        results["baseline"] = run_stage("baseline (no light)", LIGHT_TEST_BASELINE_DURATION)
+        results["baseline"] = run_stage("baseline (no light)", LIGHT_TEST_BASELINE_DURATION, track_angular=True)
         model.light_active[light_id] = 1
 
-        # ---- Reorient the settled pose (once, from the baseline direction)
-        # so the assembly's lightless direction of travel faces the live
-        # viewer camera -- every stage from here on (including baseline's
-        # own reset target for reference, though baseline itself already
-        # ran) resets to this reoriented pose instead of the original one.
+        # ---- Travel-aligned local frame from the baseline stage's own
+        # measured direction (falls back to world +Y if that travel was too
+        # small to trust). The robot's qpos is NEVER rotated to face
+        # anything - physically rotating an already-settled, contact-
+        # consistent pose turned out to risk tipping a marginal design over
+        # before the light stages even start. Only the light-patch bounds/
+        # positions below are expressed in this frame (see
+        # assembly_local_bounds/world_to_local_xy/local_to_world_xy) -
+        # run_headless_light_tests() uses the identical approach.
         baseline_end_com = get_com_position(data)
         travel_xy = baseline_end_com[:2] - initial_com[:2]
         travel_dist = float(np.linalg.norm(travel_xy))
         if travel_dist < LIGHT_TEST_MIN_BASELINE_TRAVEL:
             logger.warning(
                 "Baseline moved only %.4f mm (< %.4f mm) - direction of travel isn't "
-                "well-defined, skipping camera-facing reorientation.",
+                "well-defined, defaulting light-patch frame to world +Y.",
                 travel_dist * 1000, LIGHT_TEST_MIN_BASELINE_TRAVEL * 1000,
             )
+            forward = np.array([0.0, 1.0])
         else:
-            travel_dir = travel_xy / travel_dist
+            forward = travel_xy / travel_dist
 
             # "Head" = whichever module ends up furthest along the baseline
-            # direction of travel, not a fixed module_1 -- logged for
-            # visibility, though the rotation itself only needs travel_dir.
-            module_labels = find_module_labels(model)
+            # direction of travel, not a fixed module_1 -- purely for
+            # visibility in the log.
             head_name, head_proj = None, -np.inf
-            for body_id, name in module_labels.items():
-                proj = float(np.dot(data.xpos[body_id][:2] - initial_com[:2], travel_dir))
+            for body_id, name in find_module_labels(model).items():
+                proj = float(np.dot(data.xpos[body_id][:2] - initial_com[:2], forward))
                 if proj > head_proj:
                     head_name, head_proj = name, proj
+            logger.info("Baseline travel dist %.3f mm, head module '%s'.", travel_dist * 1000, head_name)
 
-            # Direction from the assembly to the live camera (MuJoCo free-camera
-            # convention: campos = lookat - distance*(cos(el)cos(az), cos(el)sin(az), sin(el)),
-            # verified directly against mjv_updateScene while building this),
-            # projected onto the floor since only the horizontal heading matters.
-            az, el = np.radians(viewer.cam.azimuth), np.radians(viewer.cam.elevation)
-            camera_dir_xy = np.array([-np.cos(el) * np.cos(az), -np.cos(el) * np.sin(az)])
-            camera_dist = float(np.linalg.norm(camera_dir_xy))
-            if camera_dist < 1e-6:
-                logger.warning("Camera is looking straight down (no horizontal component) - "
-                                "skipping camera-facing reorientation.")
-            else:
-                camera_dir = camera_dir_xy / camera_dist
-                angle = float(np.arctan2(
-                    travel_dir[0] * camera_dir[1] - travel_dir[1] * camera_dir[0],
-                    travel_dir[0] * camera_dir[0] + travel_dir[1] * camera_dir[1],
-                ))
-                logger.info(
-                    "Baseline travel dist %.3f mm, head module '%s'; rotating settled pose "
-                    "%.2f deg about Z so that direction faces the camera.",
-                    travel_dist * 1000, head_name, np.degrees(angle),
-                )
+        origin_xy = initial_com[:2]
+        frame = (origin_xy, forward)
 
-                c, s = np.cos(angle), np.sin(angle)
-                q_rot = np.array([np.cos(angle / 2.0), 0.0, 0.0, np.sin(angle / 2.0)])
-                new_quat = np.zeros(4)
-                for body_id in module_labels:
-                    joint_id = model.body_jntadr[body_id]
-                    qadr = model.jnt_qposadr[joint_id]
-                    x, y = initial_qpos[qadr], initial_qpos[qadr + 1]
-                    dx, dy = x - initial_com[0], y - initial_com[1]
-                    initial_qpos[qadr] = initial_com[0] + dx * c - dy * s
-                    initial_qpos[qadr + 1] = initial_com[1] + dx * s + dy * c
-                    # z (qadr+2) is untouched -- pure yaw about the world Z axis.
-                    mujoco.mju_mulQuat(new_quat, q_rot, initial_qpos[qadr + 3:qadr + 7])
-                    initial_qpos[qadr + 3:qadr + 7] = new_quat
+        # Purely cosmetic: point the VIEWER CAMERA so the robot appears to
+        # walk toward it during "left"/"front" below - this only moves the
+        # camera, never the robot's own pose (unlike the old camera-facing
+        # reorientation this replaced, which rotated the robot instead and
+        # risked tipping a marginal design over). MuJoCo's free-camera
+        # convention: campos = lookat - distance*(cos(el)cos(az), cos(el)sin(az), sin(el)),
+        # so the floor-projected viewing direction (camera -> lookat) is
+        # proportional to (cos(el)cos(az), cos(el)sin(az)) - azimuth is
+        # chosen so that direction is -forward (i.e. the robot's travel
+        # direction points from the scene toward the camera).
+        viewer.cam.lookat[:2] = origin_xy
+        viewer.cam.azimuth = float(np.degrees(np.arctan2(-forward[1], -forward[0])))
 
-        # Whether or not a rotation was applied above, settle back onto
-        # (the possibly-updated) initial_qpos before measuring bounds, so
-        # every stage below is sized/positioned against the same reference
-        # pose it will actually reset to.
+        # Back onto the (untouched) settled pose before measuring bounds,
+        # so every stage below is sized/positioned against the same
+        # reference pose it will actually reset to.
         reset_to_initial_pose()
 
         # Stages 1-3 are the same ceiling-mounted spotlight (real MuJoCo
         # <light>, d meters overhead, aimed straight down) -- only its
         # position and cutoff cone (sized to just cover the target half's
         # farthest corner) move between stages.
-        xy_min, xy_max = assembly_xy_bounds(model, data)
+        xy_min, xy_max = assembly_local_bounds(model, data, origin_xy, forward)
         mid_x = (xy_min[0] + xy_max[0]) / 2.0
         mid_y = (xy_min[1] + xy_max[1]) / 2.0
 
-        def _spot_ceiling_light(center_xy, bounds):
+        def _spot_ceiling_light(center_local_xy, bounds):
+            # center_local_xy/bounds are in the travel-aligned local frame;
+            # corner distances are rotation-invariant so max_r needs no
+            # conversion, but MuJoCo only understands world coordinates, so
+            # the light's actual position is converted via local_to_world_xy().
             x_lo, x_hi, y_lo, y_hi = bounds
             corners = ((x_lo, y_lo), (x_lo, y_hi), (x_hi, y_lo), (x_hi, y_hi))
-            max_r = max(float(np.hypot(cx - center_xy[0], cy - center_xy[1])) for cx, cy in corners)
+            max_r = max(float(np.hypot(cx - center_local_xy[0], cy - center_local_xy[1])) for cx, cy in corners)
+            center_xy = local_to_world_xy(center_local_xy, origin_xy, forward)
 
             model.light_type[light_id] = mujoco.mjtLightType.mjLIGHT_SPOT
             model.light_pos[light_id] = np.array([center_xy[0], center_xy[1], initial_com[2] + light_distance])
@@ -1831,43 +1879,98 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
         left_bounds = (xy_min[0], mid_x, xy_min[1], xy_max[1])  # left half in X, full depth in Y
         left_center = ((xy_min[0] + mid_x) / 2.0 - LIGHT_TEST_LEFT_EXTRA_OFFSET, mid_y)
         _spot_ceiling_light(left_center, left_bounds)
+        left_light_xy = local_to_world_xy(left_center, origin_xy, forward)
         results["left"] = run_stage("left", light_test_duration, light_bounds={light_id: left_bounds},
-                                     track_angular=True)
+                                     track_angular=True, frame=frame)
 
         # # ---- Stage 2: same spotlight, mirrored to cover only the right half of the body ----
         # reset_to_initial_pose()
         # right_bounds = (mid_x, xy_max[0], xy_min[1], xy_max[1])  # right half in X, full depth in Y
         # _spot_ceiling_light(((mid_x + xy_max[0]) / 2.0, mid_y), right_bounds)
         # results["right"] = run_stage("right", light_test_duration, light_bounds={light_id: right_bounds},
-        #                               track_angular=True)
+        #                               track_angular=True, frame=frame)
 
-        # ---- Stage 3: same spotlight, moved to cover only the front half (+Y) of the body ----
+        # ---- Stage 3: same spotlight, moved LIGHT_TEST_FRONT_EXTRA_OFFSET
+        # beyond the robot's own front edge (not its own front-half
+        # midpoint) - same depth as before, so the robot starts entirely in
+        # the dark and has to walk forward into the light. Hard light_bounds
+        # rectangle (same mechanism as "left") - a smooth inverse-square-only
+        # falloff here read as wrong in practice. ----
         reset_to_initial_pose()
-        front_bounds = (xy_min[0], xy_max[0], mid_y, xy_max[1])  # full width in X, front half in Y
-        front_center = (mid_x, (mid_y + xy_max[1]) / 2.0 + LIGHT_TEST_FRONT_EXTRA_OFFSET)
+        front_depth = xy_max[1] - mid_y
+        front_y_lo = xy_max[1] + LIGHT_TEST_FRONT_EXTRA_OFFSET
+        front_y_hi = front_y_lo + front_depth
+        front_bounds = (xy_min[0], xy_max[0], front_y_lo, front_y_hi)  # full width in X
+        front_center = (mid_x, (front_y_lo + front_y_hi) / 2.0)
         _spot_ceiling_light(front_center, front_bounds)
+        front_light_xy = local_to_world_xy(front_center, origin_xy, forward)
         results["front"] = run_stage("front", light_test_duration, light_bounds={light_id: front_bounds},
                                       track_acceleration=True,
-                                      v_start_override=results["baseline"]["avg_linear_mps"])
+                                      v_start_override=results["baseline"]["avg_linear_mps"], frame=frame)
 
     mujoco.set_mjcb_control(None)
 
+    # pheromone_yaw_response_deg / pheromone_speed_response, computed the
+    # same way as objectives_api.py's f6/f7 (see run_headless_light_tests),
+    # but against THIS run's own freshly-measured no-light baseline stage
+    # rather than the primary gait rollout's baseline stand-in - so these
+    # numbers are the more direct measurement, not expected to match
+    # ind{i}_stats.json's f6/f7 exactly (see run_headless_light_tests'
+    # docstring for why it cuts a dedicated baseline stage there).
+    baseline, left, front = results["baseline"], results["left"], results["front"]
+    baseline_yaw = baseline.get("yaw_rotation_deg", 0.0)
+    # Re-wrap the difference of two already-wrapped angles into (-180, 180]
+    # - without this, a pair straddling the wraparound boundary (e.g.
+    # left=+170, baseline=-170) reports +340 instead of the true -20.
+    pheromone_yaw_response_deg = ((left["yaw_rotation_deg"] - baseline_yaw + 180) % 360) - 180
+    baseline_v = baseline["avg_linear_mps"]
+    pheromone_speed_response = (
+        (front["avg_linear_mps"] - baseline_v) / baseline_v if baseline_v else 0.0
+    )
+
+    # Sign conventions match objectives_api.py's f6/f7: positive yaw
+    # response = turned TOWARD the stimulus, negative = away; positive
+    # speed response = sped up, negative = slowed down.
+    if pheromone_yaw_response_deg > 0:
+        turn_desc = "rotated TOWARD the light"
+    elif pheromone_yaw_response_deg < 0:
+        turn_desc = "rotated AWAY from the light"
+    else:
+        turn_desc = "no net rotation"
+    if pheromone_speed_response > 0:
+        speed_desc = "ACCELERATED"
+    elif pheromone_speed_response < 0:
+        speed_desc = "DECELERATED"
+    else:
+        speed_desc = "no change"
+
+    # Net TRANSLATION toward/away from the light, independent of
+    # module_1's own yaw rotation - the two can disagree (e.g. the body
+    # rotates to face the light while its net stick-slip drift still
+    # carries it the other way), which is exactly what yaw alone can't
+    # catch. dot(displacement, direction-to-light) > 0 means the stage's
+    # net COM movement had a component toward the light, not just that the
+    # body's orientation ended up facing it.
+    def _translation_desc(displacement_xy, light_xy):
+        direction_to_light = np.asarray(light_xy) - origin_xy
+        if np.linalg.norm(direction_to_light) < 1e-9:
+            return "light at robot's own position - undefined"
+        moved = np.dot(displacement_xy, direction_to_light)
+        if moved > 0:
+            return "moved TOWARD the light"
+        if moved < 0:
+            return "moved AWAY from the light"
+        return "no net translation toward/away"
+
+    left_translation_desc = _translation_desc(left["displacement_xy"], left_light_xy)
+    front_translation_desc = _translation_desc(front["displacement_xy"], front_light_xy)
+
     print("\n=== run_light_tests summary ===")
-    print(f"Baseline (no light, {LIGHT_TEST_BASELINE_DURATION:.1f}s): "
-          f"avg linear velocity = {results['baseline']['avg_linear_mps'] * 1000:.3f} mm/s")
-    for stage_name in ("left", "right"):
-        r = results.get(stage_name)
-        if r is None:
-            continue
-        if "avg_angular_degps" in r:
-            print(f"Stage '{stage_name}': avg angular velocity = {r['avg_angular_degps']:.2f} deg/s, "
-                  f"net yaw rotation = {r['yaw_rotation_deg']:.2f} deg")
-        else:
-            print(f"Stage '{stage_name}': angular tracking unavailable (no 'free_module_1' joint)")
-    front = results["front"]
-    print(f"Stage 'front': avg linear velocity = {front['avg_linear_mps'] * 1000:.3f} mm/s "
-          f"| v_start_y = {front['v_start_y_mps'] * 1000:.3f} mm/s, v_end_y = {front['v_end_y_mps'] * 1000:.3f} mm/s, "
-          f"avg accel_y = {front['avg_accel_y_mps2'] * 1000:.3f} mm/s^2")
+    print(f"No light - avg velocity: {baseline_v * 1000:.3f} mm/s")
+    print(f"Left stage - pheromone_yaw_response_deg: {pheromone_yaw_response_deg:.2f} deg "
+          f"({turn_desc}); {left_translation_desc}")
+    print(f"Front stage - avg velocity: {front['avg_linear_mps'] * 1000:.3f} mm/s, "
+          f"pheromone_speed_response: {pheromone_speed_response:.4f} ({speed_desc}); {front_translation_desc}")
 
 
 if __name__ == "__main__":
@@ -1875,7 +1978,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--m", type=str, default="../models/assembly.xml",
-        # "--m", type=str, default="D:\\microrobotics\\output\\evolution_run\\generation_59\\ind0_assembly.xml",
+        #"--m", type=str, default="D:\\microrobotics\\output\\evolution_run\\generation_59\\ind1_assembly.xml",
         help="MJCF model path to run in the live viewer",
     )
 

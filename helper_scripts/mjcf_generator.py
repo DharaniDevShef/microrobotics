@@ -220,10 +220,24 @@ class ModuleCollisionError(ValueError):
 
 
 def _assert_no_unintended_collisions(xml_path, G, fold_joints):
-    """Load the just-written model, evaluate contacts at both the flat
-    (qpos0) pose and the fully-folded pose (every hinge driven to its
-    graph's `hinge_angle`), and raise if any geom of one module
-    touches/interpenetrates a geom of a *different* module in either pose.
+    """Load the just-written model, evaluate contacts at the flat (qpos0)
+    pose, the fully-folded pose (every hinge driven to its graph's
+    `hinge_angle`), and - if the graph has any light-sensitive joint at
+    all - a light-triggered pose (every light-sensitive hinge driven to
+    its own `light_hinge_angle` instead, everything else left at its
+    already-settled baseline fold), raising if any geom of one module
+    touches/interpenetrates a geom of a *different* module in any of them.
+
+    The light-triggered pose exists because `light_hinge_angle` (Design
+    Variable 6) is free to land anywhere in [0, 45] deg independent of the
+    baseline `hinge_angle` (roblet_grammar.mutate_light_hinge_angle) - a
+    genotype that's perfectly collision-free in its baseline fold can still
+    self-intersect the moment a real light stimulus actually triggers it,
+    and that was never checked here before. Only the ALL-triggered-at-once
+    case is checked (matching a full-width "front" stimulus, the most
+    common and geometrically extreme case) rather than every subset of
+    light-sensitive joints - a full 2^n sweep isn't tractable to run on
+    every collision check.
 
     Mated module pairs (joined by a graph edge) already have every
     body-body pair excluded in <contact> (see step 7b above), so MuJoCo
@@ -286,6 +300,27 @@ def _assert_no_unintended_collisions(xml_path, G, fold_joints):
         for _ in range(300):
             mujoco.mj_step(model, data)
         bad |= contacts_now("folded")
+
+        # ---- light-triggered pose (Design Variables 5/6) ----
+        # Continues from the already-settled baseline-folded state above
+        # (not a fresh reset) and only changes the light-sensitive joints'
+        # own ctrl targets, matching how a real "front" stage actually
+        # reaches this pose - reset_to_initial_pose() back to the settled
+        # baseline fold, then override just the triggered joints.
+        light_sensitive_idx = [
+            idx for idx, num_id in enumerate(fold_joints)
+            if G.nodes[f"module_{num_id}"].get("light_sensitive", False)
+        ]
+        if light_sensitive_idx:
+            for idx in light_sensitive_idx:
+                num_id = fold_joints[idx]
+                m_type = G.nodes[f"module_{num_id}"]["module_type"]
+                sign = 1.0 if m_type == "valley fold" else -1.0
+                light_angle_rad = sign * np.radians(G.nodes[f"module_{num_id}"].get("light_hinge_angle", 0.0))
+                data.ctrl[idx] = light_angle_rad
+            for _ in range(300):
+                mujoco.mj_step(model, data)
+            bad |= contacts_now("light_triggered")
 
     if bad:
         details = "\n".join(

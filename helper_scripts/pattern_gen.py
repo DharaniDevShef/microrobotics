@@ -54,6 +54,7 @@ class AssemblyGrid(QWidget):
                 'type': 'inner',
                 'line_states': [0, 0, 0],
                 'hinge_angle': 45.0,
+                'light_hinge_angle': 15.0,
             }
             
             outer_key = f'module_{count}'
@@ -69,6 +70,7 @@ class AssemblyGrid(QWidget):
                 'type': 'outer',
                 'line_states': [0, 0, 0],
                 'hinge_angle': 45.0,
+                'light_hinge_angle': 15.0,
             }
 
     # =====================================================
@@ -139,11 +141,22 @@ class AssemblyGrid(QWidget):
                     module_type = "valley fold"
                     break
                     
+            # Design Variables 5/6 (roblet_grammar.py's pheromone-response
+            # schema): every foldable module's joint doubles as a
+            # light-sensitive one here - a rigid module has no hinge to
+            # mount a sensor on, so it never gets light_sensitive=True (see
+            # mjcf_generator.py's is_light_sensitive, which is gated the
+            # same way). light_hinge_angle defaults to 15 deg - hand-edit
+            # the exported graph JSON afterward for a different trigger
+            # angle (valid range is the same [0, 45] deg as hinge_angle).
+            is_foldable = module_type != "non-foldable"
             raw_G.add_node(
                 key,
                 module_type=module_type,
                 connectors={1: None, 2: None, 3: None},
                 hinge_angle=info.get('hinge_angle', 0.0),
+                light_sensitive=is_foldable,
+                light_hinge_angle=info.get('light_hinge_angle', 15.0) if is_foldable else 0.0,
                 _pos=info['pos'],
                 _angle=info['angle'],
                 _type=info['type'],
@@ -272,6 +285,7 @@ class AssemblyGrid(QWidget):
         
         for node, attrs in G.nodes(data=True):
             hinge_angle = attrs.get('hinge_angle', 0.0)
+            light_hinge_angle = attrs.get('light_hinge_angle', 15.0)
             pos = attrs.get('_pos', (0.0, 0.0))
             angle = attrs.get('_angle', 0.0)
             module_type = attrs.get('_type', 'outer')
@@ -289,6 +303,7 @@ class AssemblyGrid(QWidget):
             
             self.modules[node] = {
                 'hinge_angle': hinge_angle,
+                'light_hinge_angle': light_hinge_angle,
                 'pos': tuple(pos),
                 'angle': angle,
                 'active': True,
@@ -510,6 +525,7 @@ class AssemblyGrid(QWidget):
                                 'type': 'outer',
                                 'line_states': [0, 0, 0],
                                 'hinge_angle': 45.0,
+                                'light_hinge_angle': 15.0,
                             }
                             self.update()
                             self.notify_graph_update()

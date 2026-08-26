@@ -1977,8 +1977,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
 
     parser.add_argument(
-        "--m", type=str, default="../models/assembly.xml",
-        #"--m", type=str, default="D:\\microrobotics\\output\\evolution_run\\generation_59\\ind1_assembly.xml",
+        #"--m", type=str, default="../models/assembly.xml",
+        "--m", type=str, default="D:\\microrobotics\\output\\evolution_run\\generation_9\\ind0_assembly.xml",
         help="MJCF model path to run in the live viewer",
     )
 

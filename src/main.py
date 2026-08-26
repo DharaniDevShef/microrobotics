@@ -157,9 +157,11 @@ def main():
                 for g, obj, ind_id in zip(population, log["survivor_objectives"], log["survivor_ind_ids"])
             ]
             plotting_api.append_generation_population(gen, records, OUTPUT_DIR)
-            plotting_api.plot_pareto_front(gen, records, OUTPUT_DIR)
+            plotting_api.plot_pareto_front_last_gen(OUTPUT_DIR)
+            plotting_api.plot_pareto_parallel_coordinates(OUTPUT_DIR)
             plotting_api.plot_fitness_trends(OUTPUT_DIR)
             plotting_api.plot_convergence(OUTPUT_DIR)
+            plotting_api.plot_entropy_vs_velocity(OUTPUT_DIR)
             plotting_api.plot_rl_diagnostics(ppo_trainer.history, OUTPUT_DIR)
 
             # objectives_api.scalarize() - the SAME function moo_api.py uses
@@ -167,15 +169,14 @@ def main():
             # _aggregate_fitness() now calls too - so "Individual index" below
             # always names the exact ind_id whose XML/screenshot is the UI's
             # #1 Population card, not just whichever happens to have the best
-            # f2 (velocity) alone. Sign-corrects "minimize" objectives (per
-            # MAXIMIZE) before summing, unlike a raw sum, so this stays correct
-            # once f3/f4/f5 stop being placeholder zeros.
+            # f1 (velocity) alone. Sign-corrects "minimize" objectives (per
+            # MAXIMIZE) before summing, unlike a raw sum.
             best = max(records, key=lambda r: objectives_api.scalarize(r["objectives"]))
             logger.info(
                 "parents=%d offspring=%d collided=%d | survivors=%d | "
-                "best f2 (velocity)=%.4f m/s | Individual index: %d",
+                "best f1 (velocity)=%.4f m/s | Individual index: %d",
                 log['n_parents'], log['n_offspring'], log['n_collided'],
-                len(population), best['objectives']['f2_forward_velocity_folded'], best['ind_id'],
+                len(population), best['objectives']['f1_folded_gait_velocity'], best['ind_id'],
             )
 
             # Per-generation n_parents/n_offspring/n_collided, appended

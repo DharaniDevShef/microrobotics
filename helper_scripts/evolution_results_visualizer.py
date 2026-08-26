@@ -69,13 +69,26 @@ def load_population_history() -> dict:
     """out_dir/population_history.json (plotting_api.append_generation_population)
     - one growing file for the whole run instead of a separate
     generation_{gen}_population.json per generation. Returns
-    {generation_idx: [records...]}, {} if the run hasn't written one yet."""
+    {generation_idx: [records...]}, {} if the run hasn't written one yet.
+
+    Every record's objectives dict is run through
+    objectives_api.migrate_legacy_objectives() here, so this visualizer
+    can open an OLDER run's output folder (pre-renumbering f1..f7 objective
+    names) exactly the same as a current one - _aggregate_fitness()/
+    _format_metrics_text() below only ever need to know about the CURRENT
+    OBJECTIVE_NAMES schema."""
     path = OUTPUT_DIR / "population_history.json"
     if not path.exists():
         return {}
     with path.open("r", encoding="utf-8") as f:
         history = json.load(f)
-    return {entry["generation"]: entry["population"] for entry in history}
+    result = {}
+    for entry in history:
+        population = entry["population"]
+        for record in population:
+            record["objectives"] = objectives_api.migrate_legacy_objectives(record["objectives"])
+        result[entry["generation"]] = population
+    return result
 
 
 def load_breeding_events(generation_idx: int) -> Optional[dict]:

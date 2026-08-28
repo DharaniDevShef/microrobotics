@@ -10,6 +10,7 @@ every axis, no default matplotlib grey-on-grey look.
 """
 
 import json
+import logging
 import os
 
 import matplotlib
@@ -23,7 +24,33 @@ from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 
 import objectives_api as obj_api
 
+logger = logging.getLogger(__name__)
+
 DPI = 600
+
+
+def _save_fig(fig, path, **savefig_kwargs):
+    """Saves and closes `fig`, but never lets a failed write (the PNG open
+    in an image viewer/IDE preview, a virus scanner or sync client holding
+    a transient lock - the OSError this raises on Windows varies:
+    PermissionError, or "[Errno 22] Invalid argument") propagate out of a
+    plotting call. main.py calls these once per generation, AFTER the
+    (expensive) simulation/breeding work is done and BEFORE
+    checkpoint.save() - an uncaught exception here would abort the whole
+    generation loop and force a resume to re-run that entire generation's
+    simulation just to regenerate a picture. Logs a warning and returns
+    None instead."""
+    try:
+        fig.savefig(path, dpi=DPI, **savefig_kwargs)
+    except OSError:
+        logger.warning(
+            "Could not save plot to %s (file may be open in another program) - skipping this plot.",
+            path, exc_info=True,
+        )
+        path = None
+    finally:
+        plt.close(fig)
+    return path
 
 
 def _integer_x_axis(ax):
@@ -265,9 +292,7 @@ def plot_pareto_front_last_gen(out_dir, filename="pareto_front_last_gen.png"):
     fig.tight_layout()
 
     path = os.path.join(out_dir, filename)
-    fig.savefig(path, dpi=DPI, bbox_inches="tight")
-    plt.close(fig)
-    return path
+    return _save_fig(fig, path, bbox_inches="tight")
 
 
 def plot_pareto_parallel_coordinates(out_dir, filename="pareto_parallel_coordinates.png"):
@@ -335,9 +360,7 @@ def plot_pareto_parallel_coordinates(out_dir, filename="pareto_parallel_coordina
     fig.tight_layout()
 
     path = os.path.join(out_dir, filename)
-    fig.savefig(path, dpi=DPI, bbox_inches="tight")
-    plt.close(fig)
-    return path
+    return _save_fig(fig, path, bbox_inches="tight")
 
 
 def plot_fitness_trends(out_dir):
@@ -370,9 +393,7 @@ def plot_fitness_trends(out_dir):
     fig.tight_layout(rect=(0, 0, 1, 0.96))
 
     path = os.path.join(out_dir, "fitness_trends.png")
-    fig.savefig(path, dpi=DPI)
-    plt.close(fig)
-    return path
+    return _save_fig(fig, path)
 
 
 def plot_entropy_vs_velocity(out_dir, filename="entropy_vs_velocity.png"):
@@ -410,9 +431,7 @@ def plot_entropy_vs_velocity(out_dir, filename="entropy_vs_velocity.png"):
     fig.tight_layout()
 
     path = os.path.join(out_dir, filename)
-    fig.savefig(path, dpi=DPI)
-    plt.close(fig)
-    return path
+    return _save_fig(fig, path)
 
 
 def plot_convergence(out_dir):
@@ -443,9 +462,7 @@ def plot_convergence(out_dir):
     fig.tight_layout()
 
     path = os.path.join(out_dir, "convergence.png")
-    fig.savefig(path, dpi=DPI)
-    plt.close(fig)
-    return path
+    return _save_fig(fig, path)
 
 
 def append_generation_stats(gen_idx, log, out_dir):
@@ -558,9 +575,7 @@ def plot_rl_vs_baseline_comparison(run_dirs, comparison_out_dir, filename="rl_vs
     fig.suptitle("RL-Assisted vs. Random-Baseline Genetic Operations", fontsize=15, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     path = os.path.join(comparison_out_dir, filename)
-    fig.savefig(path, dpi=DPI)
-    plt.close(fig)
-    return path
+    return _save_fig(fig, path)
 
 
 def plot_rl_diagnostics(history, out_dir):
@@ -588,7 +603,7 @@ def plot_rl_diagnostics(history, out_dir):
         fig.tight_layout()
 
         path = os.path.join(out_dir, f"rl_diagnostics_{key}.png")
-        fig.savefig(path, dpi=DPI)
-        plt.close(fig)
-        paths[key] = path
+        saved = _save_fig(fig, path)
+        if saved:
+            paths[key] = saved
     return paths

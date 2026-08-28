@@ -12,6 +12,8 @@ import os
 import tempfile
 import time
 import xml.etree.ElementTree as ET
+from contextlib import ExitStack
+import imageio
 import matplotlib.pyplot as plt
 import mujoco
 import mujoco.viewer
@@ -34,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 # Physics constants
 # Magnetic field intensity (Tesla)
-B_INTENSITY = 0.01  # 10 mT
+B_INTENSITY = 0.02  # 10 mT
 # Candidate drive strengths for run_headless_b_sweep() -- the field a
 # morphology needs to overcome stiction and walk (rather than stall, or
 # over-drive into a rolling/tumbling gait) is morphology-dependent, so
@@ -59,8 +61,16 @@ WALL_STOP_DISTANCE = 200  # 200 mm
 # sim_executor.py's parallel subprocesses meant several large contexts
 # competing at once - a plausible source of the occasional renderer
 # failure some individuals were hitting.
-RENDER_WIDTH = 640
-RENDER_HEIGHT = 480
+RENDER_WIDTH = 1400
+RENDER_HEIGHT = 1080
+
+# run_light_tests()'s capture_video renderer is a separate, single-run
+# diagnostic path (not part of sim_executor.py's parallel evolution pool
+# that the RENDER_WIDTH/HEIGHT comment above warns about), so it can afford
+# to use the full offscreen buffer the model provisions (assembly.xml's
+# <global offwidth="1920" offheight="1080"/>) for maximum video quality.
+VIDEO_RENDER_WIDTH = 1920
+VIDEO_RENDER_HEIGHT = 1080
 
 # Pre-gait "settle" phase (see run_headless): how long to let the hinge
 # position actuators reach their evolved target angles - and the body
@@ -746,8 +756,13 @@ def _offscreen_camera(distance=0.25, lookat=(0, 0, 0)):
     """MjvCamera matching the live viewer's default zoom/lookat, for
     screenshots/video captured via mujoco.Renderer (no GUI window needed)."""
     camera = mujoco.MjvCamera()
-    camera.distance = distance
+    camera.distance = 0.11
     camera.lookat[:] = lookat
+
+    # Top view: looking straight down along -Z
+    camera.azimuth = 90
+    camera.elevation = -90
+
     return camera
 
 
@@ -1543,7 +1558,8 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
 
 
 def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TEST_DEFAULT_DURATION,
-                     light_distance=LIGHT_TEST_DEFAULT_DISTANCE):
+                     light_distance=LIGHT_TEST_DEFAULT_DISTANCE,
+                     capture_video=False, media_dir="../output", video_fps=30):
     """Light-response test: same live-viewer setup as run_with_viewer (load
     model, register the magnetic-field callback, real-time-paced mj_step
     loop, per-second logging), but instead of one continuous free-roam gait
@@ -1554,9 +1570,9 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
         -> stage "right" -> stage "front"
 
     Baseline: LIGHT_TEST_BASELINE_DURATION seconds of magnetic actuation
-    with the scene light off entirely (model.light_active = 0), so there's
-    a no-light reference avg linear velocity to compare the lit stages
-    against.
+    with the scene's normal (directional, non-spot) light on -- not the
+    spotlight fixture used by stages 1-3 -- so there's a no-spotlight
+    reference avg linear velocity to compare the lit stages against.
 
     Stages 1-3 all use the same fixture: a real MuJoCo spotlight --
     positioned `light_distance` m straight above the assembly (so
@@ -1613,6 +1629,20 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
     get_light_sensor_values() is called once per simulated second in each
     stage (prints only -- per-step light-sensor readings are not written to
     stats_output_path).
+
+    capture_video=True additionally records every stage (baseline, "left",
+    "front") through a SECOND, offscreen mujoco.Renderer -- same approach as
+    run_headless()'s GIF capture, just independent of the live viewer window
+    (and its real-time pacing/pause/close) so recording never depends on
+    what's on screen. Frames are captured at video_fps and streamed straight
+    to disk via an imageio ffmpeg writer (H.264, yuv420p, quality=10 -- the
+    top of imageio's 0-10 scale, which maps to -crf 0, i.e. lossless) rather
+    than buffered in memory, since a VIDEO_RENDER_WIDTH x VIDEO_RENDER_HEIGHT
+    run of this length would otherwise be several GB of raw frames. Saved to
+    f"{media_dir}/light_tests_{model_name}.mp4". A renderer/writer failure
+    (e.g. no GPU/EGL context available) only costs the video, exactly like
+    run_headless()'s screenshot/GIF guard -- the physics and printed summary
+    below are unaffected.
     """
     if not os.path.exists(model_path):
         logger.error("Could not find '%s'", model_path)
@@ -1657,8 +1687,57 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
 
     dt = model.opt.timestep
 
-    with mujoco.viewer.launch_passive(model, data) as viewer:
-        viewer.cam.distance = 1
+    # ---- offscreen video capture (independent of the live viewer window -
+    # see docstring). A renderer/writer construction failure only costs the
+    # video, never the light tests themselves. ----
+    video_renderer = None
+    video_writer = None
+    video_frame_stride = max(1, round(1.0 / (video_fps * dt)))
+    video_step_count = 0
+    if capture_video:
+        model_name = os.path.splitext(os.path.basename(model_path))[0]
+        try:
+            video_renderer = mujoco.Renderer(model, height=VIDEO_RENDER_HEIGHT, width=VIDEO_RENDER_WIDTH)
+            # distance=0.3 matches the live viewer's own zoom (viewer.cam.distance below).
+            video_camera = _offscreen_camera(distance=0.3)
+            os.makedirs(media_dir, exist_ok=True)
+            video_path = os.path.join(media_dir, f"light_tests_{model_name}.mp4")
+            video_writer = imageio.get_writer(
+                video_path, fps=video_fps, codec="libx264", quality=10,
+                pixelformat="yuv420p", macro_block_size=1,
+            )
+        except Exception:
+            logger.exception(
+                "Could not create offscreen video renderer/writer for '%s' - "
+                "continuing without video capture.", model_path,
+            )
+            if video_renderer is not None:
+                video_renderer.close()
+            video_renderer = None
+            video_writer = None
+
+    def capture_video_frame():
+        nonlocal video_step_count
+        video_step_count += 1
+        if video_renderer is None or video_writer is None:
+            return
+        if video_step_count % video_frame_stride != 0:
+            return
+        video_renderer.update_scene(data, camera=video_camera)
+        video_writer.append_data(video_renderer.render())
+
+    with ExitStack() as video_stack:
+        # Closing the video writer/renderer via ExitStack (rather than a
+        # try/finally around the whole function) means they get cleaned up
+        # on every exit path out of this "with" -- including the early
+        # `return`s in the settle loop below -- without having to wrap (and
+        # re-indent) the entire viewer session.
+        if video_writer is not None:
+            video_stack.callback(video_writer.close)
+        if video_renderer is not None:
+            video_stack.callback(video_renderer.close)
+        viewer = video_stack.enter_context(mujoco.viewer.launch_passive(model, data))
+        viewer.cam.distance = 0.3
         viewer.cam.lookat[:] = [0, 0, 0]
 
         # ---- set hinge angle: settle to the folded pose before anything else ----
@@ -1745,6 +1824,8 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
                     if light_bounds is not None:
                         get_light_sensor_values(model, data, light_bounds=light_bounds, frame=frame)
 
+                capture_video_frame()
+
                 viewer.sync()
                 time_until_next_step = dt - (time.time() - step_start)
                 if time_until_next_step > 0:
@@ -1787,15 +1868,16 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
 
         results = {}
 
-        # ---- Baseline: move with no light active at all, before any light stage ----
+        # ---- Baseline: move with the scene's normal (directional, non-spot)
+        # light on, before any spotlight stage ----
         # Its avg_linear_mps becomes the front stage's v_start_override
         # below, so that stage's acceleration is measured from the
-        # assembly's actual lightless cruising speed, not from an
+        # assembly's actual no-spotlight cruising speed, not from an
         # artificial at-rest 0 (reset_to_initial_pose() zeros qvel).
-        model.light_active[light_id] = 0
+        model.light_type[light_id] = mujoco.mjtLightType.mjLIGHT_DIRECTIONAL
+        model.light_active[light_id] = 1
         reset_to_initial_pose()
         results["baseline"] = run_stage("baseline (no light)", LIGHT_TEST_BASELINE_DURATION, track_angular=True)
-        model.light_active[light_id] = 1
 
         # ---- Travel-aligned local frame from the baseline stage's own
         # measured direction (falls back to world +Y if that travel was too
@@ -1978,7 +2060,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         #"--m", type=str, default="../models/assembly.xml",
-        "--m", type=str, default="D:\\microrobotics\\output\\evolution_run\\generation_9\\ind0_assembly.xml",
+        "--m", type=str, default="D:\\microrobotics\\output\\evolution_run\\generation_59\\ind5_assembly.xml",
         help="MJCF model path to run in the live viewer",
     )
 
@@ -1988,7 +2070,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--max_sim_time", type=float, default=300.0,
+        "--max_sim_time", type=float, default=7.0,
         help="Maximum simulation time in seconds (for headless runs)",
     )
 
@@ -2035,6 +2117,16 @@ if __name__ == "__main__":
              f"in each stage (default: {LIGHT_TEST_DEFAULT_DISTANCE}).",
     )
     parser.add_argument(
+        "--capture_video", action="store_true",
+        help="With --light_tests, also save a high-quality MP4 of every stage "
+             "(baseline/left/front), captured via an offscreen renderer independent "
+             "of the live viewer window.",
+    )
+    parser.add_argument(
+        "--video_fps", type=int, default=30,
+        help="With --light_tests --capture_video, output frames per second (default: 30).",
+    )
+    parser.add_argument(
         "--log-file", type=str, default=None,
         help="Optional log file path to write simulator logs to.",
     )
@@ -2065,6 +2157,8 @@ if __name__ == "__main__":
         run_light_tests(
             args.m, args.o, light_test_duration=args.light_test_duration,
             light_distance=args.light_distance,
+            capture_video=args.capture_video, video_fps=args.video_fps,
+            media_dir=os.path.dirname(args.o) or ".",
         )
     elif args.headless:
         if args.sweep_b:

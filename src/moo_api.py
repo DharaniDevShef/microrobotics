@@ -95,7 +95,7 @@ def _graph_hash(G):
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _is_collision_free(G, scratch_dir):
+def _is_collision_free(G, scratch_dir, rng):
     """True if the FULL mirrored graph (symmetry.build_symmetric_graph(G))
     builds cleanly through mjcf_generator.build_assembly's own 3D
     collision check (check_collisions=True - the same check
@@ -109,8 +109,16 @@ def _is_collision_free(G, scratch_dir):
     geometric collision, not a crash. Used to GATE a graph before it's
     accepted into the population at all - see sobol_seed_population() and
     make_children_collision_free() - rather than just detecting and
-    penalizing the collision after the fact during evaluation."""
+    penalizing the collision after the fact during evaluation.
+
+    Repairs `G` in place (rg.ensure_min_light_sensitive) right before
+    mirroring, so every graph that passes this gate - and therefore every
+    graph that ever reaches _prepare_assembly() later - is guaranteed to
+    have at least one light-sensitive joint whenever it has a foldable
+    module at all, regardless of whether it arrived here freshly seeded or
+    post-mutation."""
     os.makedirs(scratch_dir, exist_ok=True)
+    rg.ensure_min_light_sensitive(G, rng)
     try:
         full_G = symmetry.build_symmetric_graph(G)
     except symmetry.MirrorAnchorViolation:
@@ -140,7 +148,7 @@ def _build_collision_free_seed(rng, n_modules, type_weights, hinge_angle_fn, scr
             type_choices = [rng.choices(rg.MODULE_TYPES, weights=type_weights, k=1)[0] for _ in range(candidate_n)]
             G = rg.random_seed_graph(rng, candidate_n, module_type_choices=type_choices,
                                       hinge_angle_fn=hinge_angle_fn)
-            if _is_collision_free(G, scratch_dir):
+            if _is_collision_free(G, scratch_dir, rng):
                 return G
         if candidate_n <= rg.MIN_MODULES:
             logger.warning(
@@ -346,7 +354,7 @@ def make_children_collision_free(parent_a, parent_b, ppo_trainer, rng, scratch_d
             children, decision = make_children(parent_a, parent_b, ppo_trainer, rng, rl_assisted=rl_assisted)
         except rg.GraftPortConflict:
             continue
-        if all(_is_collision_free(child, scratch_dir) for child in children):
+        if all(_is_collision_free(child, scratch_dir, rng) for child in children):
             return children, decision
         if rl_assisted and decision is not None:
             ppo_trainer.record(decision, COLLISION_PENALTY)

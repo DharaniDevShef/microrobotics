@@ -503,6 +503,35 @@ def mutate_light_hinge_angle(G, target_node, new_angle):
     return G2
 
 
+def ensure_min_light_sensitive(G, rng):
+    """In place: guarantees at least one foldable module in G carries the
+    light-sensitive PVC strip (Design Variable 5), whenever G has any
+    foldable module at all. A no-op if one already exists, or if G has no
+    foldable module to mount one on.
+    rng - random number generator
+
+    Both Sobol seeding's per-module coin flip and mutation
+    (TOGGLE_LIGHT_SENSOR turning off the last sensitive module,
+    DELETE_NODE/PRUNE_SUBTREE removing its only carrier, GRAFT_SUBTREE/
+    SWAP_SUBTREES recombining away every sensitive node) can otherwise
+    legally produce a half-genotype with zero light-sensitive joints. Such
+    an individual can never trigger a reactive fold, so its
+    pheromone_yaw_response_deg/pheromone_speed_response would just be gait
+    chaos rather than a real pheromone response - a phantom reading, not a
+    zero. Called right before mirroring (symmetry.build_symmetric_graph)
+    so this holds for every genotype that ever reaches evaluation,
+    regardless of how it was produced."""
+    if any(G.nodes[n].get("light_sensitive", False) for n in G.nodes):
+        return G
+    foldable = [n for n in G.nodes if G.nodes[n]["module_type"] != "non-foldable"]
+    if not foldable:
+        return G
+    chosen = rng.choice(foldable)
+    G.nodes[chosen]["light_sensitive"] = True
+    G.nodes[chosen]["light_hinge_angle"] = round(float(rng.uniform(MIN_HINGE_ANGLE, MAX_HINGE_ANGLE)), 2)
+    return G
+
+
 def reconnect_port(G, target_node, old_port, new_port):
     if not compute_node_action_mask(G, target_node)[Action.RECONNECT_PORT]:
         raise ValueError(f"RECONNECT_PORT not allowed on {target_node}")
@@ -746,6 +775,12 @@ def random_seed_graph(rng, n_modules, module_type_choices=None, hinge_angle_fn=N
     # uniform-broadcast pattern as hinge_angle itself.
     foldable = [n for n in G.nodes if G.nodes[n]["module_type"] != "non-foldable"]
     selected = [n for n in foldable if light_sensitive_fn()]
+    if foldable and not selected:
+        # Every per-module coin flip landing False is a legal outcome of
+        # light_sensitive_fn(), but a seed with a foldable module and zero
+        # light-sensitive joints is not a valid genotype - see
+        # ensure_min_light_sensitive's docstring for why.
+        selected = [rng.choice(foldable)]
     if selected:
         if LIGHT_HINGE_ANGLE_MODE == "uniform":
             shared_light_angle = round(float(light_hinge_angle_fn()), 2)

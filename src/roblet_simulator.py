@@ -756,12 +756,12 @@ def _offscreen_camera(distance=0.25, lookat=(0, 0, 0)):
     """MjvCamera matching the live viewer's default zoom/lookat, for
     screenshots/video captured via mujoco.Renderer (no GUI window needed)."""
     camera = mujoco.MjvCamera()
-    camera.distance = 0.11
+    camera.distance = distance
     camera.lookat[:] = lookat
 
     # Top view: looking straight down along -Z
-    camera.azimuth = 90
-    camera.elevation = -90
+    # camera.azimuth = 90
+    # camera.elevation = -90
 
     return camera
 

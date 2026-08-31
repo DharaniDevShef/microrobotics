@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 DPI = 600
 
 
-def _save_fig(fig, path, **savefig_kwargs):
+def _save_fig(fig, path, dpi=DPI, **savefig_kwargs):
     """Saves and closes `fig`, but never lets a failed write (the PNG open
     in an image viewer/IDE preview, a virus scanner or sync client holding
     a transient lock - the OSError this raises on Windows varies:
@@ -39,9 +39,14 @@ def _save_fig(fig, path, **savefig_kwargs):
     checkpoint.save() - an uncaught exception here would abort the whole
     generation loop and force a resume to re-run that entire generation's
     simulation just to regenerate a picture. Logs a warning and returns
-    None instead."""
+    None instead.
+
+    dpi defaults to this module's usual DPI=600 "print quality" - pass an
+    explicit override (e.g. the RL-vs-baseline comparison plots' 300) for a
+    figure that's meant to be a quick screen/slide look rather than
+    archival print output."""
     try:
-        fig.savefig(path, dpi=DPI, **savefig_kwargs)
+        fig.savefig(path, dpi=dpi, **savefig_kwargs)
     except OSError:
         logger.warning(
             "Could not save plot to %s (file may be open in another program) - skipping this plot.",
@@ -202,15 +207,32 @@ def _population_costs_and_ranks(pop):
     return costs, rank
 
 
-def plot_pareto_front_last_gen(out_dir, filename="pareto_front_last_gen.png"):
+def plot_pareto_front_last_gen(out_dir, filename="pareto_front_last_gen.png", n_generations=5):
     """Single figure, 4 panels (f1 vs f2, f2 vs f3, f3 vs f4, f4 vs f1),
-    for the MOST RECENT generation only - replaces the old per-generation
-    parallel-coordinates plot_pareto_front(). Each axis is min-max
-    normalized within this generation's population; points are colored by
-    NSGA-III non-dominated rank (see _population_costs_and_ranks), with
-    rank-0 (the actual Pareto front) highlighted in a distinct color.
+    overlaying up to `n_generations` generations' own Pareto fronts (rank-0,
+    non-dominated members only - NonDominatedSorting run separately per
+    generation, never pooled across generations), evenly spaced across the
+    run (always including the first and last recorded generation) and
+    colored by generation (like plot_entropy_vs_velocity) - so how the
+    front actually MOVED over the run is visible directly, not just its
+    final-generation position.
 
-    No line joins the rank-0 points: each panel is a 2D slice of the full
+    Deliberately NOT "every individual from a few generations, colored by
+    generation" (that's already plot_entropy_vs_velocity, for f1 vs f2) -
+    keeping only each generation's rank-0 members is what keeps this a
+    Pareto-front plot rather than a general population-drift scatter: only
+    non-dominated points are ever shown, generation by generation.
+
+    Every panel is normalized against ONE shared basis - each objective's
+    min/max across every individual, every rank, every generation in the
+    WHOLE run (not just the plotted generations) - not the last-gen-only
+    per-population normalization _population_costs_and_ranks uses
+    elsewhere. A per-generation basis would make each selected
+    generation's front independently stretch to fill the full 0-1 axis
+    regardless of whether it actually improved, hiding the very movement
+    this plot exists to show.
+
+    No line joins a front's points: each panel is a 2D slice of the full
     4-objective front, and there's no guarantee that slice is monotonic
     the way a true 2-objective front is, so a connecting line would imply
     a curve shape that isn't actually there.
@@ -226,56 +248,50 @@ def plot_pareto_front_last_gen(out_dir, filename="pareto_front_last_gen.png"):
     generations = _load_all_generations(out_dir)
     if not generations:
         return None
-    gen_idx, pop = generations[-1]
-    if len(pop) < 2:
+
+    # Shared normalization basis: every individual, every rank, every
+    # generation in the run - see docstring for why this can't be
+    # per-generation once multiple generations share the same axes.
+    all_F = np.array([
+        obj_api.to_minimization_vector(entry["objectives"])
+        for _, pop in generations for entry in pop
+    ])
+    if len(all_F) == 0:
         return None
+    value_range = np.ptp(all_F, axis=0)
+    value_range[value_range == 0] = 1.0
+    f_min = all_F.min(axis=0)
+
+    # Up to n_generations, evenly spaced by index across every recorded
+    # generation, always including the first and last.
+    n_pick = min(n_generations, len(generations))
+    pick_idxs = np.unique(np.round(np.linspace(0, len(generations) - 1, n_pick)).astype(int))
+    selected = [generations[i] for i in pick_idxs]
 
     names = obj_api.OBJECTIVE_NAMES
     titles = [_OBJECTIVE_DISPLAY[n][0] for n in names]
-    costs, rank = _population_costs_and_ranks(pop)
-    max_rank = int(rank.max()) if len(rank) else 0
-
-    # Ranks 1-4 ("near front") get one flat light-blue color rather than
-    # their own gradient step - common practice for eyeballing the top few
-    # fronts together (see plot_pareto_front_last_gen's docstring for why
-    # rank 0 alone isn't always the most useful cut with 4 objectives).
-    # Rank 0 keeps its own distinct highlight color on top so the actual
-    # front is still identifiable at a glance, not folded into the same
-    # band as ranks 1-4.
-    NEAR_FRONT_MAX_RANK = 4
-    NEAR_FRONT_COLOR = "#8ecfff"
-
     pairs = [(0, 1), (1, 2), (2, 3), (3, 0)]
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     axes = axes.ravel()
-    cmap = plt.cm.plasma
+    cmap = plt.cm.viridis
+    gen_min, gen_max = selected[0][0], selected[-1][0]
+
+    sc = None
+    for gen_idx, pop in selected:
+        if len(pop) < 2:
+            continue
+        F = np.array([obj_api.to_minimization_vector(e["objectives"]) for e in pop])
+        front_idx = NonDominatedSorting().do(F)[0]
+        front_costs = (F[front_idx] - f_min) / value_range
+        gen_colors = np.full(len(front_idx), gen_idx)
+        for ax, (i, j) in zip(axes, pairs):
+            sc = ax.scatter(
+                front_costs[:, i], front_costs[:, j], c=gen_colors,
+                cmap=cmap, vmin=gen_min, vmax=max(gen_max, gen_min + 1),
+                s=70, alpha=0.9, edgecolors="#333333", linewidths=0.5,
+            )
 
     for ax, (i, j) in zip(axes, pairs):
-        far = rank > NEAR_FRONT_MAX_RANK
-        if far.any():
-            ax.scatter(
-                costs[far, i], costs[far, j], c=rank[far],
-                cmap=cmap, vmin=NEAR_FRONT_MAX_RANK + 1, vmax=max(max_rank, NEAR_FRONT_MAX_RANK + 1),
-                s=50, alpha=0.85, edgecolors="#333333", linewidths=0.5,
-                label=f"Rank > {NEAR_FRONT_MAX_RANK}",
-            )
-        near_front = (rank > 0) & (rank <= NEAR_FRONT_MAX_RANK)
-        if near_front.any():
-            ax.scatter(
-                costs[near_front, i], costs[near_front, j], color=NEAR_FRONT_COLOR, s=60,
-                edgecolors="#2a6f9e", linewidths=0.6, zorder=2, label=f"Rank 1-{NEAR_FRONT_MAX_RANK}",
-            )
-        # No connecting line here on purpose: a line only implies a real
-        # curve for a genuine 2-objective front. This is a 2D slice of a
-        # 4D front (see plot_pareto_front_last_gen's docstring) - nothing
-        # says that projection is monotonic, so joining rank-0 points by
-        # increasing x previously drew a zigzag that implied a shape that
-        # isn't actually there. Scatter only.
-        front = rank == 0
-        ax.scatter(
-            costs[front, i], costs[front, j], color="#00e5e5", s=90,
-            edgecolors="#005050", linewidths=0.8, zorder=3, label="Pareto front - rank 0",
-        )
         ax.set_xlabel(titles[i])
         ax.set_ylabel(titles[j])
         # Short title only - the full descriptive names are already on the
@@ -286,28 +302,35 @@ def plot_pareto_front_last_gen(out_dir, filename="pareto_front_last_gen.png"):
         ax.set_xlim(-0.05, 1.05)
         ax.set_ylim(-0.05, 1.05)
 
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.03), fontsize=10)
-    fig.suptitle(f"Pareto Front - Final Generation {gen_idx}", fontsize=15, fontweight="bold", y=1.06)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 0.92, 0.95))
+    if sc is not None:
+        cbar = fig.colorbar(sc, ax=axes.tolist(), fraction=0.05, pad=0.02)
+        cbar.set_label("Generation")
+        cbar.ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+    gens_str = ", ".join(str(g) for g, _ in selected)
+    fig.suptitle(f"Pareto Front Across Generations ({gens_str})", fontsize=15, fontweight="bold")
 
     path = os.path.join(out_dir, filename)
     return _save_fig(fig, path, bbox_inches="tight")
 
 
 def plot_pareto_parallel_coordinates(out_dir, filename="pareto_parallel_coordinates.png"):
-    """Parallel-coordinates view of the same last-generation population as
-    plot_pareto_front_last_gen: one axis per objective (f1..f4), one line
-    per individual crossing all four - shows tradeoffs across all
-    objectives at once instead of one pair at a time.
+    """Parallel-coordinates view of the MOST RECENT generation's population
+    only (plot_pareto_front_last_gen moved to overlaying several
+    generations' own fronts instead - see its docstring - so this is no
+    longer the "same population" as that plot): one axis per objective
+    (f1..f4), one line per individual crossing all four - shows tradeoffs
+    across all objectives at once instead of one pair at a time.
 
     Each axis plots costs' complement (1 - min-max-normalized cost), so
     "up" always means "better" on every axis regardless of that
-    objective's own maximize/minimize direction - same normalization
-    source (_population_costs_and_ranks) and the same 3-tier rank
-    coloring as plot_pareto_front_last_gen, so the two plots read
-    consistently: rank 0 (the actual front) in distinct cyan, ranks 1-4 in
-    flat light blue, rank 5+ in a plasma gradient by rank."""
+    objective's own maximize/minimize direction - normalized within this
+    one generation's population (_population_costs_and_ranks), with the
+    same 3-tier rank coloring this file used to also use for
+    plot_pareto_front_last_gen: rank 0 (the actual front) in distinct
+    cyan, ranks 1-4 in flat light blue, rank 5+ in a plasma gradient by
+    rank."""
     generations = _load_all_generations(out_dir)
     if not generations:
         return None
@@ -500,82 +523,160 @@ def _load_generation_stats(out_dir):
         return json.load(f)
 
 
-def plot_rl_vs_baseline_comparison(run_dirs, comparison_out_dir, filename="rl_vs_baseline_comparison.png"):
-    """The RL_ASSISTED_GENETIC_OPERATIONS comparison plot: overlays each
-    run's f1 (locomotion), f2 (shape-entropy delta), scalarized fitness
-    (convergence), and collision rate, one line per run, so the effect of
-    the learned policy vs. random_baseline.py's blind variation is visible
-    directly, generation by generation.
-
-    `run_dirs`: dict[label -> OUTPUT_DIR] - e.g.
-    {"RL-assisted": ".../evolution_run", "Random baseline": ".../evolution_run_norl"}.
-    Runs with no data yet are silently skipped (so this is safe to call
-    while one arm is still in progress)."""
-    os.makedirs(comparison_out_dir, exist_ok=True)
-
+def _load_comparison_runs(run_dirs):
+    """dict[label -> [(gen_idx, population), ...]] for every run_dirs entry
+    that has any data yet - shared by every plot_*_comparison function
+    below. Runs with no data yet are silently dropped (so each comparison
+    plot stays safe to call while one arm is still in progress)."""
     runs = {}
     for label, out_dir in run_dirs.items():
         generations = _load_all_generations(out_dir)
-        if not generations:
-            continue
-        gen_stats = {s["generation"]: s for s in _load_generation_stats(out_dir)}
-        runs[label] = (generations, gen_stats)
+        if generations:
+            runs[label] = generations
+    return runs
+
+
+def plot_convergence_comparison(run_dirs, comparison_out_dir, filename="convergence_comparison.png"):
+    """Multi-run counterpart to plot_convergence(): best vs. population-mean
+    SCALARIZED fitness (objectives_api.scalarize), one best/mean pair of
+    lines per run, so the RL-assisted policy's convergence behavior is
+    directly comparable against random_baseline.py's. Saved at this
+    module's usual DPI=600 "print quality" - unlike the per-generation
+    plots elsewhere in this file, this one isn't regenerated every
+    generation of a run, so there's no storage-cost reason to shrink it.
+
+    `run_dirs`: dict[label -> OUTPUT_DIR] - e.g.
+    {"RL-assisted": ".../evolution_run", "Random baseline": ".../evolution_run_norl"}."""
+    os.makedirs(comparison_out_dir, exist_ok=True)
+    runs = _load_comparison_runs(run_dirs)
     if not runs:
         return None
 
     run_colors = ["#1f77ff", "#e8382b", "#22b14c", "#a349e6"]
-    fig, axes = plt.subplots(4, 1, figsize=(9, 16))
-    ax_f1, ax_f2, ax_conv, ax_collision = axes
+    fig, ax = plt.subplots(figsize=(9, 5.5))
 
-    for color, (label, (generations, gen_stats)) in zip(run_colors, runs.items()):
+    for color, (label, generations) in zip(run_colors, runs.items()):
         gen_indices = [g for g, _ in generations]
+        best_vals, mean_vals = [], []
+        for _, pop in generations:
+            scalarized = [obj_api.scalarize(entry["objectives"]) for entry in pop]
+            best_vals.append(max(scalarized))
+            mean_vals.append(float(np.mean(scalarized)))
+        ax.plot(gen_indices, best_vals, color=color, label=f"{label} - best")
+        ax.plot(gen_indices, mean_vals, color=color, linestyle="--", alpha=0.7, label=f"{label} - mean")
 
-        best_f1 = [max(e["objectives"].get("f1_folded_gait_velocity", 0.0) for e in pop) for _, pop in generations]
-        mean_f1 = [float(np.mean([e["objectives"].get("f1_folded_gait_velocity", 0.0) for e in pop])) for _, pop in generations]
-        ax_f1.plot(gen_indices, best_f1, color=color, label=f"{label} - best")
-        ax_f1.plot(gen_indices, mean_f1, color=color, linestyle="--", alpha=0.7, label=f"{label} - mean")
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Scalarized fitness")
+    ax.set_title("GA Convergence - Best vs. Mean Population Fitness", fontsize=15, fontweight="bold")
+    ax.legend(loc="best", fontsize=8)
+    _integer_x_axis(ax)
+    fig.tight_layout()
 
-        mean_f2 = [float(np.mean([e["objectives"].get("f2_entropy", 0.0) for e in pop])) for _, pop in generations]
-        ax_f2.plot(gen_indices, mean_f2, color=color, label=f"{label} - mean")
+    path = os.path.join(comparison_out_dir, filename)
+    return _save_fig(fig, path)
 
-        scalarized_best = [max(obj_api.scalarize(e["objectives"]) for e in pop) for _, pop in generations]
-        ax_conv.plot(gen_indices, scalarized_best, color=color, label=label)
 
+def plot_fitness_trends_comparison(run_dirs, comparison_out_dir, filename="fitness_trends_comparison.png"):
+    """Multi-run counterpart to plot_fitness_trends(): one subplot per
+    objective (2x2 grid, f1..f4), each generation's BEST value only - no
+    mean line, same reasoning as plot_fitness_trends (the mean is a
+    population-homogeneity signal that plot_convergence_comparison already
+    covers) - one line per run so the two arms' actual best-so-far progress
+    is directly comparable. Saved at this module's usual DPI=600 - see
+    plot_convergence_comparison's docstring for why.
+
+    `run_dirs`: dict[label -> OUTPUT_DIR]."""
+    os.makedirs(comparison_out_dir, exist_ok=True)
+    runs = _load_comparison_runs(run_dirs)
+    if not runs:
+        return None
+
+    run_colors = ["#1f77ff", "#e8382b", "#22b14c", "#a349e6"]
+    names = obj_api.OBJECTIVE_NAMES
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+    axes = axes.ravel()
+
+    for ax, name in zip(axes, names):
+        title, ylabel = _OBJECTIVE_DISPLAY[name]
+        best_fn = max if obj_api.MAXIMIZE[name] else min
+        for color, (label, generations) in zip(run_colors, runs.items()):
+            gen_indices = [g for g, _ in generations]
+            best_vals = [best_fn(entry["objectives"].get(name, 0.0) for entry in pop) for _, pop in generations]
+            ax.plot(gen_indices, best_vals, color=color, label=label)
+        ax.set_title(title)
+        ax.set_xlabel("Generation")
+        ax.set_ylabel(ylabel)
+        ax.legend(loc="best", fontsize=8)
+        _integer_x_axis(ax)
+
+    fig.suptitle("Fitness Trends Across Generations - Best Individual per Generation", fontsize=15, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+
+    path = os.path.join(comparison_out_dir, filename)
+    return _save_fig(fig, path)
+
+
+def plot_collision_rate_comparison(run_dirs, comparison_out_dir, filename="collision_rate_comparison.png"):
+    """Collision rate (n_collided / n_offspring per generation, from
+    append_generation_stats' generation_stats.json), one line per run - the
+    piece of plot_rl_vs_baseline_comparison's old combined figure that's
+    neither a fitness trend nor convergence, so it stays its own plot."""
+    os.makedirs(comparison_out_dir, exist_ok=True)
+    runs = _load_comparison_runs(run_dirs)
+    if not runs:
+        return None
+
+    run_colors = ["#1f77ff", "#e8382b", "#22b14c", "#a349e6"]
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    any_data = False
+
+    for color, (label, generations) in zip(run_colors, runs.items()):
+        gen_stats = {s["generation"]: s for s in _load_generation_stats(run_dirs[label])}
+        gen_indices = [g for g, _ in generations]
         collision_rate = [
             gen_stats[g]["n_collided"] / gen_stats[g]["n_offspring"]
             if g in gen_stats and gen_stats[g]["n_offspring"] else None
             for g in gen_indices
         ]
-        if any(v is not None for v in collision_rate):
-            xs = [g for g, v in zip(gen_indices, collision_rate) if v is not None]
-            ys = [v for v in collision_rate if v is not None]
-            ax_collision.plot(xs, ys, color=color, label=label)
+        xs = [g for g, v in zip(gen_indices, collision_rate) if v is not None]
+        ys = [v for v in collision_rate if v is not None]
+        if xs:
+            any_data = True
+            ax.plot(xs, ys, color=color, label=label)
 
-    ax_f1.set_title("f1: Folded-Gait Velocity - Locomotion", fontsize=13, fontweight="bold")
-    ax_f1.set_ylabel("Velocity - m/s")
-    ax_f1.legend(loc="best", fontsize=8)
-    _integer_x_axis(ax_f1)
+    if not any_data:
+        plt.close(fig)
+        return None
 
-    ax_f2.set_title("f2: Entropy - Folding-Complexity Gain", fontsize=13, fontweight="bold")
-    ax_f2.set_ylabel("Entropy Δ")
-    ax_f2.legend(loc="best", fontsize=8)
-    _integer_x_axis(ax_f2)
+    ax.set_title("Collision Rate - n_collided / n_offspring", fontsize=15, fontweight="bold")
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Collision rate")
+    ax.legend(loc="best", fontsize=8)
+    _integer_x_axis(ax)
+    fig.tight_layout()
 
-    ax_conv.set_title("Convergence: Best Scalarized Fitness", fontsize=13, fontweight="bold")
-    ax_conv.set_ylabel("Scalarized fitness")
-    ax_conv.legend(loc="best", fontsize=8)
-    _integer_x_axis(ax_conv)
-
-    ax_collision.set_title("Collision Rate - n_collided / n_offspring", fontsize=13, fontweight="bold")
-    ax_collision.set_xlabel("Generation")
-    ax_collision.set_ylabel("Collision rate")
-    ax_collision.legend(loc="best", fontsize=8)
-    _integer_x_axis(ax_collision)
-
-    fig.suptitle("RL-Assisted vs. Random-Baseline Genetic Operations", fontsize=15, fontweight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.97))
     path = os.path.join(comparison_out_dir, filename)
     return _save_fig(fig, path)
+
+
+def plot_rl_vs_baseline_comparison(run_dirs, comparison_out_dir):
+    """The RL_ASSISTED_GENETIC_OPERATIONS comparison plots: GA convergence
+    (with mean), fitness trends (best only, no mean), and collision rate -
+    each its own separate PNG (see plot_convergence_comparison /
+    plot_fitness_trends_comparison / plot_collision_rate_comparison) - so
+    the effect of the learned policy vs. random_baseline.py's blind
+    variation is visible directly, generation by generation.
+
+    `run_dirs`: dict[label -> OUTPUT_DIR] - e.g.
+    {"RL-assisted": ".../evolution_run", "Random baseline": ".../evolution_run_norl"}.
+    Runs with no data yet are silently skipped (so this is safe to call
+    while one arm is still in progress). Returns {name: path_or_None} for
+    the three files."""
+    return dict(
+        convergence=plot_convergence_comparison(run_dirs, comparison_out_dir),
+        fitness_trends=plot_fitness_trends_comparison(run_dirs, comparison_out_dir),
+        collision_rate=plot_collision_rate_comparison(run_dirs, comparison_out_dir),
+    )
 
 
 def plot_rl_diagnostics(history, out_dir):

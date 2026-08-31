@@ -44,7 +44,7 @@ import rl_api
 
 logger = logging.getLogger(__name__)
 
-POP_SIZE = 10
+POP_SIZE = 30
 N_GENERATIONS = 10
 SIM_SECONDS = 7
 SEED = 42  # reproducible Sobol-seeding of initial population (fresh runs only - a resumed run's RNG/seed come from the checkpoint)
@@ -68,7 +68,7 @@ RL_ASSISTED_GENETIC_OPERATIONS = True
 # be a self-contradictory objective pair. Each writes to its own
 # OUTPUT_DIR (below) so switching this never disturbs the other's
 # checkpoint/data, same principle as RL_ASSISTED_GENETIC_OPERATIONS above.
-PHEROMONE_RESPONSE_TYPE = "repulsive"  # "attractive" | "repulsive"
+PHEROMONE_RESPONSE_TYPE = "attractive"  # "attractive" | "repulsive"
 
 
 def configure_logging(log_file, level=logging.INFO):

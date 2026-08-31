@@ -25,6 +25,15 @@ import entropy_api
 # Global dictionaries mapping Parent Body ID -> List of (Magnet Geom ID, Polarity Sign)
 parent_body_magnet_map = {}
 
+# Vectorized-callback view of parent_body_magnet_map, rebuilt by
+# _prepare_magnet_arrays() alongside every parent_body_magnet_map.update()
+# call -- see magnetic_field_callback for why the per-step hot loop needs
+# this instead of walking the dict itself.
+_magnet_geom_ids = np.zeros(0, dtype=np.int32)  # one row per (parent, magnet)
+_magnet_moments = np.zeros(0, dtype=np.float64)  # M_MOMENT * polarity_sign, same rows
+_magnet_owner = np.zeros(0, dtype=np.int32)  # row -> index into _magnet_parent_body_ids
+_magnet_parent_body_ids = np.zeros(0, dtype=np.int32)  # one entry per parent body
+
 # Torque tracking global variables
 torque_history = []
 
@@ -36,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 # Physics constants
 # Magnetic field intensity (Tesla)
-B_INTENSITY = 0.02  # 10 mT
+B_INTENSITY = 0.05  # 10 mT
 # Candidate drive strengths for run_headless_b_sweep() -- the field a
 # morphology needs to overcome stiction and walk (rather than stall, or
 # over-drive into a rolling/tumbling gait) is morphology-dependent, so
@@ -55,14 +64,16 @@ TOTAL_CYCLE_TIME = 1.0 / FREQUENCY
 WALL_STOP_DISTANCE = 200  # 200 mm
 
 # Offscreen screenshot/GIF render resolution. The visualizer only ever
-# displays these at a couple hundred px wide (see SCREENSHOT_CARD_WIDTH in
-# evolution_results_visualizer.py), so 1920x1080 was pure waste -
-# needlessly heavy GPU/EGL context memory per renderer, which under
-# sim_executor.py's parallel subprocesses meant several large contexts
-# competing at once - a plausible source of the occasional renderer
-# failure some individuals were hitting.
-RENDER_WIDTH = 1400
-RENDER_HEIGHT = 1080
+# displays these at a couple hundred px wide (SCREENSHOT_CARD_WIDTH=260 in
+# evolution_results_visualizer.py), so 1400x1080 was still far more than
+# needed - 480x370 (same ~1.3 aspect ratio) is still ~1.8x that card width
+# (retina-sharp at 2x), while cutting renderer-construction + render time
+# roughly 30% (profiled: 0.48s -> 0.34s per screenshot) and the GPU/EGL
+# context memory each of sim_executor.py's parallel subprocesses holds -
+# a plausible source of the occasional renderer failure some individuals
+# were hitting.
+RENDER_WIDTH = 480
+RENDER_HEIGHT = 370
 
 # run_light_tests()'s capture_video renderer is a separate, single-run
 # diagnostic path (not part of sim_executor.py's parallel evolution pool
@@ -120,12 +131,49 @@ LIGHT_TRIGGER_LUX_THRESHOLD = 10000.0
 
 
 
+def _prepare_magnet_arrays():
+    """Flattens parent_body_magnet_map into the arrays magnetic_field_callback
+    needs, in one shot. Call this once right after every
+    parent_body_magnet_map.clear()/.update(find_all_magnets(...)) pair (the
+    3 run_headless/run_with_viewer/run_light_tests call sites) -- NOT from
+    inside the callback itself, which runs once per physics step and can't
+    afford to re-walk the dict (and re-build lists of Python (geom_id,
+    polarity_sign) tuples) 700+ times per run just to read it."""
+    global _magnet_geom_ids, _magnet_moments, _magnet_owner, _magnet_parent_body_ids
+    parents = sorted(parent_body_magnet_map)
+    geom_ids, moments, owner = [], [], []
+    for idx, body_id in enumerate(parents):
+        for geom_id, polarity_sign in parent_body_magnet_map[body_id]:
+            geom_ids.append(geom_id)
+            moments.append(M_MOMENT * polarity_sign)
+            owner.append(idx)
+    _magnet_geom_ids = np.array(geom_ids, dtype=np.int32)
+    _magnet_moments = np.array(moments, dtype=np.float64)
+    _magnet_owner = np.array(owner, dtype=np.int32)
+    _magnet_parent_body_ids = np.array(parents, dtype=np.int32)
+
+
 def magnetic_field_callback(model, data):
     """
     MuJoCo Control Callback.
     Calculates magnetic torque:
         Tau = M x B
     Applies torque to parent module bodies and records net applied torque magnitude.
+
+    Vectorized over every magnet at once via _magnet_geom_ids/_magnet_moments/
+    _magnet_owner (see _prepare_magnet_arrays) instead of a per-magnet Python
+    loop -- this is the dominant per-step cost of a headless run (profiling
+    showed it costing ~5x the underlying mj_step itself), since MuJoCo calls
+    this once per physics step. The closed form below exploits b_vector
+    always being Z-only (per the oscillating-field scheme a few lines down):
+    for world dipole m=(mx,my,mz) and B=(0,0,b_z),
+        Tau = m x B = (my*b_z, -mx*b_z, 0)
+    so only the world-frame X/Y dipole components are needed -- i.e. just
+    the [2] and [5] entries (the local-Z-axis column) of each magnet geom's
+    flattened 3x3 xmat, not a full matrix multiply + 3D cross product per
+    magnet. If b_vector is ever generalized away from Z-only (see the
+    commented-out XZ-plane scheme above), this closed form must go back to
+    a real per-magnet cross product.
     """
     # Clear previous external forces
     data.xfrc_applied.fill(0)
@@ -167,31 +215,33 @@ def magnetic_field_callback(model, data):
 
     b_z = -B_INTENSITY if time_in_cycle < half_cycle_time else B_INTENSITY
 
-    # Magnetic field along Z only
-    b_vector = np.array([0.0, 0.0, b_z])
+    n_parents = len(_magnet_parent_body_ids)
+    if n_parents == 0:
+        torque_history.append(0.0)
+        b_field_history.append(b_z)
+        time_history.append(data.time)
+        return
 
-    step_total_torque = 0.0
+    # World-frame dipole X/Y components for every magnet at once: column 2
+    # (indices 2, 5 of the flattened row-major 3x3) of each magnet geom's
+    # xmat is its local +Z axis in world coordinates, scaled by that
+    # magnet's (signed) moment.
+    geom_mats = data.geom_xmat[_magnet_geom_ids]
+    dipole_x = geom_mats[:, 2] * _magnet_moments
+    dipole_y = geom_mats[:, 5] * _magnet_moments
 
-    # Apply magnetic torque
-    for parent_body_id, magnet_list in parent_body_magnet_map.items():
-        accumulated_torque = np.zeros(3)
-        for geom_id, polarity_sign in magnet_list:
-            # Magnet world orientation
-            geom_mat = data.geom_xmat[geom_id].reshape(3, 3)
-            # Magnet dipole along local Z-axis
-            local_m = np.array([0.0, 0.0, 1.0]) * M_MOMENT * polarity_sign
-            # Convert dipole to world frame
-            world_m = geom_mat.dot(local_m)
-            # Tau = M x B
-            torque_vector = np.cross(world_m, b_vector)
-            accumulated_torque += torque_vector
+    # Tau = m x B, B=(0,0,b_z) -> (my*b_z, -mx*b_z, 0), summed per parent body.
+    per_magnet_torque = np.stack(
+        [dipole_y * b_z, -dipole_x * b_z, np.zeros_like(dipole_x)], axis=1
+    )
+    accumulated_torque = np.zeros((n_parents, 3))
+    np.add.at(accumulated_torque, _magnet_owner, per_magnet_torque)
 
-        ramped_torque = accumulated_torque * effective_torque_multiplier
-        data.xfrc_applied[parent_body_id][3:6] = ramped_torque
-        step_total_torque += ramped_torque
+    ramped_torque = accumulated_torque * effective_torque_multiplier
+    data.xfrc_applied[_magnet_parent_body_ids, 3:6] = ramped_torque
 
     # Record magnitude of total torque on whole body for this step
-    torque_history.append(np.linalg.norm(step_total_torque))
+    torque_history.append(np.linalg.norm(ramped_torque.sum(axis=0)))
     b_field_history.append(b_z)
     time_history.append(data.time)
 
@@ -1015,6 +1065,7 @@ def run_headless(
         light_target_angles = read_light_target_angles_from_xml(model_path)
 
     parent_body_magnet_map.update(find_all_magnets(model))
+    _prepare_magnet_arrays()
     module_labels = find_module_labels(model)
 
     # module_1 is this design's designated sensor/control module (see
@@ -1422,6 +1473,7 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
     # Find all magnets
     parent_body_magnet_map.clear()
     parent_body_magnet_map.update(find_all_magnets(model))
+    _prepare_magnet_arrays()
 
     # Identify module bodies and assign their text labels
     module_labels = find_module_labels(model)
@@ -1684,6 +1736,7 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
 
     parent_body_magnet_map.clear()
     parent_body_magnet_map.update(find_all_magnets(model))
+    _prepare_magnet_arrays()
 
     dt = model.opt.timestep
 
@@ -2060,7 +2113,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         #"--m", type=str, default="../models/assembly.xml",
-        "--m", type=str, default="D:\\microrobotics\\output\\evolution_run\\generation_59\\ind5_assembly.xml",
+        "--m", type=str, default="..\\output\\evolution_run\\generation_9\\ind5_assembly.xml",
         help="MJCF model path to run in the live viewer",
     )
 

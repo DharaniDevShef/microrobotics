@@ -32,6 +32,19 @@ hierarchical choice over a PAIR of graphs of changing size, which is
 naturally expressed as a direct policy-gradient loop (this is also the
 standard formulation in graph/NAS-controller RL literature) rather than
 forced into a padded Box/Discrete gym.Env just to reuse SB3's PPO class.
+
+Actor and critic SHARE one Graph Transformer encoder (own separate
+heads) and are trained through one combined loss/optimizer - see
+_GraphTransformerEncoder's and PPOTrainer's docstrings. entropy_coef also
+decays every update() call (PPOTrainer._current_entropy_coef) instead of
+staying fixed, both changes aimed at the same sample-starved regime: at
+only pop_size transitions per PPO update, a shared trunk lets the encoder
+learn from both losses at once, and a higher-then-decaying entropy bonus
+keeps exploration alive long enough that a low-sample-count run of bad
+luck on one action type (crossover collapsing within ~10 generations, in
+both pheromone-response arms, was the concrete failure this was written
+against) doesn't permanently zero out its sampling probability before
+enough evidence accumulates to reassess it.
 """
 
 import random
@@ -191,8 +204,16 @@ class GraphTransformerBlock(nn.Module):
 class _GraphTransformerEncoder(nn.Module):
     """Shared building block for both ActorNet and CriticNet - projects
     node features to `hidden` dims, then runs them through a stack of
-    GraphTransformerBlocks. ActorNet and CriticNet each own their OWN
-    instance of this (separate weights, no sharing between actor/critic)."""
+    GraphTransformerBlocks. ONE instance is constructed by PPOTrainer and
+    passed into BOTH ActorNet and CriticNet (see their constructors) -
+    genuinely shared weights, not two independently-trained copies. With
+    only pop_size transitions per PPO update, letting the encoder learn
+    from both the policy AND value losses each update - rather than each
+    net having to learn its own graph representation from scratch off the
+    same tiny sample count - is meaningfully more sample-efficient. See
+    PPOTrainer.__init__ for how the combined optimizer avoids either
+    double-applying or dropping either loss's gradient contribution to
+    these shared weights."""
 
     def __init__(self, in_dim, hidden, n_blocks, heads):
         super().__init__()
@@ -209,19 +230,19 @@ class _GraphTransformerEncoder(nn.Module):
 
 
 class ActorNet(nn.Module):
-    """Graph Transformer POLICY network. Encodes parent_a AND parent_b
-    with its own two-graph-capable encoder (weights are NOT shared with
-    CriticNet - two separate models), fuses their pooled embeddings via
-    cross-attention for the top-level action-type choice, and produces
-    every action's parameters: node_head scores parent_a's nodes
+    """Graph Transformer POLICY network. Encodes parent_a AND parent_b via
+    `encoder` (SHARED with CriticNet - see _GraphTransformerEncoder's
+    docstring, not owned/constructed here), fuses their pooled embeddings
+    via cross-attention for the top-level action-type choice, and
+    produces every action's parameters: node_head scores parent_a's nodes
     (mutation target / GRAFT host / SWAP's parent_a side), while
     partner_node_head scores parent_b's nodes (GRAFT donor root / SWAP's
     parent_b side) - this is what lets one policy drive mutation AND
     crossover, per the design doc's "RL for crossover and mutation"."""
 
-    def __init__(self, in_dim=NODE_FEATURE_DIM, hidden=HIDDEN_DIM, n_blocks=2, heads=4):
+    def __init__(self, encoder, hidden=HIDDEN_DIM, heads=4):
         super().__init__()
-        self.encoder = _GraphTransformerEncoder(in_dim, hidden, n_blocks, heads)
+        self.encoder = encoder
         self.cross_attn = nn.MultiheadAttention(hidden, num_heads=heads, batch_first=True)
 
         self.action_type_head = nn.Linear(hidden, len(rg.ALL_ACTIONS))
@@ -247,15 +268,15 @@ class ActorNet(nn.Module):
 
 
 class CriticNet(nn.Module):
-    """Graph Transformer VALUE network. A second, independently
-    parameterized two-graph encoder (mirrors ActorNet's architecture but
-    its own separate weights) - pools parent_a and parent_b separately
-    and concatenates them into a single state-value estimate, since the
-    reward for a crossover decision depends on both parents."""
+    """Graph Transformer VALUE network. Encodes parent_a and parent_b via
+    `encoder` (SHARED with ActorNet - see _GraphTransformerEncoder's
+    docstring), pools each separately and concatenates them into a single
+    state-value estimate, since the reward for a crossover decision
+    depends on both parents."""
 
-    def __init__(self, in_dim=NODE_FEATURE_DIM, hidden=HIDDEN_DIM, n_blocks=2, heads=4):
+    def __init__(self, encoder, hidden=HIDDEN_DIM):
         super().__init__()
-        self.encoder = _GraphTransformerEncoder(in_dim, hidden, n_blocks, heads)
+        self.encoder = encoder
         self.value_head = nn.Linear(hidden * 2, 1)
 
     def forward(self, data_a, data_b):
@@ -587,30 +608,66 @@ def _recompute_critic(critic, decision):
 # ---------------------------------------------------------------------
 
 class PPOTrainer:
-    """Owns the two independent Graph Transformer models: `self.actor`
-    (policy, over BOTH mutation and crossover) and `self.critic`
-    (state-value baseline). They are separate nn.Module instances with
-    separate parameters and separate Adam optimizers - no weight sharing.
-    Each is stepped with its own loss (actor: clipped PPO surrogate +
-    entropy bonus; critic: MSE against the observed reward); the only
-    place they interact is through the numbers (the critic's value
-    estimate sets the advantage the actor's surrogate is scaled by),
-    never through shared gradients.
+    """Owns `self.actor` (policy, over BOTH mutation and crossover) and
+    `self.critic` (state-value baseline). They share ONE Graph Transformer
+    encoder (`self.encoder` - see _GraphTransformerEncoder's docstring for
+    why) plus their own separate heads, trained through ONE combined loss
+    (actor: clipped PPO surrogate + entropy bonus; critic: MSE against the
+    observed reward; standard A2C/PPO-style `policy_loss + value_coef *
+    value_loss - entropy_coef * entropy`) and ONE optimizer - NOT two
+    separate optimizers each independently stepping the same shared
+    encoder parameters, which would either double-apply an update (if
+    both param groups included the encoder) or silently starve it of one
+    loss's gradient entirely (if only one did).
+
+    entropy_coef decays every update() call from entropy_coef_start
+    toward entropy_coef_end (see _current_entropy_coef) rather than
+    staying fixed - a fixed low value let a genuine failure mode
+    (SWAP/GRAFT_SUBTREE's action-type probability collapsing to near-zero
+    within the first ~10 generations, in both pheromone-response arms -
+    see plot_rl_diagnostics) go uncorrected once it happened, since there
+    was no exploration pressure left to ever revisit it.
     """
 
-    def __init__(self, lr=3e-4, clip_eps=0.2, entropy_coef=0.01, value_coef=0.5,
-                 epochs=4, seed=None):
-        self.actor = ActorNet()
-        self.critic = CriticNet()
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=lr)
+    def __init__(self, lr=3e-4, clip_eps=0.2, entropy_coef_start=0.05, entropy_coef_end=0.01,
+                 entropy_decay=0.97, value_coef=0.5, epochs=4, seed=None):
+        self.encoder = _GraphTransformerEncoder(NODE_FEATURE_DIM, HIDDEN_DIM, n_blocks=2, heads=4)
+        self.actor = ActorNet(self.encoder)
+        self.critic = CriticNet(self.encoder)
+
+        # De-duplicated by parameter identity: self.actor.parameters() and
+        # self.critic.parameters() both include the shared encoder's
+        # tensors (it's a submodule of both) - naively concatenating both
+        # lists would register those tensors TWICE in one optimizer,
+        # applying their update twice per step.
+        encoder_params = list(self.encoder.parameters())
+        encoder_param_ids = {id(p) for p in encoder_params}
+        actor_only_params = [p for p in self.actor.parameters() if id(p) not in encoder_param_ids]
+        critic_only_params = [p for p in self.critic.parameters() if id(p) not in encoder_param_ids]
+        self.optimizer = torch.optim.Adam(encoder_params + actor_only_params + critic_only_params, lr=lr)
+
         self.clip_eps = clip_eps
-        self.entropy_coef = entropy_coef
+        self.entropy_coef_start = entropy_coef_start
+        self.entropy_coef_end = entropy_coef_end
+        self.entropy_decay = entropy_decay
         self.value_coef = value_coef
         self.epochs = epochs
         self.rng = random.Random(seed)
         self.buffer = []  # list[(Decision, reward)]
-        self.history = {"policy_loss": [], "value_loss": [], "entropy": [], "reward": []}
+        self._update_count = 0
+        # reward_action pairs 1:1 with reward (decision.action.name at the
+        # time it was recorded) - the direct diagnostic for "is one action
+        # type getting systematically worse rewards than others" (see
+        # plotting_api.plot_reward_and_loss_by_action), rather than having
+        # to hand-correlate breeding_events.json against this list
+        # yourself. loss_by_action is one {action_name: {policy_loss,
+        # value_loss, count}} snapshot per update() call (see update()),
+        # not per-transition - loss is only ever computed batched, per PPO
+        # epoch, never per individual sample outside that batch.
+        self.history = {
+            "policy_loss": [], "value_loss": [], "entropy": [], "reward": [], "entropy_coef": [],
+            "reward_action": [], "loss_by_action": [],
+        }
 
     def select_action(self, G_a, G_b):
         """Picks one grammar action - mutation on G_a, or a crossover
@@ -621,6 +678,21 @@ class PPOTrainer:
     def record(self, decision, reward):
         self.buffer.append((decision, reward))
         self.history["reward"].append(reward)
+        self.history["reward_action"].append(decision.action.name)
+
+    def _current_entropy_coef(self):
+        """Exponential decay from entropy_coef_start toward
+        entropy_coef_end, per update() call (not per generation-count
+        planned in advance - main.py's N_GENERATIONS has changed run to
+        run, so this needs to work regardless of how long the run turns
+        out to be, not front-load its whole decay against one assumed
+        total). self._update_count is checkpointed (see state_dict), so
+        this stays continuous across a resume instead of restarting the
+        schedule from entropy_coef_start."""
+        decayed = self.entropy_coef_end + (self.entropy_coef_start - self.entropy_coef_end) * (
+            self.entropy_decay ** self._update_count
+        )
+        return decayed
 
     def update(self):
         """Runs `self.epochs` clipped-surrogate PPO passes over everything
@@ -639,8 +711,12 @@ class PPOTrainer:
         if advantages.numel() > 1 and advantages.std() > 1e-6:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
+        entropy_coef = self._current_entropy_coef()
+        per_action_losses = {}  # reassigned each epoch - holds the LAST epoch's grouping once the loop ends
+
         for _ in range(self.epochs):
             policy_losses, value_losses, entropies = [], [], []
+            per_action_losses = {}  # action_name -> [(policy_loss, value_loss), ...] this epoch
             for (decision, _), advantage, old_logprob, ret in zip(
                 self.buffer, advantages, old_logprobs, rewards
             ):
@@ -648,50 +724,74 @@ class PPOTrainer:
                 ratio = torch.exp(new_logprob - old_logprob)
                 surr1 = ratio * advantage
                 surr2 = torch.clamp(ratio, 1 - self.clip_eps, 1 + self.clip_eps) * advantage
-                policy_losses.append(-torch.min(surr1, surr2))
+                sample_policy_loss = -torch.min(surr1, surr2)
+                policy_losses.append(sample_policy_loss)
                 entropies.append(entropy)
 
                 new_value = _recompute_critic(self.critic, decision)
-                value_losses.append((new_value - ret) ** 2)
+                sample_value_loss = (new_value - ret) ** 2
+                value_losses.append(sample_value_loss)
+
+                per_action_losses.setdefault(decision.action.name, []).append(
+                    (sample_policy_loss.item(), sample_value_loss.item())
+                )
 
             policy_loss = torch.stack(policy_losses).mean()
             entropy_bonus = torch.stack(entropies).mean()
             value_loss = torch.stack(value_losses).mean()
 
-            actor_loss = policy_loss - self.entropy_coef * entropy_bonus
-            self.actor_optimizer.zero_grad()
-            actor_loss.backward()
-            self.actor_optimizer.step()
-
-            critic_loss = self.value_coef * value_loss
-            self.critic_optimizer.zero_grad()
-            critic_loss.backward()
-            self.critic_optimizer.step()
+            loss = policy_loss - entropy_coef * entropy_bonus + self.value_coef * value_loss
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
             self.history["policy_loss"].append(policy_loss.item())
             self.history["value_loss"].append(value_loss.item())
             self.history["entropy"].append(entropy_bonus.item())
+            self.history["entropy_coef"].append(entropy_coef)
+
+        # Snapshot from the LAST epoch's pass only (not averaged across
+        # epochs - the model has already moved by then, so later epochs'
+        # losses are the more representative "where did this update leave
+        # each action type" reading), one entry per update() call.
+        self.history["loss_by_action"].append({
+            action: dict(
+                policy_loss=sum(pl for pl, _ in vals) / len(vals),
+                value_loss=sum(vl for _, vl in vals) / len(vals),
+                count=len(vals),
+            )
+            for action, vals in per_action_losses.items()
+        })
+
+        self._update_count += 1
 
         self.buffer.clear()
 
     def state_dict(self):
         """Everything needed to resume training exactly where it left off:
-        both networks' weights, both optimizers' internal state (Adam's
-        running moment estimates - resuming without these would silently
-        restart Adam's warmup), the training-diagnostics history (so
-        plotting_api's RL diagnostics plot stays continuous across a
-        resume instead of resetting to empty), and this trainer's own rng
-        (used for RECONNECT_PORT's old_port tie-break - separate from the
-        rng moo_api.py passes into select_action's caller). The buffer is
-        NOT included: update() always clears it before returning, so it's
-        empty at every point a checkpoint could be taken (end of a
-        generation) anyway. See checkpoint.py for how this gets saved/
-        loaded alongside the population and RNG state."""
+        both networks' weights (actor's and critic's state dicts each
+        already include the shared encoder's weights under it - see
+        _GraphTransformerEncoder - so it's saved/loaded redundantly-but-
+        harmlessly twice rather than needing special-casing here), the
+        combined optimizer's internal state (Adam's running moment
+        estimates - resuming without these would silently restart Adam's
+        warmup), _update_count (so the entropy_coef decay schedule - see
+        _current_entropy_coef - continues from where it left off instead
+        of restarting at entropy_coef_start on every resume), the
+        training-diagnostics history (so plotting_api's RL diagnostics
+        plot stays continuous across a resume instead of resetting to
+        empty), and this trainer's own rng (used for RECONNECT_PORT's
+        old_port tie-break - separate from the rng moo_api.py passes into
+        select_action's caller). The buffer is NOT included: update()
+        always clears it before returning, so it's empty at every point a
+        checkpoint could be taken (end of a generation) anyway. See
+        checkpoint.py for how this gets saved/loaded alongside the
+        population and RNG state."""
         return dict(
             actor=self.actor.state_dict(),
             critic=self.critic.state_dict(),
-            actor_optimizer=self.actor_optimizer.state_dict(),
-            critic_optimizer=self.critic_optimizer.state_dict(),
+            optimizer=self.optimizer.state_dict(),
+            update_count=self._update_count,
             history=self.history,
             rng_state=self.rng.getstate(),
         )
@@ -699,8 +799,8 @@ class PPOTrainer:
     def load_state_dict(self, state):
         self.actor.load_state_dict(state["actor"])
         self.critic.load_state_dict(state["critic"])
-        self.actor_optimizer.load_state_dict(state["actor_optimizer"])
-        self.critic_optimizer.load_state_dict(state["critic_optimizer"])
+        self.optimizer.load_state_dict(state["optimizer"])
+        self._update_count = state.get("update_count", 0)
         self.history = state.get("history", self.history)
         if "rng_state" in state:
             self.rng.setstate(state["rng_state"])

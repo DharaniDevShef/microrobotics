@@ -49,6 +49,18 @@ N_GENERATIONS = 10
 SIM_SECONDS = 7
 SEED = 42  # reproducible Sobol-seeding of initial population (fresh runs only - a resumed run's RNG/seed come from the checkpoint)
 
+# plotting_api's ~13 PNGs are all DPI=600 (print quality) and get fully
+# re-rendered from a growing population_history.json every time they're
+# called - measured at ~25-40s+ per generation combined, and growing as
+# the run gets longer, even though nobody actually needs all of them
+# rewritten every single generation (they're progress-monitoring, not
+# live telemetry). Regenerated every PLOT_EVERY_N_GENERATIONS generations
+# instead - always still on the very last one (see the main loop), so the
+# final saved plots are never stale. Data persistence (population_history.
+# json, generation_stats.json, checkpoint.pt) is NOT throttled by this -
+# only the matplotlib rendering is.
+PLOT_EVERY_N_GENERATIONS = 10
+
 # True (default): breeding uses rl_api's trained policy, as it always has.
 # False: breeding uses random_baseline.py's uniform-random choice over the
 # SAME grammar-legal action space instead - a classic-GA "blind variation
@@ -131,6 +143,23 @@ def main():
         population = moo_api.sobol_seed_population(POP_SIZE, seed=SEED, scratch_dir=seed_scratch_dir)
         start_gen = 0
 
+        # Warm-start objectives_api.scalarize()'s running min/max (the RL
+        # reward's normalization reference - see its docstring) from the
+        # Sobol-seeded population's own spread, BEFORE any breeding or PPO
+        # update happens. Without this, the running range starts completely
+        # empty and only widens as generation 0's individuals happen to get
+        # evaluated one at a time - so the very first rewards PPO ever sees
+        # (which is also when a failure mode like a low-probability action
+        # type getting an early bad outcome and never recovering is most
+        # likely to take hold - see rl_api.py's module docstring) are
+        # normalized against the least reliable range the run will ever
+        # have. Evaluates the SAME graphs generation 0 is about to breed
+        # from anyway, so moo_api._EVAL_CACHE makes this free: generation
+        # 0's own evaluate_population() call re-hashes these exact
+        # (unchanged) genotypes and skips re-simulating them.
+        logger.info("Warm-starting objective normalization range from the Sobol-seeded population...")
+        moo_api.evaluate_population(population, os.path.join(OUTPUT_DIR, "_warm_start"), sim_seconds=SIM_SECONDS)
+
     if start_gen >= N_GENERATIONS:
         logger.info("Checkpoint already covers all %d requested generations - nothing to do "
                     "(raise N_GENERATIONS to continue training this run further).", N_GENERATIONS)
@@ -157,12 +186,20 @@ def main():
                 for g, obj, ind_id in zip(population, log["survivor_objectives"], log["survivor_ind_ids"])
             ]
             plotting_api.append_generation_population(gen, records, OUTPUT_DIR)
-            plotting_api.plot_pareto_front_last_gen(OUTPUT_DIR)
-            plotting_api.plot_pareto_parallel_coordinates(OUTPUT_DIR)
-            plotting_api.plot_fitness_trends(OUTPUT_DIR)
-            plotting_api.plot_convergence(OUTPUT_DIR)
-            plotting_api.plot_entropy_vs_velocity(OUTPUT_DIR)
-            plotting_api.plot_rl_diagnostics(ppo_trainer.history, OUTPUT_DIR)
+
+            # See PLOT_EVERY_N_GENERATIONS' docstring - rendering, not data
+            # persistence, so safe to skip most generations. Always runs on
+            # the last generation so the final saved plots are current.
+            if gen % PLOT_EVERY_N_GENERATIONS == 0 or gen == N_GENERATIONS - 1:
+                plotting_api.plot_pareto_front_last_gen(OUTPUT_DIR)
+                plotting_api.plot_pareto_parallel_coordinates(OUTPUT_DIR)
+                plotting_api.plot_fitness_trends(OUTPUT_DIR)
+                plotting_api.plot_convergence(OUTPUT_DIR)
+                plotting_api.plot_hypervolume(OUTPUT_DIR)
+                plotting_api.plot_entropy_vs_velocity(OUTPUT_DIR)
+                plotting_api.plot_rl_diagnostics(ppo_trainer.history, OUTPUT_DIR)
+                plotting_api.plot_action_distribution(OUTPUT_DIR)
+                plotting_api.plot_reward_and_loss_by_action(ppo_trainer.history, OUTPUT_DIR)
 
             # objectives_api.scalarize() - the SAME function moo_api.py uses
             # for the RL reward, and evolution_results_visualizer.py's

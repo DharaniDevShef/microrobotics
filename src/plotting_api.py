@@ -9,6 +9,7 @@ high-contrast style (see _apply_bright_style) - proper titles/units on
 every axis, no default matplotlib grey-on-grey look.
 """
 
+import collections
 import json
 import logging
 import os
@@ -20,8 +21,10 @@ from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
 import networkx as nx
 import numpy as np
+from pymoo.indicators.hv import HV
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 
+import moo_api
 import objectives_api as obj_api
 
 logger = logging.getLogger(__name__)
@@ -90,6 +93,7 @@ _RL_METRIC_COLOR = {
     "policy_loss": "#e8382b",
     "value_loss": "#a349e6",
     "entropy": "#22b14c",
+    "entropy_coef": "#ff8c00",
 }
 
 
@@ -488,6 +492,90 @@ def plot_convergence(out_dir):
     return _save_fig(fig, path)
 
 
+# HV's reference point must weakly dominate (be worse than) every point
+# it's ever handed - since every front below is normalized into [0, 1]
+# (lower-is-better) against the whole run's own observed range, a fixed
+# point just past that range's worst possible corner works for every
+# generation without needing per-call retuning.
+_HV_REF_POINT_MARGIN = 1.05
+
+
+def _run_wide_normalized(entries):
+    """(n, len(OBJECTIVE_NAMES)) array: objectives_api.to_minimization_vector
+    per entry, then min-max normalized against the range observed ACROSS
+    ALL of `entries` (not one generation's own local range, unlike
+    _population_costs_and_ranks) - so hypervolume means the same thing
+    regardless of which generation computed it, comparable as a trend
+    across the whole run. Recomputed fresh from population_history.json
+    every call - no dependency on objectives_api's in-memory running-
+    min/max state, so this gives the same answer whether called from
+    inside the live training process or standalone later (e.g. from
+    evolution_results_visualizer.py)."""
+    F = np.array([obj_api.to_minimization_vector(e["objectives"]) for e in entries])
+    lo, hi = F.min(axis=0), F.max(axis=0)
+    span = hi - lo
+    span[span == 0] = 1.0
+    return (F - lo) / span
+
+
+def compute_hypervolume(out_dir):
+    """Per-generation Hypervolume (HV) - computed fresh from
+    population_history.json every call (like every other function in
+    this module - see _load_all_generations' docstring).
+
+    HV is the standard multi-objective quality indicator for a real
+    engineering problem like this one: unlike GD/IGD/IGD+, it only needs
+    a reference POINT, not a reference FRONT, so it doesn't need a known
+    "true" Pareto front (which doesn't exist here - this isn't a
+    benchmark test function) or an empirically-best-known substitute
+    (which would partly measure the run against its own output - a
+    circularity GD/IGD/IGD+ can't avoid without real ground truth, which
+    is why this module deliberately doesn't compute them).
+
+    Returns dict(generations=[...], hv=[...]), or None if there's no
+    population_history.json yet."""
+    generations = _load_all_generations(out_dir)
+    if not generations:
+        return None
+
+    all_entries = [entry for _, pop in generations for entry in pop]
+    normalized_all = _run_wide_normalized(all_entries)
+    hv_indicator = HV(ref_point=np.full(normalized_all.shape[1], _HV_REF_POINT_MARGIN))
+
+    result = dict(generations=[], hv=[])
+    cursor = 0
+    for gen_idx, pop in generations:
+        n = len(pop)
+        gen_normalized = normalized_all[cursor:cursor + n]
+        cursor += n
+        gen_fronts = NonDominatedSorting().do(gen_normalized)
+        gen_front = gen_normalized[gen_fronts[0]]
+
+        result["generations"].append(gen_idx)
+        result["hv"].append(float(hv_indicator(gen_front)))
+    return result
+
+
+def plot_hypervolume(out_dir, filename="hypervolume.png"):
+    """Hypervolume trend across generations - see compute_hypervolume for
+    why this module tracks HV alone and not GD/IGD/IGD+ (no known true
+    Pareto front to compare against for a real engineering problem)."""
+    data = compute_hypervolume(out_dir)
+    if not data:
+        return None
+
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    ax.plot(data["generations"], data["hv"], color="#1f77ff")
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Hypervolume")
+    ax.set_title("Hypervolume Across Generations", fontsize=15, fontweight="bold")
+    _integer_x_axis(ax)
+    fig.tight_layout()
+
+    path = os.path.join(out_dir, filename)
+    return _save_fig(fig, path)
+
+
 def append_generation_stats(gen_idx, log, out_dir):
     """Appends {generation, n_parents, n_offspring, n_collided} to
     out_dir/generation_stats.json - the per-generation breeding/collision
@@ -521,6 +609,157 @@ def _load_generation_stats(out_dir):
         return []
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+# One consistent color per grammar action - reused by every plot below
+# that breaks something out by action type, split visually into a light
+# blue/green/gold family for the 8 mutation actions vs. bold red/purple
+# for the 2 crossover actions, so a crossover action is immediately
+# distinguishable in a stacked/grouped view instead of blending into the
+# mutation majority (see plot_action_distribution).
+_ACTION_COLORS = {
+    "ADD_NODE": "#1f77ff",
+    "DELETE_NODE": "#5aa0ff",
+    "PRUNE_SUBTREE": "#8ec2ff",
+    "MUTATE_FOLD_TYPE": "#22b14c",
+    "MUTATE_HINGE_ANGLE": "#6fcf87",
+    "RECONNECT_PORT": "#c9a227",
+    "TOGGLE_LIGHT_SENSOR": "#e0c46c",
+    "MUTATE_LIGHT_HINGE_ANGLE": "#f0dfa0",
+    "GRAFT_SUBTREE": "#e8382b",
+    "SWAP_SUBTREES": "#a349e6",
+}
+
+
+def _load_breeding_events(out_dir):
+    """[(gen_idx, events)] for every generation with a breeding_events.json
+    (moo_api._write_breeding_events - written once per generation,
+    unconditionally, in both the RL-assisted and random-baseline arms).
+    Reuses population_history.json's own generation indices (via
+    _load_all_generations) rather than re-scanning generation_* folders
+    independently, so the two data sources never disagree about which
+    generations exist. A generation whose file is missing (e.g. an
+    interrupted/partial folder) is silently skipped."""
+    generations = _load_all_generations(out_dir)
+    result = []
+    for gen_idx, _ in generations:
+        path = os.path.join(out_dir, f"generation_{gen_idx}", "breeding_events.json")
+        if not os.path.exists(path):
+            continue
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        result.append((gen_idx, payload.get("events", [])))
+    return result
+
+
+def plot_action_distribution(out_dir, filename="action_distribution.png"):
+    """Stacked-area chart of which grammar action moo_api.make_children()
+    actually picked, as a FRACTION of that generation's breeding
+    decisions, generation by generation - the automatic version of what
+    previously required hand-counting breeding_events.json across every
+    generation folder to notice (e.g. a crossover action's band
+    collapsing toward zero within the first ~10 generations)."""
+    events_by_gen = _load_breeding_events(out_dir)
+    if not events_by_gen:
+        return None
+
+    gen_indices = [g for g, _ in events_by_gen]
+    action_names = list(_ACTION_COLORS.keys())
+    fractions = {a: [] for a in action_names}
+    for _, events in events_by_gen:
+        total = len(events)
+        counts = collections.Counter(e["action"] for e in events)
+        for a in action_names:
+            fractions[a].append((counts.get(a, 0) / total) if total else 0.0)
+
+    fig, ax = plt.subplots(figsize=(10, 6.5))
+    ax.stackplot(
+        gen_indices, [fractions[a] for a in action_names],
+        labels=[a.replace("_", " ").title() for a in action_names],
+        colors=[_ACTION_COLORS[a] for a in action_names],
+        alpha=0.9, edgecolor="#ffffff", linewidth=0.3,
+    )
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Fraction of Breeding Decisions")
+    ax.set_ylim(0, 1)
+    ax.set_title("Action-Type Distribution Across Generations", fontsize=15, fontweight="bold")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=5, fontsize=8)
+    _integer_x_axis(ax)
+    fig.tight_layout()
+
+    path = os.path.join(out_dir, filename)
+    return _save_fig(fig, path, bbox_inches="tight")
+
+
+def plot_reward_and_loss_by_action(history, out_dir, filename="rl_diagnostics_by_action.png"):
+    """Two-panel bar chart breaking PPO's reward and policy loss down BY
+    grammar action type, aggregated over the whole run so far - the
+    direct diagnostic for WHY one action type's sampling probability
+    might be collapsing (see plot_action_distribution): if its reward is
+    systematically worse than other actions', that explains it rather
+    than just describing it.
+
+    `history`: rl_api.PPOTrainer.history. reward_action (set in
+    PPOTrainer.record) pairs 1:1 with reward. loss_by_action (set once
+    per PPOTrainer.update() call, from that update's LAST PPO epoch) is a
+    list of {action_name: {policy_loss, value_loss, count}} snapshots -
+    count-weighted-averaged across all of them here. Each bar is
+    annotated with its sample count, since rare actions (crossover,
+    especially once/if its probability collapses) can end up averaged
+    over far fewer samples than common ones - a mean alone would hide
+    that it's a much noisier estimate."""
+    reward_vals = history.get("reward") or []
+    reward_actions = history.get("reward_action") or []
+    loss_snapshots = history.get("loss_by_action") or []
+    if not reward_vals and not loss_snapshots:
+        return None
+
+    action_names = list(_ACTION_COLORS.keys())
+
+    reward_by_action = collections.defaultdict(list)
+    for r, a in zip(reward_vals, reward_actions):
+        reward_by_action[a].append(r)
+
+    policy_loss_sum = collections.defaultdict(float)
+    policy_loss_n = collections.defaultdict(int)
+    for snapshot in loss_snapshots:
+        for a, stats in snapshot.items():
+            policy_loss_sum[a] += stats["policy_loss"] * stats["count"]
+            policy_loss_n[a] += stats["count"]
+
+    present = [a for a in action_names if reward_by_action.get(a) or policy_loss_n.get(a)]
+    if not present:
+        return None
+
+    fig, (ax_r, ax_l) = plt.subplots(2, 1, figsize=(10, 9))
+    labels = [a.replace("_", " ").title() for a in present]
+    colors = [_ACTION_COLORS[a] for a in present]
+
+    reward_means = [float(np.mean(reward_by_action[a])) if reward_by_action.get(a) else 0.0 for a in present]
+    reward_counts = [len(reward_by_action.get(a, [])) for a in present]
+    bars_r = ax_r.bar(labels, reward_means, color=colors, edgecolor="#333333", linewidth=0.6)
+    for bar, n in zip(bars_r, reward_counts):
+        ax_r.annotate(f"n={n}", (bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                       textcoords="offset points", xytext=(0, 3), ha="center", fontsize=8)
+    ax_r.axhline(0.0, color="#999999", linewidth=1.0, linestyle=":")
+    ax_r.set_title("Mean Reward by Action Type", fontsize=13, fontweight="bold")
+    ax_r.set_ylabel("Mean Reward")
+    ax_r.tick_params(axis="x", rotation=30)
+
+    policy_loss_means = [(policy_loss_sum[a] / policy_loss_n[a]) if policy_loss_n.get(a) else 0.0 for a in present]
+    bars_l = ax_l.bar(labels, policy_loss_means, color=colors, edgecolor="#333333", linewidth=0.6)
+    for bar, n in zip(bars_l, [policy_loss_n.get(a, 0) for a in present]):
+        ax_l.annotate(f"n={n}", (bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                       textcoords="offset points", xytext=(0, 3), ha="center", fontsize=8)
+    ax_l.set_title("Mean Policy Loss by Action Type - Final PPO Epoch per Update", fontsize=13, fontweight="bold")
+    ax_l.set_ylabel("Mean Policy Loss")
+    ax_l.tick_params(axis="x", rotation=30)
+
+    fig.suptitle("PPO Reward / Loss Broken Out by Grammar Action", fontsize=15, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+
+    path = os.path.join(out_dir, filename)
+    return _save_fig(fig, path, bbox_inches="tight")
 
 
 def _load_comparison_runs(run_dirs):
@@ -678,20 +917,74 @@ def plot_rl_vs_baseline_comparison(run_dirs, comparison_out_dir):
         collision_rate=plot_collision_rate_comparison(run_dirs, comparison_out_dir),
     )
 
+# A real scalarize()-delta reward (scalarize(child) - scalarize(parent))
+# is mathematically bounded to [-1, 1] - see objectives_api.scalarize.
+# moo_api.COLLISION_PENALTY is a worse-than-any-legitimate-outcome flat
+# penalty added on top of (or instead of) that delta, so anything below
+# halfway between the two clearly-separated ranges is a collision/failure
+# event, not real signal - separates the two for plot_rl_diagnostics'
+# reward panel. Derived from the actual constant (not a hardcoded copy of
+# its value) so the two can never silently drift out of sync again if
+# COLLISION_PENALTY is retuned.
+_COLLISION_REWARD_THRESHOLD = (moo_api.COLLISION_PENALTY - 1.0) / 2
+
 
 def plot_rl_diagnostics(history, out_dir):
     """One SEPARATE PNG per PPO training metric (reward, policy_loss,
     value_loss, entropy) - previously a single 4x1 combined figure.
     history: rl_api.PPOTrainer.history (dict of lists). Returns
-    dict[metric_key -> path] for whichever metrics had data."""
+    dict[metric_key -> path] for whichever metrics had data.
+
+    The reward metric gets a 2-panel figure instead of the generic
+    single-panel treatment: full range (so collision-gate failures -
+    moo_api.COLLISION_PENALTY - are still visible as spikes) on top, and
+    the same series with those spikes excluded and the y-axis rescaled to
+    fit what remains on the bottom - see _COLLISION_REWARD_THRESHOLD.
+    Without this, the real reward signal is invisible against the -10
+    spikes on a single linear axis."""
     os.makedirs(out_dir, exist_ok=True)
+
+    paths = {}
+    reward_values = history.get("reward")
+    if reward_values:
+        values_arr = np.asarray(reward_values, dtype=float)
+        collision_mask = values_arr <= _COLLISION_REWARD_THRESHOLD
+        n_collision = int(collision_mask.sum())
+        steps = np.arange(len(values_arr))
+
+        fig, (ax_full, ax_zoom) = plt.subplots(2, 1, figsize=(8, 9))
+        ax_full.plot(steps, values_arr, color=_RL_METRIC_COLOR["reward"], linewidth=1.0)
+        ax_full.set_title("Reward per Mutation Step - Full Range", fontsize=13, fontweight="bold")
+        ax_full.set_xlabel("Mutation Step")
+        ax_full.set_ylabel("Reward")
+
+        real_steps = steps[~collision_mask]
+        real_values = values_arr[~collision_mask]
+        ax_zoom.plot(real_steps, real_values, color=_RL_METRIC_COLOR["reward"], linewidth=1.0)
+        if len(real_values):
+            span = max(float(real_values.max() - real_values.min()), 0.05)
+            pad = 0.1 * span
+            ax_zoom.set_ylim(real_values.min() - pad, real_values.max() + pad)
+        ax_zoom.axhline(0.0, color="#999999", linewidth=1.0, linestyle=":")
+        ax_zoom.set_title(
+            f"Reward per Mutation Step - {n_collision} Collision-Gate Failure(s) Excluded",
+            fontsize=13, fontweight="bold",
+        )
+        ax_zoom.set_xlabel("Mutation Step")
+        ax_zoom.set_ylabel("Reward")
+        fig.tight_layout()
+
+        path = os.path.join(out_dir, "rl_diagnostics_reward.png")
+        saved = _save_fig(fig, path)
+        if saved:
+            paths["reward"] = saved
+
     specs = [
-        ("reward", "Reward per Mutation Step", "Mutation Step", "Reward"),
         ("policy_loss", "Actor Policy Loss", "PPO Update Step", "Policy Loss"),
         ("value_loss", "Critic Value Loss", "PPO Update Step", "Value Loss"),
         ("entropy", "Policy Entropy", "PPO Update Step", "Entropy"),
+        ("entropy_coef", "Entropy Coefficient Schedule", "PPO Update Step", "Entropy Coefficient"),
     ]
-    paths = {}
     for key, title, xlabel, ylabel in specs:
         values = history.get(key)
         if not values:

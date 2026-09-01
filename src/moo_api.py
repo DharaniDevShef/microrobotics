@@ -34,6 +34,7 @@ scalar fitness formula).
 import hashlib
 import json
 import logging
+import math
 import os
 import random
 import shutil
@@ -66,7 +67,19 @@ from mjcf_generator import build_assembly, ModuleCollisionError  # noqa: E402
 
 _MESHDIR = os.path.abspath(os.path.join(_SRC_DIR, "..", "meshes")).replace("\\", "/")
 
-COLLISION_PENALTY = -10.0  # subtracted from the RL reward when a child collides
+# Added to the RL reward when a child collides/fails - see run_generation's
+# reward loop and make_children_collision_free's exhausted-attempts path.
+# Proportioned to objectives_api.scalarize()'s own [0, 1] range: a real
+# reward delta (scalarize(child) - scalarize(parent)) is mathematically
+# bounded to [-1, 1], so this used to be -10.0 - 10x any possible
+# legitimate outcome. At tiny per-generation sample counts (pop_size
+# transitions/update), a handful of early collisions at that magnitude
+# could dominate the running advantage estimate and bias PPO away from
+# whichever action type triggers them most (crossover, empirically - see
+# plot_rl_diagnostics' reward panel). -2.0 is still a clearly worse
+# outcome than any legitimate one (max legitimate delta is -1.0), without
+# being an order of magnitude larger than the signal it's mixed with.
+COLLISION_PENALTY = -2.0
 
 # What roblet_simulator.py's save_simulation_stats(physics_ok=False) writes -
 # used verbatim for a graph that couldn't even be built into a valid MJCF
@@ -379,8 +392,27 @@ def _reference_directions(n_obj, n_partitions=2):
     return get_reference_directions("das-dennis", n_obj, n_partitions=n_partitions)
 
 
+def _auto_ref_partitions(n_obj, pop_size):
+    """Largest das-dennis n_partitions whose reference-direction count
+    (comb(n_partitions + n_obj - 1, n_obj - 1)) doesn't exceed `pop_size`
+    - so NSGA-III's niching resolution scales with population size
+    instead of silently staying fixed at whatever partition count
+    happened to fit an earlier, smaller POP_SIZE (a caller that never
+    overrides run_generation's ref_partitions - true of main.py - would
+    otherwise keep e.g. 10 reference directions for 4 objectives even
+    after raising pop_size to 30, where each direction ends up niching
+    ~3 individuals on average - coarser diversity-preservation than the
+    population size could support). Falls back to 1 (comb(n_obj, n_obj-1)
+    = n_obj directions - the minimum meaningful partition count) if even
+    that already exceeds pop_size."""
+    partitions = 1
+    while math.comb(partitions + 1 + n_obj - 1, n_obj - 1) <= pop_size:
+        partitions += 1
+    return partitions
+
+
 def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_seconds=7.0,
-                    n_offspring=None, ref_partitions=2, max_workers=None, rl_assisted=True):
+                    n_offspring=None, ref_partitions=None, max_workers=None, rl_assisted=True):
     """One NSGA-III generation. Returns (next_generation_graphs, log) where
     `log` carries per-survivor objectives/rank for plotting_api.py.
 
@@ -407,6 +439,7 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
     """
     pop_size = len(population_graphs)
     n_offspring = n_offspring or pop_size
+    ref_partitions = ref_partitions or _auto_ref_partitions(len(obj_api.OBJECTIVE_NAMES), pop_size)
     work_dir = work_dir or tempfile.mkdtemp(prefix="roblet_gen_")
 
     # Phase 1: breeding decisions.

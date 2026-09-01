@@ -74,21 +74,28 @@ def load(path, ppo_trainer):
     payload = torch.load(path, weights_only=False)
     try:
         ppo_trainer.load_state_dict(payload["ppo"])
-    except RuntimeError:
-        # nn.Module.load_state_dict is shape-strict: a checkpoint saved
-        # before the RL action space or node feature vector grew (e.g.
-        # adding the light-sensitive-joint design variables' new
-        # TOGGLE_LIGHT_SENSOR/MUTATE_LIGHT_HINGE_ANGLE actions and their
-        # two new per-node features - see rl_api.py) has ActorNet/CriticNet
-        # tensors of the WRONG size for the current architecture. There's
-        # no safe partial-load here (the mismatched layers are exactly the
-        # ones every other layer's weights were jointly trained against),
-        # so treat this the same as "no checkpoint" - a full fresh
-        # Sobol-reseeded start - rather than crashing main.py outright.
+    except (RuntimeError, KeyError):
+        # nn.Module.load_state_dict is shape-strict (raises RuntimeError):
+        # a checkpoint saved before the RL action space or node feature
+        # vector grew (e.g. adding the light-sensitive-joint design
+        # variables' new TOGGLE_LIGHT_SENSOR/MUTATE_LIGHT_HINGE_ANGLE
+        # actions and their two new per-node features - see rl_api.py) has
+        # ActorNet/CriticNet tensors of the WRONG size for the current
+        # architecture. KeyError covers the same "incompatible
+        # architecture" bucket one level up: a checkpoint saved before
+        # PPOTrainer.state_dict()'s own dict shape changed (e.g. actor and
+        # critic used to each own a separate optimizer/encoder -
+        # "actor_optimizer"/"critic_optimizer" keys - now they share one
+        # encoder and one combined "optimizer" key - see PPOTrainer).
+        # There's no safe partial-load either way (the mismatched pieces
+        # are exactly what every other layer's weights were jointly
+        # trained against), so treat both the same as "no checkpoint" - a
+        # full fresh Sobol-reseeded start - rather than crashing main.py
+        # outright.
         logger.warning(
-            "Checkpoint at %s has RL weights that don't match the current network "
-            "architecture (likely from before a design-variable/action-space change) - "
-            "starting a fresh run instead of resuming.", path,
+            "Checkpoint at %s has RL weights/optimizer state that don't match the current "
+            "network/trainer architecture (likely from before a design-variable/action-space "
+            "or RL-architecture change) - starting a fresh run instead of resuming.", path,
         )
         return None
     obj_api.set_normalization_state(payload.get("obj_norm"))  # None for pre-existing checkpoints

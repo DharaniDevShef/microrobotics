@@ -541,7 +541,27 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
     feasible_idx = [i for i, r in enumerate(all_records) if r["constraint"] <= 0]
     infeasible_idx = [i for i, r in enumerate(all_records) if r["constraint"] > 0]
 
-    survivors = _survive(feasible_idx, pop_size)
+    # Elitism: force the single best-scalarized FEASIBLE individual through
+    # regardless of niching. ReferenceDirectionSurvival._do() only does
+    # crowding/niche selection against reference directions - it has no
+    # notion of "best" - so once the population homogenizes (e.g. the RL
+    # policy collapsing onto one low-risk action type - see
+    # plot_action_distribution), niching can legitimately drop the best
+    # individual found so far in favor of reference-direction coverage,
+    # producing exactly the "best fitness decreases" artifact convergence.png
+    # shows. Restricted to feasible_idx, not all_records, so a failed
+    # simulation's placeholder objectives (see the feasibility-first
+    # comment above) can never be elitism-locked in as "best".
+    elite_idx = max(feasible_idx, key=lambda i: obj_api.scalarize(all_records[i]["objectives"])) if feasible_idx else None
+    elite_survivor = None
+    if elite_idx is not None:
+        elite_record = all_records[elite_idx]
+        elite_survivor = Individual(X=elite_record["graph"], F=np.array(elite_record["F"]))
+        feasible_idx = [i for i in feasible_idx if i != elite_idx]
+
+    survivors = _survive(feasible_idx, pop_size - (1 if elite_survivor is not None else 0))
+    if elite_survivor is not None:
+        survivors = [elite_survivor] + survivors
     if len(survivors) < pop_size:
         logger.warning(
             "Only %d/%d feasible individuals available this generation; padding survivors with %d infeasible one(s).",

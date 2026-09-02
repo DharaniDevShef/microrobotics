@@ -627,10 +627,22 @@ class PPOTrainer:
     within the first ~10 generations, in both pheromone-response arms -
     see plot_rl_diagnostics) go uncorrected once it happened, since there
     was no exploration pressure left to ever revisit it.
+
+    entropy_decay=0.995/entropy_coef_end=0.02 (not the previous 0.97/0.01):
+    with one update() call per generation, 0.97 decays entropy_coef to
+    within ~1% of entropy_coef_end by generation ~150 - for a 250+
+    generation run (main.py's N_GENERATIONS), that leaves the back half of
+    training with almost no exploration pressure left, which is exactly
+    what let TOGGLE_LIGHT_SENSOR's action-type probability collapse to
+    ~100% by generation ~30 with nothing to pull it back (see
+    plot_action_distribution / the collision-penalty asymmetry discussed
+    in moo_api.COLLISION_PENALTY's docstring). 0.995 keeps entropy_coef
+    above ~0.02 for the whole run instead of bottoming out a third of the
+    way through it.
     """
 
-    def __init__(self, lr=3e-4, clip_eps=0.2, entropy_coef_start=0.05, entropy_coef_end=0.01,
-                 entropy_decay=0.97, value_coef=0.5, epochs=4, seed=None):
+    def __init__(self, lr=3e-4, clip_eps=0.2, entropy_coef_start=0.05, entropy_coef_end=0.02,
+                 entropy_decay=0.995, value_coef=0.5, epochs=4, seed=None):
         self.encoder = _GraphTransformerEncoder(NODE_FEATURE_DIM, HIDDEN_DIM, n_blocks=2, heads=4)
         self.actor = ActorNet(self.encoder)
         self.critic = CriticNet(self.encoder)
@@ -708,8 +720,29 @@ class PPOTrainer:
         old_logprobs = torch.stack([d.old_logprob for d, _ in self.buffer])
 
         advantages = rewards - old_values
-        if advantages.numel() > 1 and advantages.std() > 1e-6:
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        # Standardized per action TYPE, not once globally over the whole
+        # buffer: once one action type dominates the buffer (see
+        # moo_api.COLLISION_PENALTY's docstring / plot_action_distribution),
+        # a single global mean/std is essentially that dominant action's own
+        # reward distribution, so a rare sample from an under-sampled action
+        # - including a COLLISION_PENALTY hit - gets divided by a std that
+        # has nothing to do with its own action's spread and comes out
+        # artificially amplified, which further suppresses whichever action
+        # is already rare. Grouping first keeps every action type's
+        # advantage scaled against its OWN reward distribution instead, so
+        # rarity alone can't inflate a sample's apparent importance.
+        # Singleton groups (only one sample this update) keep their raw
+        # reward-minus-baseline advantage - there's no within-group spread
+        # to standardize against yet.
+        action_names = [d.action.name for d, _ in self.buffer]
+        advantages = advantages.clone()
+        for name in set(action_names):
+            group_idx = [i for i, n in enumerate(action_names) if n == name]
+            if len(group_idx) > 1:
+                group = advantages[group_idx]
+                std = group.std()
+                if std > 1e-6:
+                    advantages[group_idx] = (group - group.mean()) / (std + 1e-8)
 
         entropy_coef = self._current_entropy_coef()
         per_action_losses = {}  # reassigned each epoch - holds the LAST epoch's grouping once the loop ends

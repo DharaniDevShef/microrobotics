@@ -160,6 +160,53 @@ def append_generation_population(gen_idx, records, out_dir):
     return path
 
 
+def save_pareto_archive(archive, out_dir):
+    """Writes out_dir/pareto_archive.json - moo_api.update_pareto_archive's
+    current archive (list of dict(graph, objectives, F)), serialized the
+    same way append_generation_population serializes a graph
+    (nx.node_link_data). Unlike population_history.json this OVERWRITES
+    rather than appends each call: the archive is already the complete,
+    deduplicated, up-to-date non-dominated set as of this generation, not
+    a per-generation increment - there's nothing to accumulate on top of
+    it. Called every generation from main.py right after run_generation,
+    same as population_history.json, so a resumed run can reload it via
+    load_pareto_archive() instead of restarting the archive empty."""
+    os.makedirs(out_dir, exist_ok=True)
+    payload = [
+        {
+            "graph": nx.node_link_data(r["graph"], edges="edges"),
+            "objectives": r["objectives"],
+            "F": list(r["F"]) if not isinstance(r["F"], list) else r["F"],
+        }
+        for r in archive
+    ]
+    path = os.path.join(out_dir, "pareto_archive.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    return path
+
+
+def load_pareto_archive(out_dir):
+    """Inverse of save_pareto_archive - returns [] if the run hasn't
+    written one yet (fresh run, or a run from before this archive
+    existed), otherwise the archive in the same dict(graph, objectives, F)
+    shape moo_api.update_pareto_archive expects, with `graph` restored to
+    an nx.DiGraph (nx.node_link_graph) and `F` restored to an np.ndarray."""
+    path = os.path.join(out_dir, "pareto_archive.json")
+    if not os.path.exists(path):
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+    return [
+        dict(
+            graph=nx.node_link_graph(r["graph"], edges="edges"),
+            objectives=r["objectives"],
+            F=np.array(r["F"]),
+        )
+        for r in payload
+    ]
+
+
 def _load_population_history(out_dir):
     path = os.path.join(out_dir, "population_history.json")
     if not os.path.exists(path):

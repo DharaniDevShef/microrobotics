@@ -45,7 +45,7 @@ import rl_api
 logger = logging.getLogger(__name__)
 
 POP_SIZE = 30
-N_GENERATIONS = 10
+N_GENERATIONS = 40
 SIM_SECONDS = 7
 SEED = 42  # reproducible Sobol-seeding of initial population (fresh runs only - a resumed run's RNG/seed come from the checkpoint)
 
@@ -59,7 +59,7 @@ SEED = 42  # reproducible Sobol-seeding of initial population (fresh runs only -
 # final saved plots are never stale. Data persistence (population_history.
 # json, generation_stats.json, checkpoint.pt) is NOT throttled by this -
 # only the matplotlib rendering is.
-PLOT_EVERY_N_GENERATIONS = 10
+PLOT_EVERY_N_GENERATIONS = 5
 
 # True (default): breeding uses rl_api's trained policy, as it always has.
 # False: breeding uses random_baseline.py's uniform-random choice over the
@@ -67,7 +67,7 @@ PLOT_EVERY_N_GENERATIONS = 10
 # + NSGA-III selection" comparison arm, for measuring what the learned
 # policy actually contributes. Writes to a different OUTPUT_DIR (below) so
 # toggling this never disturbs an in-progress True run's checkpoint/data.
-RL_ASSISTED_GENETIC_OPERATIONS = True
+RL_ASSISTED_GENETIC_OPERATIONS = False
 
 # Which of the two pheromone-response evolution runs this is (Week 2's
 # Reaction Primitives 2.1-3.2 - see objectives_api.configure_pheromone_
@@ -120,6 +120,12 @@ def main():
     logger.info("Pheromone response mode: %s", PHEROMONE_RESPONSE_TYPE)
 
     ppo_trainer = rl_api.PPOTrainer(seed=SEED)
+    # Kept OUTSIDE checkpoint.pt (its own JSON side-file, like
+    # population_history.json) rather than added to checkpoint.py's
+    # torch-based format - see plotting_api.save_pareto_archive/
+    # load_pareto_archive. Reloaded here unconditionally (not just on
+    # resume) since it's independent of whether checkpoint.pt exists.
+    archive = plotting_api.load_pareto_archive(OUTPUT_DIR)
 
     resumed = ckpt.load(CHECKPOINT_PATH, ppo_trainer)
     if resumed is not None:
@@ -178,8 +184,10 @@ def main():
             os.makedirs(gen_dir, exist_ok=True)
             population, log = moo_api.run_generation(
                 population, ppo_trainer, rng, work_dir=gen_dir, sim_seconds=SIM_SECONDS,
-                rl_assisted=RL_ASSISTED_GENETIC_OPERATIONS,
+                rl_assisted=RL_ASSISTED_GENETIC_OPERATIONS, archive=archive,
             )
+            archive = log["archive"]
+            plotting_api.save_pareto_archive(archive, OUTPUT_DIR)
 
             records = [
                 dict(graph=g, objectives=obj, ind_id=ind_id)
@@ -210,10 +218,10 @@ def main():
             # MAXIMIZE) before summing, unlike a raw sum.
             best = max(records, key=lambda r: objectives_api.scalarize(r["objectives"]))
             logger.info(
-                "parents=%d offspring=%d collided=%d | survivors=%d | "
+                "parents=%d offspring=%d collided=%d | survivors=%d | pareto_archive=%d | "
                 "best f1 (velocity)=%.4f m/s | Individual index: %d",
-                log['n_parents'], log['n_offspring'], log['n_collided'],
-                len(population), best['objectives']['f1_folded_gait_velocity'], best['ind_id'],
+                log['n_parents'], log['n_offspring'], log['n_collided'], len(population), len(archive),
+                best['objectives']['f1_folded_gait_velocity'], best['ind_id'],
             )
 
             # Per-generation n_parents/n_offspring/n_collided, appended

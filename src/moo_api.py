@@ -47,6 +47,7 @@ from scipy.stats import qmc
 from pymoo.algorithms.moo.nsga3 import ReferenceDirectionSurvival
 from pymoo.core.individual import Individual
 from pymoo.core.population import Population
+from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 from pymoo.util.ref_dirs import get_reference_directions
 
 import objectives_api as obj_api
@@ -411,10 +412,63 @@ def _auto_ref_partitions(n_obj, pop_size):
     return partitions
 
 
+def update_pareto_archive(archive, candidates):
+    """Maintains a run-wide, read-only record of every non-dominated
+    (Pareto-optimal) individual ever evaluated - independent of NSGA-III's
+    own environmental selection in _survive(), so a good trade-off point
+    that later gets dropped from the BREEDING population (a legitimate
+    outcome of reference-direction niching preferring front coverage over
+    any one point once the non-dominated front outgrows pop_size - see
+    _survive's docstring) is still preserved here for reporting/analysis.
+
+    Deliberately NEVER fed back into breeding - only read by callers (e.g.
+    a future plotting/reporting function) that want "the best trade-offs
+    this run has ever found," without reintroducing the single-objective
+    bias _survive() used to have (an earlier version force-carried the
+    single scalarize-best individual through niching itself, which could
+    permanently lock in an individual that's excellent on one objective
+    and terrible on another - see _survive's docstring for what replaced
+    that).
+
+    `archive`: list of dict(graph, objectives, F) - the archive so far
+    (pass [] for a fresh run). `candidates`: this generation's FEASIBLE
+    evaluated individuals (dict with at least graph/objectives/F) - same
+    pool _survive() draws from (run_generation passes it
+    [all_records[i] for i in feasible_idx]).
+
+    Returns the updated archive: every archive member/candidate that isn't
+    dominated by anything else in the combined pool, deduplicated by graph
+    content hash first - an unchanged survivor re-evaluated generation
+    after generation (moo_api's own _EVAL_CACHE-backed determinism) would
+    otherwise re-enter as a "new" duplicate every single generation."""
+    combined = list(archive) + [dict(graph=c["graph"], objectives=c["objectives"], F=c["F"]) for c in candidates]
+    if not combined:
+        return []
+
+    seen_hashes = set()
+    deduped = []
+    for r in combined:
+        h = _graph_hash(r["graph"])
+        if h in seen_hashes:
+            continue
+        seen_hashes.add(h)
+        deduped.append(r)
+
+    F = np.array([r["F"] for r in deduped])
+    front = NonDominatedSorting().do(F, only_non_dominated_front=True)
+    return [deduped[i] for i in front]
+
+
 def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_seconds=7.0,
-                    n_offspring=None, ref_partitions=None, max_workers=None, rl_assisted=True):
+                    n_offspring=None, ref_partitions=None, max_workers=None, rl_assisted=True,
+                    archive=None):
     """One NSGA-III generation. Returns (next_generation_graphs, log) where
-    `log` carries per-survivor objectives/rank for plotting_api.py.
+    `log` carries per-survivor objectives/rank for plotting_api.py, plus
+    `log["archive"]` - the updated Pareto archive (see
+    update_pareto_archive) computed from `archive` (the archive so far;
+    pass [] or omit on generation 0) and this generation's evaluated pool.
+    Callers that want the archive to persist across generations/resumes
+    should thread `log["archive"]` back in as next call's `archive`.
 
     `rl_assisted` (main.py's RL_ASSISTED_GENETIC_OPERATIONS) switches the
     breeding operator between the trained RL policy and random_baseline.py's
@@ -541,27 +595,23 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
     feasible_idx = [i for i, r in enumerate(all_records) if r["constraint"] <= 0]
     infeasible_idx = [i for i, r in enumerate(all_records) if r["constraint"] > 0]
 
-    # Elitism: force the single best-scalarized FEASIBLE individual through
-    # regardless of niching. ReferenceDirectionSurvival._do() only does
-    # crowding/niche selection against reference directions - it has no
-    # notion of "best" - so once the population homogenizes (e.g. the RL
-    # policy collapsing onto one low-risk action type - see
-    # plot_action_distribution), niching can legitimately drop the best
-    # individual found so far in favor of reference-direction coverage,
-    # producing exactly the "best fitness decreases" artifact convergence.png
-    # shows. Restricted to feasible_idx, not all_records, so a failed
-    # simulation's placeholder objectives (see the feasibility-first
-    # comment above) can never be elitism-locked in as "best".
-    elite_idx = max(feasible_idx, key=lambda i: obj_api.scalarize(all_records[i]["objectives"])) if feasible_idx else None
-    elite_survivor = None
-    if elite_idx is not None:
-        elite_record = all_records[elite_idx]
-        elite_survivor = Individual(X=elite_record["graph"], F=np.array(elite_record["F"]))
-        feasible_idx = [i for i in feasible_idx if i != elite_idx]
-
-    survivors = _survive(feasible_idx, pop_size - (1 if elite_survivor is not None else 0))
-    if elite_survivor is not None:
-        survivors = [elite_survivor] + survivors
+    # NOTE: an earlier version of this function force-carried the single
+    # best-SCALARIZED individual through regardless of niching. Reverted:
+    # ReferenceDirectionSurvival._do() already runs on all_records (parents
+    # + offspring combined, i.e. P_t ∪ Q_t) - that IS NSGA-III's own
+    # elitism, and it already keeps every non-dominated individual unless
+    # the non-dominated front itself exceeds pop_size, in which case
+    # niching picks a spread across reference directions rather than one
+    # scalarized "best" - that's the algorithm correctly prioritizing
+    # front coverage, not a bug. Forcing one scalarize-argmax individual
+    # through on top of that imposes a single-objective preference NSGA-III
+    # was never designed to have, and can permanently lock in an individual
+    # that's excellent on one objective and terrible on another (see
+    # plot_entropy_vs_velocity - this is what pinned the RL-assisted run's
+    # best-by-scalarize individual at ~worst-possible folding entropy).
+    # See update_pareto_archive() for how "never lose a good solution" is
+    # now handled instead - a read-only archive, not a change to selection.
+    survivors = _survive(feasible_idx, pop_size)
     if len(survivors) < pop_size:
         logger.warning(
             "Only %d/%d feasible individuals available this generation; padding survivors with %d infeasible one(s).",
@@ -570,6 +620,7 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
         survivors += _survive(infeasible_idx, pop_size - len(survivors))
 
     next_generation = [ind.X for ind in survivors]
+    updated_archive = update_pareto_archive(archive or [], [all_records[i] for i in feasible_idx])
     log = dict(
         survivor_objectives=[obj_lookup[id(ind.X)] for ind in survivors],
         survivor_ind_ids=[ind_id_lookup[id(ind.X)] for ind in survivors],
@@ -577,5 +628,6 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
         n_parents=len(parent_records),
         n_offspring=len(offspring_records),
         n_collided=sum(1 for r in all_records if r["constraint"] > 0),
+        archive=updated_archive,
     )
     return next_generation, log

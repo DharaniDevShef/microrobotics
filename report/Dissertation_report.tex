@@ -1,0 +1,1412 @@
+% ----------------------------------------------------------------
+% Report Class (This is a LaTeX2e document)  *********************
+% ----------------------------------------------------------------
+% ACS 322/420 Dissertation Template
+% March 2013, JL
+%
+% STRUCTURE PASS (see chat) -----------------------------------------------
+% This file has been restructured into full chapter/section/subsection
+% headings for "Evolution of Robotic Locomotion through Morphological
+% Optimisation" (Dharani Saravanan, MSc AI for Engineering, Sheffield,
+% supervisor Dr Shuhei Miyashita - see report/DisCover.pdf).
+%
+% NOTHING BELOW IS FINISHED PROSE. Every section/subsection contains a
+% detailed %-comment block telling YOU what to write, what evidence/
+% figures/numbers to cite from this project, and which Guidelines.md
+% marking-rubric level each point is aimed at. Replace each "Text..."
+% placeholder with real prose once you've read its comment block, then
+% delete the comment block (or leave it - LaTeX comments never print).
+%
+% PAGE BUDGET (target: 40-50 pages of main body, i.e. Chapter 1 through
+% the end of Chapter 7 / start of References - abstract, individual
+% contribution, acknowledgements, references and appendices are NOT
+% counted per Guidelines.md and are excluded from this budget):
+%   Ch1 Introduction                    ~6 pages
+%   Ch2 Literature Review               ~7 pages
+%   Ch3 Roblet Platform & Simulation    ~5 pages
+%   Ch4 Evolutionary Framework Design   ~11 pages  (largest chapter - this is your core contribution)
+%   Ch5 Experimental Methodology        ~3 pages
+%   Ch6 Results and Discussion          ~13 pages  (second largest - evidence + critical analysis)
+%   Ch7 Conclusions and Future Work     ~4 pages
+%   ---------------------------------------------
+%   Total                               ~49 pages
+% Treat these as budgets, not targets to hit exactly - if a section has
+% less to say, let it be short; Guidelines.md explicitly rewards a
+% "short well-argued... report" over a padded one. Every \section/
+% \subsection below now carries its own sub-budget (in pages) inline in
+% its comment block, so the chapter totals above are the SUM of what
+% follows them - if you overrun one section, trim another in the same
+% chapter first before eating into a different chapter's budget.
+%
+% MARKING WEIGHT (Guidelines.md marksheet: Report Quality /20, Scientific
+% and professional conventions /20, Results /30, Understanding and
+% analysis /30 - 100 total). Every chapter/section heading below is also
+% tagged inline with which of these 4 criteria it primarily earns marks
+% against, and a HIGH/MED/LOW priority - use this to decide where your
+% WRITING TIME goes, not just your page count. Headline allocation:
+%   - Results (30) and Understanding & Analysis (30) = 60/100 marks are
+%     earned overwhelmingly in Chapter 6 (Results and Discussion) - it
+%     is tagged HIGH throughout and should get your most careful drafting
+%     and redrafting, not just your most pages.
+%   - Scientific and professional conventions (20) is earned primarily
+%     in Chapter 2 (Literature Review) and the References list - critical
+%     evaluation of sources, not just correct citation syntax.
+%   - Report Quality (20) is earned across the WHOLE document (structure,
+%     clarity, production standard) - it has no single chapter "home",
+%     which is why it isn't tagged per-section below.
+%   - The Aims and Objectives section (1.3) is a special case: it isn't
+%     marked directly, but it is the RUBRIC AGAINST WHICH Chapter 6's
+%     Results mark is judged ("achieved all basic and most of advanced
+%     project aims" = Merit band) - get its wording right and Chapter 6
+%     Section 6.7 has to explicitly close the loop against it.
+%
+% FIGURES: every \includegraphics path below is relative to this file's
+% own location (report/), pointing at ../paper/Figures/. Compile this
+% .tex from inside report/ (or adjust \graphicspath below) so those
+% resolve. All figures already exist and were generated from real runs
+% of this project's own code (helper_scripts/evolution_results_visualizer.py
+% and src/plotting_api.py) via paper/Figures/generate_figures.py - none
+% of the images below are placeholders, and their captions are already
+% written for you (Guidelines.md: "captions should be descriptive enough
+% that the figure and caption alone are self-explanatory"). You still
+% need to WRITE THE SURROUNDING PROSE that refers to each figure by
+% number (Guidelines.md: "if you haven't written about it in the text it
+% shouldn't be in the document").
+%
+% ONE IMPORTANT FLAG: paper/Figures/roblet_paper_image_on_assembly_
+% folding_actuation.gif is an animated GIF - pdflatex/LaTeX cannot embed
+% it directly. Before compiling, either (a) extract one representative
+% static frame (or a 2x2 panel of key frames: mechanical agitation ->
+% self-assembly -> hot-water self-folding -> magnetic actuation) as a
+% PNG, or (b) cite the original Han et al. (2023) figure instead. A
+% placeholder \includegraphics for this is commented out in Section 3.1
+% below - do not compile with it uncommented until you've done this.
+% ----------------------------------------------------------------
+
+\documentclass[12pt,a4paper]{report}
+
+\usepackage[lmargin=3.81cm,tmargin=2.54cm,rmargin=2.54cm,bmargin=2.52cm]{geometry}
+
+\linespread{1.5}
+
+% Fonts -- the following two packages give you Times Roman in LaTex
+%\usepackage{txfonts}
+\usepackage{mathptmx}
+\usepackage[numbers]{natbib}
+
+% Added for this structure pass - all standard, all needed by what's below:
+\usepackage{graphicx}          % \includegraphics
+\usepackage{subcaption}        % subfigures (real_setup vs sim_setup, attractive vs repulsive, etc.)
+\usepackage{amsmath}           % multi-objective fitness vector equation (Ch4)
+\usepackage{amssymb}           % \mathbb{R}, etc., if you reuse paper/rl_hyperparameters.tex content
+\usepackage{booktabs}          % \toprule/\midrule/\bottomrule - reuse paper/main.tex's hyperparameter table
+\usepackage[hidelinks]{hyperref} % clickable cross-references/citations - remove if your supervisor prefers not
+\usepackage{xcolor}
+
+\newcommand{\imageinference}[1]{\textcolor{blue}{#1}}
+\newcommand{\missinginfo}[1]{\textcolor{red}{[TO COMPLETE: #1]}}
+
+\graphicspath{{../paper/Figures/}}
+
+\begin{document}
+
+\pagenumbering{Roman}
+
+\section*{ABSTRACT}
+% [~1 page max] MARKING: not scored directly by the 4-criterion
+% marksheet, but it IS the marker's first impression and primes how they
+% read everything that follows for Report Quality - a vague or padded
+% abstract costs you goodwill before Chapter 1 even starts.
+% Guidelines.md: "a concise summary of the work outlining the problem,
+% why it might be important, approach taken and results...written for a
+% technical audience with interest in the design and implementation
+% aspects of the project." Target ~250-300 words, ONE page max, no
+% citations, no figures. Write this LAST, after every other chapter is
+% finished - it is much easier to summarize work you've already written
+% up than to predict it.
+%
+% A tested structure (matches paper/main.tex's own abstract skeleton,
+% which you can reuse almost directly - see \about{} bullets in
+% paper/main.tex Section "abstract"):
+%   1. Opening sentence: the general question (modular self-assembling
+%      robots need locomotion AND morphology co-designed automatically).
+%   2. Specific problem: Roblet morphologies (Han et al. 2023, IROS) are
+%      currently hand-designed; the design space (6 variables, graph-
+%      structured, up to ~40 modules) is combinatorially intractable to
+%      search manually.
+%   3. Approach: physics-in-the-loop evolution in MuJoCo, NSGA-III
+%      multi-objective selection over 4 objectives, variation
+%      (mutation+crossover) chosen by a PPO-trained Graph Transformer
+%      actor-critic instead of blind random operators.
+%   4. What was actually built (be concrete): the graph genotype +
+%      grammar, the pheromone reaction-primitive test protocol
+%      (attractive/repulsive), the RL-guided breeding pipeline, the
+%      random-baseline comparison arm, the diagnostic/evaluation
+%      tooling (Hypervolume, action-distribution, per-action reward/loss).
+%   5. Headline result(s) - be honest and specific, not just positive:
+%      e.g. evolutionary convergence achieved (cite Hypervolume trend,
+%      Fig.~\ref{fig:hypervolume}); diverse attractive/repulsive
+%      morphologies evolved (Fig.~\ref{fig:evolved-morphologies}); AND
+%      the honest negative finding that the random baseline currently
+%      outperforms the RL-guided arm at the scale tested
+%      (Fig.~\ref{fig:convergence-comparison}) with the diagnosed cause
+%      (crossover action-type collapse) and the fix implemented but not
+%      yet validated at full scale.
+%   6. Closing/broader-perspective sentence: what this demonstrates for
+%      automated co-design of self-assembling modular robots generally.
+This project investigates whether evolutionary search can be used to design modular robots whose shape, folding behaviour and locomotion are considered together. The chosen platform is the Roblet system, in which small modules join through magnetic connectors, fold from a flat arrangement into a three-dimensional structure, and move under an externally applied magnetic field.
+
+The work developed a graph-based representation of Roblet morphologies and a grammar that limits changes to physically meaningful configurations. Candidate designs were mirrored, checked for collisions and evaluated in MuJoCo. Four objectives were used: folded-gait velocity, change in shape entropy during folding, yaw response to a light stimulus, and speed response to a light stimulus. Attractive and repulsive light responses were treated as separate runs because they require opposite optimisation directions. NSGA-III was used to preserve trade-offs between these objectives, while a proximal policy optimisation (PPO) actor-critic selected grammar actions for mutation and crossover.
+
+The available experiments used a population of 30 individuals, five generations, seven-second rollouts and random seed 42. \imageinference{The convergence and hypervolume figures indicate measurable progress during the reported run; the exact values and any plateau should be confirmed from the plotted data before submission.} The small comparison run also showed that the random baseline achieved a higher best scalarised fitness than the RL-assisted run at this scale. Overall, the project establishes a working physics-in-the-loop framework for studying automated morphology design on a self-assembling robotic platform.
+
+\newpage \section*{INDIVIDUAL CONTRIBUTION}
+% [MAX 1 PAGE, hard limit per Guidelines.md] MARKING: not scored by the
+% 4-criterion marksheet shown in Guidelines.md (it's assessed separately,
+% likely alongside Performance and Professional Skills - confirm with
+% your supervisor) - but it IS compulsory and its omission or vagueness
+% is a real risk given the multi-author context below, independent of
+% the marksheet.
+% Guidelines.md: COMPULSORY, MAX 1 PAGE. "make it clear what your role
+% was and what work you contributed... make it clear what existing work
+% and resources... that you used for your project... include references
+% to any external software and data."
+%
+% THIS SECTION MATTERS MORE THAN IT LOOKS FOR THIS PROJECT SPECIFICALLY:
+% the Roblet hardware/platform and its physical demonstration are prior
+% work by the Miyashita lab (Han, Rus \& Miyashita, IROS 2023 -
+% \citep{han2023roblets}), and paper/main.tex shows this project's
+% write-up is being prepared as a MULTI-AUTHOR paper (Dharani Saravanan,
+% Xiao Chen, Jakub W Schmidt, Atsushi Aoyama, Adam Stanton, Shuhei
+% Miyashita). An examiner WILL ask "which of this is yours?" - answer it
+% here explicitly, don't leave it implicit.
+%
+% Be precise and itemized. Suggested content, all verifiable from this
+% project's own repository:
+%   - What you did NOT create (be upfront, this is expected and fine):
+%     the physical Roblet hardware design, its magnetic self-folding
+%     mechanism, and the CAD mass-property data used for the MuJoCo
+%     digital twin are prior work from the lab (cite \citep{han2023roblets}
+%     and name whichever lab members/co-authors supplied the physical
+%     platform / CAD data you built the simulation from).
+%   - What you DID create/contribute (this is your actual MSc
+%     contribution - list concretely, each is independently verifiable
+%     in the codebase):
+%       * The graph-based genotype representation and its grammar-legal
+%         mutation/crossover operator set (src/roblet_grammar.py).
+%       * The MuJoCo digital-twin simulation and MJCF assembly generator
+%         (src/roblet_simulator.py, helper_scripts/mjcf_generator.py).
+%       * The pheromone reaction-primitive test protocol (light-response
+%         objectives, attractive/repulsive configuration).
+%       * The 4-objective multi-objective formulation and NSGA-III
+%         integration (src/objectives_api.py, src/moo_api.py).
+%       * The Graph Transformer PPO actor-critic for structural edits
+%         (src/rl_api.py) - including [if true by submission time] the
+%         shared-encoder architecture and entropy-schedule redesign.
+%       * The evaluation/diagnostic tooling: Hypervolume tracking,
+%         action-distribution and per-action reward/loss plots, the
+%         RL-vs-random-baseline comparison arm (src/plotting_api.py,
+%         helper_scripts/evolution_results_visualizer.py).
+%   - External software/libraries used (cite/list, don't just namedrop):
+%     MuJoCo (physics), pymoo (NSGA-III, non-dominated sorting,
+%     hypervolume/GD/IGD indicators), PyTorch + torch\_geometric (Graph
+%     Transformer), NetworkX (genotype graphs).
+%   - If a supervisor or lab member gave you starting code, a design
+%     document, or the CAD/mass-property data, say so explicitly here -
+%     this is exactly what Guidelines.md is asking for, and omitting it
+%     is a bigger risk than including it.
+The physical Roblet platform, its magnetic self-assembly mechanism and the original CAD mass-property data were developed by the Miyashita laboratory and are treated as prior resources in this project \citep{han2023roblets}. The work reported here consisted of implementing and extending the computational design and evaluation framework. This included the graph genotype and grammar-legal operators, the MuJoCo digital-twin assembly and its MJCF generation, the folded-gait and light-response objective calculations, and the NSGA-III evolutionary loop.
+
+An additional contribution was the adaptation of light-based reaction primitives into attractive and repulsive evolutionary configurations. The PPO actor-critic was implemented to select structural mutation and crossover actions, and a random-action arm was added as a controlled comparison. Hypervolume, convergence, action-distribution and PPO diagnostic plots were also produced. MuJoCo was used for physics simulation, pymoo for multi-objective selection, PyTorch and torch\_geometric for the graph policy, and NetworkX for graph manipulation. \missinginfo{Add the names of lab members who supplied CAD data, starter code or design documents, and confirm the repository or data-access statement required for submission.}
+
+\newpage \section*{ACKNOWLEDGEMENTS}
+% [~0.5 page if included] MARKING: not scored, fully optional - keep
+% short, this is not a place to spend page budget or writing effort.
+% Optional (Guidelines.md). If included, this is the ONE place you are
+% explicitly permitted to write in the first person ("I would like to
+% thank..."). Thank your supervisor (Dr Shuhei Miyashita) and anyone who
+% supplied hardware/CAD data/prior code (see Individual Contribution
+% above for exactly who that might be).
+Automated robot design is useful when the number of possible shapes and behaviours is too large for manual testing. Here, morphology is not treated as a fixed container for a controller. Module type, connectivity and folding parameters affect physical motion, while the same morphology also determines which light-sensitive joints can be used. Co-design therefore means that these structural and response variables are changed within the same evolutionary representation.
+
+The approach is physics-aware because candidate designs are scored after assembly and motion in a simulator. This avoids selecting shapes that look promising in two dimensions but fail after folding. It also makes the objective values easier to interpret: a design is rewarded for the behaviour of its folded body rather than for a proxy that may not reflect contact, mass or actuation.
+
+%%% Table of Contents
+\tableofcontents
+\listoffigures  % recommended, not mandatory - a 40-50 page, figure-heavy
+                % report benefits from this for "Report Quality" marks
+                % (well-structured, professional production standard).
+\listoftables
+
+\thispagestyle{empty}
+
+
+\chapter{Introduction}
+% [~6 pages total] MARKING WEIGHT: Report Quality (MED) - first
+% impression of structure/clarity. Section 1.3 (Aims and Objectives) is
+% the highest-stakes part of this chapter even though it isn't marked
+% directly - see the file-header note on why.
+% Guidelines.md: compulsory chapter. Every chapter/section EXCEPT intro
+% and conclusions needs its own scene-setting opening paragraph per the
+% "Guidelines on Writing the Dissertation" - the Introduction itself
+% doesn't need one (it IS the scene-setter for the whole document), but
+% write 2-3 sentences at the very top of this chapter previewing 1.1-1.6.
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+
+\section{Background and Motivation}
+% [~2 pages incl. 1.1.1-1.1.3] MARKING: Report Quality (MED).
+% Merge/adapt directly from your own already-written material:
+% paper/main.tex's Introduction bullets (\bull{Intro-concept-general},
+% \bull{Intro-develop-example}) and the Background slide content in
+% report/project_summary.md ("Automated Robot Design", "Bio-Inspired
+% Evolutionary Robotics", "RL in Action" - Boston Dynamics/Isaac Sim+PPO
+% precedent). Suggested flow, general -> specific (funnel structure):
+%   1. General: automated/AI-driven robot design as a field - physics-
+%      aware co-design of morphology and control, why hand-engineering
+%      doesn't scale.
+%   2. Bio-inspired evolutionary robotics + why natural selection is a
+%      good search strategy for physically-embodied design spaces.
+%   3. Narrow to modular, self-assembling, self-folding systems
+%      specifically - motivate WHY modular (functional diversity from a
+%      small part catalogue, potential for swarm behaviour via
+%      \citep{alattas2019evolutionary}, \citep{liu2023smores},
+%      \citep{tu2026locomotion}).
+%   4. Introduce the Roblet platform itself as the concrete system this
+%      project builds on (full technical description is deferred to
+%      Chapter 3 - here just establish WHAT it is and WHY it's the right
+%      testbed): magnetic jigsaw self-assembly, heat-triggered PVC
+%      self-folding, external oscillating-field actuation, light-based
+%      "virtual pheromone" swarm signalling \citep{han2023roblets}.
+%   5. Close on the RL-for-robot-design precedent (Boston Dynamics /
+%      Isaac Sim + PPO massively-parallel training) as the playbook this
+%      project adapts to modular self-assembling systems - this is your
+%      bridge into the Motivation/Problem Statement below.
+
+\subsection{Automated and Physics-Aware Robot Co-Design}
+% [~0.7 page]
+% What "co-design" means here specifically: morphology (module type,
+% connectivity, hinge angle) and light-triggered behaviour
+% (light-sensitive joint selection, light-detection hinge angle) are
+% evolved TOGETHER, not morphology-then-controller in two stages.
+% Contrast briefly with the alternative (fixed-morphology RL control
+% tuning) to justify why co-design is the right framing - this sets up
+% Chapter 2's literature review (Section 2.2) rather than duplicating it
+% here; keep this to 1-2 paragraphs.
+Roblets are small, modular units with magnetic bonding sites and foldable sections. The units can be assembled from a two-dimensional arrangement and then folded into a three-dimensional robot. Locomotion is produced by an externally applied oscillating magnetic field rather than by motors placed in every module. This combination makes Roblets a useful test case for automated design because morphology affects assembly, folding, magnetic response and motion at the same time \citep{han2023roblets}.
+
+\subsection{The Roblet Platform}
+% [~0.6 page]
+% Brief here (1 paragraph) - full detail belongs in Chapter 3. Just
+% enough to make the rest of the Introduction make sense: modular
+% 3D-printed units, magnetic bonding, self-folding, external magnetic
+% actuation, light-based pheromone signalling. Cite \citep{han2023roblets}.
+Roblets are small, modular units with magnetic bonding sites and foldable sections. The units can be assembled from a two-dimensional arrangement and then folded into a three-dimensional robot. Locomotion is produced by an externally applied oscillating magnetic field rather than by motors placed in every module. This combination makes Roblets a useful test case for automated design because morphology affects assembly, folding, magnetic response and motion at the same time \citep{han2023roblets}.
+
+\subsection{Swarm Communication via Light-Based Virtual Pheromones}
+% [~0.7 page]
+% Motivate why light-triggered reactive folding is interesting as a
+% PRIMITIVE for swarm behaviour (turn toward/away, speed up/slow down in
+% response to a neighbour's signal) even though this project evolves and
+% tests these primitives on a SINGLE robot, not a multi-robot swarm -
+% be explicit about that scope limitation here (don't let a reader
+% assume swarm experiments were run - see also Chapter 7 Limitations).
+Light-sensitive joints provide a simple local reaction primitive. A joint can respond to a one-sided light stimulus by changing the robot's turning behaviour, or to a wider stimulus by changing its speed. These responses are relevant to virtual pheromone communication because a robot could, in principle, move towards or away from a signal produced by another robot. In this project the primitive was evaluated on one simulated robot at a time. No multi-robot swarm experiment was carried out, so the results concern a building block of swarm behaviour rather than swarm coordination itself.
+
+
+\section{Problem Statement}
+% [~1 page] MARKING: Report Quality (MED); sets up Results (indirectly -
+% a sharp problem statement makes it easy for the marker to later see
+% Chapter 6 actually solves it).
+% This is where you state, precisely, the gap being addressed. Draw
+% directly from paper/project_summary.md's "Motivation" slide AND from
+% report/Aims_and_objectives.md's own "Project Aim" paragraph (reuse its
+% wording as your base, then expand): "the limited integration between
+% morphology generation, self-folding behaviour, and locomotion
+% performance in existing evolutionary robotic approaches."
+%   - The Bottleneck: all existing Roblet designs are hand-crafted by
+%     human intuition (cite \citep{han2023roblets} again here as the
+%     concrete prior-art example) - severely caps functional variety.
+%   - Combinatorial Explosion: the graph-structured design space (6
+%     design variables: module type, port adjacency, module count
+%     2-40, hinge angle, light-sensitive joint selection, light-
+%     detection hinge angle) is intractable for brute-force or manual
+%     search - give a rough combinatorial argument/estimate here to
+%     make this concrete and quantitative, not just asserted.
+%   - State the hypothesis this project tests, in the SAME terms as
+%     Aims\_and\_objectives.md: that an ML-assisted (specific approach
+%     chosen after literature review - O-1) evolutionary framework can
+%     co-design morphology, self-folding, and locomotion together, and
+%     that folding-complexity/pheromone-response measures (AO-2, AO-1)
+%     reveal something about how morphology evolution relates to
+%     behaviour. Do NOT frame this as "RL vs random baseline" here -
+%     that is a methodological VALIDATION of the O-1 approach choice,
+%     addressed in Chapter 6 Section 6.5, not the project's core
+%     hypothesis (see Section 1.3's note on this).
+
+Existing Roblet morphologies are designed by hand, which limits the range of structures that can be considered \citep{han2023roblets}. The difficulty is increased because a candidate is defined by interacting module types, port connections, module count, fold angles and light-response settings. Even before all graph connections are counted, allowing between 2 and 40 modules creates a large discrete search space.
+
+The problem addressed in this report is the limited integration of morphology generation, self-folding behaviour and locomotion performance in an evolutionary robotic system. The central hypothesis is that an ML-assisted evolutionary framework can generate legal two-dimensional Roblet configurations, evaluate their folded three-dimensional behaviour and use the resulting measurements to improve the population. A second question is whether entropy-based folding complexity and light-response measures can reveal relationships between morphology and behaviour. The random-baseline experiment is used later to assess the selected ML mechanism; it is not the main hypothesis.
+
+\section{Aims and Objectives}
+% [~0.75 page] MARKING: this section is not itself scored, but Chapter 6
+% Section 6.7 (Discussion) and the Results marksheet band ("achieved all
+% basic and most of advanced project aims" = Merit, "completed all
+% advanced objectives" = Distinction) are graded AGAINST what you write
+% here - get the wording right, then do not silently redefine it later.
+%
+% USE report/Aims\_and\_objectives.md VERBATIM AS YOUR SOURCE (it is the
+% project's own official aim/objectives document) - state the Project
+% Aim paragraph first, then Basic Objectives O-1..O-4, then Advanced
+% Objectives AO-1/AO-2, using that document's own numbering and wording
+% (paraphrase lightly for prose flow, don't change the substance):
+%   O-1: an ML-assisted evolutionary approach (Python) to generate/evolve
+%        2D self-assembling module configurations - "the specific ML
+%        approach to be selected following a review of relevant
+%        literature" (this is where your Chapter 2 literature review
+%        earns its keep: it is what JUSTIFIES choosing PPO + Graph
+%        Transformer as O-1's "specific ML approach", not a free-
+%        standing advanced objective).
+%   O-2: extend the simulation framework for 2D-to-3D self-folding.
+%   O-3: extend the simulation framework to evaluate 3D structures in a
+%        physics-based environment, actuate via oscillating magnetic
+%        field, and feed fitness back into the evolutionary framework.
+%   O-4: analyse evolved morphologies and their influence on locomotion
+%        behaviour/performance using performance-based metrics across
+%        generations.
+%   AO-1: \textbf{state the pivot explicitly and honestly.} The original
+%        AO-1 (see Aims\_and\_objectives.md) was to "investigate and
+%        compare different ML surrogate-learning approaches for
+%        morphology fitness prediction" - a cheap learned proxy for the
+%        MuJoCo fitness evaluation itself. This was changed during the
+%        project to instead adapt light-based pheromone-response metrics
+%        (attractive/repulsive reaction primitives, Section 4.2.2/4.2.3)
+%        for the evolutionary objective set. State this change and WHY
+%        (e.g. surrogate fitness prediction became less valuable once
+%        parallel MuJoCo evaluation + evaluation caching made real
+%        simulation cheap enough - Section 4.5 - while pheromone-response
+%        behaviour was a more scientifically interesting and novel
+%        direction aligned with the swarm-signalling motivation in
+%        Section 1.1.3). This is exactly the "revised... highlighting
+%        actual progress against the original plan" Guidelines.md asks
+%        for in Project Management (1.5) - cross-reference it there too.
+%   AO-2: entropy/morphology-complexity measures and their relationship
+%        with locomotion behaviour and evolutionary outcomes - unchanged
+%        from the original document, directly evidenced in Section 6.3.
+%
+% IMPORTANT CORRECTION vs. earlier drafts of this file: the RL-guided-
+% policy-vs-random-baseline comparison (Chapter 6 Section 6.5) is
+% evidence for O-1 (justifying the chosen "specific ML approach"), NOT
+% AO-1. AO-1 (final form) is the pheromone-response work, evidenced in
+% Sections 4.2.2/4.2.3 and 6.4. Keep this mapping consistent everywhere
+% you reference O-1..AO-2 by number in Chapters 4, 6 and 7.
+
+The project aim was to develop an ML-assisted evolutionary framework within the Roblet platform for designing two-dimensional module morphologies that self-assemble, self-fold and locomote magnetically. The basic objectives were to: (O-1) develop a Python evolutionary approach for generating self-assembling configurations; (O-2) extend the simulation to support two-dimensional to three-dimensional self-folding; (O-3) evaluate folded structures under magnetic actuation and feed their fitness back into evolution; and (O-4) analyse evolved morphologies and their influence on locomotion across generations.
+
+The original advanced objective AO-1 concerned comparing surrogate-learning methods for fitness prediction. It was changed during the project to the development of attractive and repulsive light-response objectives, since direct parallel simulation and caching made surrogate prediction less necessary and the reaction primitives were more closely related to the platform motivation. AO-2 remained the investigation of entropy and morphology complexity in relation to locomotion and evolutionary outcomes.
+
+\section{Contributions}
+% [~0.5 page] MARKING: Scientific and Professional Conventions (MED) -
+% this is where you demonstrate you know where your work sits relative
+% to the literature reviewed in Chapter 2.
+% A short, itemized "what is novel/original here" list (3-5 bullets),
+% distinct from Individual Contribution (which is about WHO did the
+% work) - this is about WHAT is new relative to prior work. Directly
+% reuse/adapt your own already-written novelty argument from earlier
+% project discussion (Neural Graph Evolution \citep{wang2019neural} and
+% Evolving Embodied Intelligence \citep{wang2026evolving} as the two
+% closest prior works, with your specific improvements over each - one
+% continuously-trained policy vs. per-species policy sharing; unified
+% mutation-and-crossover policy vs. mutation-only; multi-head
+% per-edge attention vs. single GAT coefficient). State the novelty
+% claim carefully/honestly per your own earlier self-critique: the
+% contribution is POLICY-GUIDED EVOLUTIONARY GRAPH EDITING combined with
+% many-objective Pareto search and Roblet-specific constraints jointly -
+% NOT "using discrete RL actions" alone, which is not by itself novel
+% (cite \citep{li2024reinforcement} as prior art for RL choosing
+% discrete design actions, to show you know the boundary of your claim).
+
+The main contributions are as follows:
+\begin{itemize}
+    \item A graph-based Roblet genotype with symmetry construction and grammar-legal structural edits.
+    \item A MuJoCo evaluation path from a two-dimensional graph to a folded, magnetically actuated three-dimensional assembly.
+    \item A four-objective formulation combining locomotion, folding complexity and light-response behaviour, with separate attractive and repulsive runs.
+    \item A PPO graph policy that selects mutation and crossover actions, together with a uniform-random comparison arm.
+    \item Evaluation tools for convergence, hypervolume, Pareto structure, action use and RL training behaviour.
+\end{itemize}
+The intended contribution is the combination of policy-guided graph editing for both mutation and crossover with many-objective selection and Roblet-specific constraints, rather than discrete RL actions alone.
+
+\section{Project Management}
+% [~1.25 pages] MARKING: assessed partly under Performance and
+% Professional Skills (see appendix mark sheet), not the 4-criterion
+% marksheet directly - but the "actual vs. planned" narrative here is
+% also indirect evidence for Understanding and Analysis (shows you can
+% reason about your own project critically, not just execute a plan).
+% Guidelines.md: compulsory, forms part of the Introduction, marked
+% under Performance and Professional Skills (see appendix mark sheet -
+% check with supervisor whether that's assessed separately from this
+% document). Include:
+%   - A revised Gantt chart (planned vs. actual) - use a LaTeX package
+%     (pgfgantt) or an image exported from whatever tool you planned
+%     the project in. Show major phases: literature review; genotype/
+%     grammar implementation; MuJoCo simulation + digital twin;
+%     objectives + NSGA-III integration; RL actor-critic implementation;
+%     pheromone reaction-primitive tests; evaluation tooling; RL
+%     debugging/redesign (shared encoder, entropy schedule, reward
+%     rescale - this took real, documented iteration, which is GOOD
+%     evidence of project management/adaptability, not something to
+%     hide); write-up.
+%   - A short narrative (1-2 paragraphs) on where actual progress
+%     diverged from the plan and why - TWO concrete, real examples to
+%     use: (1) the AO-1 pivot from ML surrogate fitness prediction to
+%     pheromone-response metrics (Section 1.3 - explain roughly WHEN in
+%     the project timeline this decision was made, on the Gantt chart);
+%     (2) if RL training diagnostics revealed the crossover-collapse
+%     failure mode later than planned, say so and show it on the chart
+%     as unplanned "RL debugging/redesign" time. This is exactly the
+%     kind of "actual progress against original plan" Guidelines.md
+%     asks for, and honest scope adjustment reads as competence, not
+%     failure.
+Text...
+
+\section{Dissertation Structure}
+% [~0.5 page]
+% One short paragraph, one sentence per remaining chapter (2-7),
+% explaining what each covers and why the chapters are ordered this way
+% (Guidelines.md: "explains the reasoning behind the chapter's
+% structure" - this is the one place that applies to the Introduction
+% itself). Write this LAST once the rest of the structure is finalized.
+Chapter 3 introduces the hardware and explains how its main physical effects were represented in MuJoCo. Chapter 4 gives the design of the evolutionary framework, beginning with the genotype and ending with the complete computational pipeline. Chapter 5 states the settings used for the reported experiments and defines the controlled random baseline and evaluation metrics. Chapter 6 presents convergence, trade-offs, morphology, baseline comparison and RL diagnostics, then relates the findings to the objectives. Chapter 7 closes with the delivered contributions, limitations and future experiments.
+
+
+\chapter{Literature Review}
+% [~7 pages total] MARKING WEIGHT: Scientific and Professional
+% Conventions (HIGH) - this chapter is that criterion's primary home
+% (20 marks; Merit/Distinction bands specifically require "evident
+% critical evaluation of references", which every section below is
+% written to force). Secondary: Understanding and Analysis (MED) - a
+% sharp research-gap statement (2.6) is itself evidence of understanding.
+% Guidelines.md: "may be a stand-alone chapter or embedded... guided by
+% your supervisor." This project has enough directly-relevant prior work
+% (12 references already in Bibliography_uRL.bib) to justify a
+% stand-alone chapter. Every section below needs CRITICAL evaluation,
+% not just summary - marksheet "Scientific and professional conventions"
+% Merit/Distinction band explicitly requires "evident critical evaluation
+% of references", not just correct citation. For every paper discussed,
+% answer: what did they do, what's the limitation relative to THIS
+% project's problem, and how does that motivate a design choice you made?
+% Opening paragraph (required, not optional, per the "every chapter
+% needs a scene-setter" rule): state the 5 themes covered below and how
+% they build toward your own approach.
+
+\section{Modular and Self-Reconfigurable Robots}
+% [~1.3 pages] MARKING: Scientific Conventions (HIGH).
+% \citep{4272328} (Klavins, Programmable Self-Assembly - foundational,
+% pre-dates Roblets, good for historical framing), \citep{liu2023smores}
+% (SMORES-EP, parallel self-assembly), \citep{tu2026locomotion} (spherical
+% freeform modular robots, reconfiguration autonomy), \citep{wyder2025robot}
+% (robot metabolism / machines consuming machines - interesting
+% tangential framing for "growth"), \citep{alattas2019evolutionary}
+% (survey - use this to structure the section and to point at further
+% reading rather than re-deriving the whole field). End by positioning
+% Roblets \citep{han2023roblets} within this landscape: what makes it
+% distinct (magnetic self-assembly + heat-folding + light-pheromone
+% signalling combined) from the other systems surveyed.
+
+\section{Evolutionary Robotics and Morphology-Control Co-Design}
+% [~1.3 pages] MARKING: Scientific Conventions (HIGH).
+% Core review of body-brain co-evolution as a field. \citep{li2023modular}
+% (survey of modular design automation across morphology/controller/
+% vision - good scaffolding reference), \citep{miras2026epistatic}
+% (epistatic gene interactions in robot evolution - relevant to your
+% own grammar-masked mutation design: discuss how your grammar masking
+% is itself a form of managing epistasis/illegal-genotype risk).
+% \citep{xu2021multi} (multi-objective graph heuristic search for
+% terrestrial robot design - closely related genotype representation,
+% compare directly to your own graph/grammar design). \citep{bhatia2021evolution}
+% (Evolution Gym benchmark - mention as the benchmark-standard this
+% project does NOT use, and justify why: Roblet-specific physical
+% constraints, not a generic voxel/soft-robot benchmark).
+
+\section{Reinforcement Learning for Robot Design}
+% [~1.3 pages] MARKING: Scientific Conventions (HIGH) + Understanding
+% and Analysis (MED) - this section is what your Chapter 1 Contributions
+% novelty claim rests on, so it needs to be right, not just present.
+% This is where you draw the CRITICAL distinction the whole project's
+% novelty rests on (see your own earlier analysis from this project's
+% development): most RL-for-robotics work uses RL to learn a CONTROL
+% policy for a fixed or separately-evolved body, not to choose
+% structural edits during evolution. \citep{li2024reinforcement}
+% (RL for freeform robot design - closest prior art for "RL picks
+% discrete design/build actions"; state clearly how this differs from
+% your work: direct incremental construction vs. PPO-guided mutation
+% AND crossover inside an EA loop). \citep{yang2024machine} (survey,
+% machine learning for micro/nanorobots - useful for broader framing).
+% \citep{li2024bridging} (survey bridging EA and RL - use to justify why
+% hybridizing them, rather than picking one, is a reasonable design
+% choice). \citep{brown2025reinforcement} (RL-inspired GA for global
+% optimisation - note this uses RL ideas to INFORM a GA's operators
+% rather than a trained policy directly selecting them; contrast).
+
+\section{Multi-Objective Evolutionary Algorithms in Robotics}
+% [~1.2 pages] MARKING: Scientific Conventions (HIGH).
+% NSGA-III itself (cite the original Deb \& Jain NSGA-III paper if not
+% already in your .bib - check and add it, it is currently MISSING from
+% Bibliography\_uRL.bib and is a load-bearing citation for Chapter 4).
+% \citep{ming2024constrained} (constrained MOO with RL-assisted operator
+% selection - very close conceptually to this project's own "RL selects
+% the genetic operator" design; discuss the similarity and the
+% differences explicitly - this is a strong related-work comparison,
+% don't undersell it). Explain briefly WHY many-objective (4 objectives,
+% >3) needs reference-direction niching rather than crowding-distance
+% NSGA-II - this motivates NSGA-III specifically over the more common
+% NSGA-II baseline.
+
+\section{Graph-Structured Policies for Variable Morphology}
+% [~1.2 pages] MARKING: Scientific Conventions (HIGH) + Understanding
+% and Analysis (MED) - same reason as Section 2.3, this is your
+% strongest novelty-vs-prior-art comparison, make it precise.
+% \citep{wang2019neural} (Neural Graph Evolution - your primary
+% reference point, already compared against in your own prior analysis:
+% reused their graph-as-genotype idea, replaced their per-species policy
+% sharing with one continuously-trained policy). \citep{wang2026evolving}
+% (Evolving Embodied Intelligence - second primary reference point:
+% reused attention-over-structure, improved with multi-head per-edge
+% attention over GAT's single coefficient, and a unified mutation-and-
+% crossover policy over their mutation-only design). \citep{luo2025gcnt}
+% (graph-based transformer policies for morphology-agnostic RL - relevant
+% to your Graph Transformer encoder choice, though note it targets
+% CONTROL not structural edits - flag that distinction again here).
+% \citep{sun2023co} (hierarchical DRL co-optimization of morphology and
+% behaviour - another close comparator, discuss what "hierarchical"
+% means there vs. your single-policy design).
+
+\section{Summary and Research Gap}
+% [~0.7 page] MARKING: Understanding and Analysis (MED-HIGH) - a crisp,
+% well-argued gap statement is a direct, visible instance of synthesis.
+% Close the chapter with an explicit gap statement (2-3 sentences): no
+% prior work combines (a) policy-guided evolutionary graph editing for
+% BOTH mutation and crossover, (b) many-objective (4-objective) NSGA-III
+% Pareto search, and (c) the Roblet-specific fold/port/light-response
+% grammar constraints, jointly, in one system. This should read as the
+% direct justification for Chapter 4's design, not a repeat of the
+% Contributions list in Chapter 1 - tie it forward explicitly ("Chapter
+% 4 describes how this gap is addressed...").
+
+
+\chapter{The Roblet Platform and Physics Simulation}
+% [~5 pages total] MARKING WEIGHT: Report Quality (MED) - mostly
+% descriptive/scene-setting, lower marking stakes than Ch4/Ch6. Section
+% 3.3 alone also feeds Understanding and Analysis (MED) since the
+% digital-twin design choices ARE your own technical work.
+% Short chapter (~5 pages) - establishes the PHYSICAL system being
+% simulated/evolved over, and is explicit prior-work context (see
+% Individual Contribution). Opening paragraph: state that this chapter
+% describes the platform this project builds ON, distinguishing it from
+% Chapter 4's original contribution.
+
+\section{Physical Roblet Hardware}
+% [~1.5 pages incl. figure] MARKING: Report Quality only (LOW-MED) -
+% this is attributed prior work, described not argued; don't over-invest
+% writing time here relative to Chapters 4 and 6.
+% \citep{han2023roblets} is the primary citation for this whole section
+% - this is a DESCRIPTIVE section (what the hardware is), not original
+% work, and should read that way (attribute clearly throughout, don't
+% let phrasing imply authorship).
+%   - Modular 3D-printed units, magnetic "jigsaw smart-glue" bonding
+%     sites (Fig.~\ref{fig:real-setup}).
+%   - [OPTIONAL, see the GIF flag in the file header] a 4-stage figure:
+%     mechanical agitation -> self-assembly -> hot-water self-folding ->
+%     magnetic actuation, matching report/project_summary.md's
+%     description of Han et al.'s own figure.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\linewidth]{real_setup.png}
+    \caption{Physical Roblet modules under the microscope/camera setup used for hardware validation, showing the translucent 3D-printed module bodies and embedded permanent magnets (red markers) at each port. Photograph of the physical platform developed by the Miyashita Lab \citep{han2023roblets}; shown here for direct comparison with the simulated digital twin (Fig.~\ref{fig:sim-setup}).}
+    \label{fig:real-setup}
+\end{figure}
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[width=0.9\linewidth]{roblet_paper_image_on_assembly_folding_actuation.gif}
+%     \caption{...}
+%     \label{fig:assembly-stages}
+% \end{figure}
+% ^ DO NOT UNCOMMENT until the GIF has been converted to a static image
+% (see file-header note) - pdflatex cannot embed an animated GIF.
+
+\section{Actuation and Self-Folding Principles}
+% [~1 page] MARKING: Report Quality only (LOW-MED), same reason as 3.1.
+% Mechanism detail: heat-responsive PVC hinges (2D->3D self-folding),
+% external oscillating magnetic field for locomotion (magnetic torque
+% on embedded magnets), light-based virtual pheromone signalling as the
+% swarm-communication primitive this project's pheromone objectives are
+% built on (forward-reference Chapter 4 Section 4.4 here).
+The physical design uses heat-responsive PVC hinges to convert the flat arrangement into a folded structure. In the simulation, this process is represented by allowing connected module bodies to settle into their folded configuration rather than prescribing the final pose directly. The assembled robot is then driven by an oscillating magnetic field. Each embedded magnet experiences a torque that depends on the field direction, and the combined torques produce the motion of the whole assembly.
+
+The light-response mechanism is represented as a change at selected foldable joints. A one-sided stimulus is used to measure yaw response, while a wider stimulus is used to measure speed response. These two measurements form the reaction primitives used later in the evolutionary objective set. The simulator therefore provides a common route from morphology to folding, actuation and measurable behaviour.
+
+\section{MuJoCo Digital-Twin Simulation}
+\label{sec:digital-twin}
+% [~2.5 pages incl. figure] MARKING: Understanding and Analysis (MED) -
+% this IS your own technical work (unlike 3.1/3.2), so justify design
+% choices (e.g. weld-based folding vs. scripted kinematics), don't just
+% describe them.
+% This IS your own work (the simulation, not the hardware) - make that
+% ownership clear in phrasing here, contrasting with 3.1's attribution.
+% Content to cover, drawn from src/roblet_simulator.py and
+% helper_scripts/mjcf_generator.py:
+%   - Per-module mass/CoM/inertia from CAD mass-property exports (note
+%     whether this CAD data was supplied by the lab or self-measured -
+%     see Individual Contribution).
+%   - N42SH cylindrical neodymium magnet model
+%     ($m = 6.5\times10^{-3}\,\mathrm{A\,m^2}$) embedded per connector.
+%   - Modules as independent free bodies joined by weld equality
+%     constraints (not a fixed kinematic tree) - explain WHY this choice
+%     matters: it lets the folded pose emerge from real contact/weld
+%     physics settling, matching how the physical magnetic self-folding
+%     actually works, rather than being scripted.
+%   - External field $\mathbf{B}$, torque $\boldsymbol{\tau} = \mathbf{m}\times\mathbf{B}$
+%     on every embedded magnet.
+%   - The B-sweep procedure: each individual evaluated at multiple
+%     candidate field strengths, highest-velocity stable candidate kept
+%     (explain why field strength needs per-morphology tuning rather
+%     than one fixed global value).
+\begin{figure}[h]
+    \centering
+    \begin{subfigure}[b]{0.47\linewidth}
+        \includegraphics[width=\linewidth]{sim_setup_transparent.png}
+        \caption{Top view, transparent bodies showing embedded magnets (green)}
+        \label{fig:sim-setup-transparent}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.47\linewidth}
+        \includegraphics[width=\linewidth]{sim_setup.png}
+        \caption{Rendered assembly}
+        \label{fig:sim-setup-render}
+    \end{subfigure}
+    \caption{Simulated Roblet digital twin in MuJoCo, corresponding to the physical assembly in Fig.~\ref{fig:real-setup}. Panel (a) shows the transparent top-down view used to verify embedded-magnet placement against the CAD source data; panel (b) shows the fully rendered simulated assembly.}
+    \label{fig:sim-setup}
+\end{figure}
+
+The digital twin was implemented as a set of independent module bodies with mass, centre-of-mass and inertia values taken from the available CAD exports. A cylindrical N42SH magnet model with magnetic moment $m=6.5\times10^{-3}\,\mathrm{A\,m^2}$ was placed at each connector. Connected bodies were joined with weld equality constraints. This choice allows the bodies to remain separate physical objects while their assembled relationship is enforced during settling; it is closer to the assembly process than a purely scripted kinematic tree.
+
+The external field applies the torque $\boldsymbol{\tau}=\mathbf{m}\times\mathbf{B}$ to each magnet. For locomotion, candidate field strengths of $0.001$, $0.008$ and $0.05$ T were tested. The field was swept for each morphology because a small or heavy structure may stall at a field that drives another structure into excessive rolling or tumbling. The candidate with the highest stable velocity was retained. \missinginfo{Confirm the source of the CAD mass properties and add the exact settling and rollout durations if they differ from the current code settings.}
+
+
+\chapter{Evolutionary Framework Design}
+\label{ch:framework}
+% [~11 pages total] MARKING WEIGHT: Understanding and Analysis (HIGH) -
+% together with Chapter 6 this is where most of that 30-mark criterion
+% is earned ("technical content and understanding", up to "evidence of
+% some original thinking" for Distinction). Secondary: Scientific and
+% Professional Conventions (MED) - correct, precise use of technical
+% terms and equations throughout. This is the core original-contribution
+% chapter - budget the most writing effort and the most critical-design-
+% justification prose here, since "Understanding and analysis"
+% Distinction-band explicitly rewards "evidence of some original
+% thinking", which belongs here more than anywhere else. Opening
+% paragraph: preview 4.1-4.7 and how they compose into the pipeline
+% shown in Fig.~\ref{fig:pipeline}.
+%
+% You already have a substantial amount of near-final prose for this
+% chapter in paper/main.tex Section "Methodology for Evolution" (genotype,
+% assembly/actuation, pheromone tests, multi-objective formulation,
+% RL-NSGA-III) - that is written at ICRA-paper density/brevity; for the
+% dissertation you have MORE space (this is ~11 pages vs. a paper
+% subsection), so expand each with more justification/reasoning ("why
+% this design, not an alternative") rather than just restating it
+% verbatim. Reuse its already-correct LaTeX (equation, table) directly
+% where suitable - no need to re-derive.
+
+\section{Genotype Representation and Design Variables}
+% [~2 pages incl. figure, excl. 4.1.1/4.1.2 below] MARKING:
+% Understanding and Analysis (MED-HIGH).
+% Reuse/expand paper/main.tex Section~\ref{sec:genotype}: rooted,
+% port-connected graph; module types {rigid, mountain-fold, valley-fold};
+% port~1 = parent link, ports~2/3 = children; the 6 design variables
+% (module type, adjacency, module count $N\in[2,40]$ post-mirroring,
+% hinge angle $\theta_i \in [0^\circ,45^\circ]$, light-sensitive joint
+% selection, light-detection hinge angle $\theta_{light}$). Explain the
+% REASONING behind each variable choice, not just list them - e.g. why
+% $\theta_{light}$ above/below $\theta_i$ is what determines
+% attractive-vs-repulsive response direction (forward-reference Section
+% 4.3/4.4).
+Each candidate is represented as a rooted directed graph. Nodes represent modules and edges represent port-to-port connections. A node can be rigid, mountain-fold or valley-fold. Port 1 is used for the parent connection, while ports 2 and 3 provide possible child connections. The full morphology contains between 2 and 40 modules after mirroring.
+
+The design variables include module type, port adjacency, module count, ordinary hinge angle, light-sensitive joint selection and light-detection hinge angle. The hinge angle controls the folded geometry, while the light angle controls the response produced when a selected joint receives light. Keeping these variables in one genotype allows the search to evaluate their interaction rather than optimising shape and response separately.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.75\linewidth]{genotype_representation.png}
+    \caption{Example half-genotype as a directed graph: nodes are modules (coloured by fold type, orange = root module 1), edges are labelled by the (source port)-(destination port) connector pair. Only this half-graph is evolved directly; the full bilaterally symmetric morphology is produced by mirroring it about the root's spine (Section~\ref{sec:symmetry}).}
+    \label{fig:genotype}
+\end{figure}
+
+\subsection{Bilateral Symmetry and Mirror Construction}
+\label{sec:symmetry}
+% [~0.75 page]
+% Explain the half-genotype + deterministic mirror-operator design
+% (mirror anchors = root module 1 and its port-1 spine child; port~2 is
+% the evolvable half; port~3 is populated only at build time by
+% mirroring port~2). Justify WHY: physical design requires bilateral
+% symmetry, and evolving only half keeps the search space smaller
+% without constraining the operators themselves.
+Only one half of the morphology is evolved directly. The root module and its spine child provide the mirror anchors, while the expandable side is connected through the remaining port. During construction, the other side is generated deterministically by reflecting the evolved half. This keeps the final robot bilaterally symmetric and reduces the number of graph decisions required by the search.
+
+The mirror is applied at build time rather than treated as a separate learned action. As a result, every mutation and crossover operates on the same half-graph representation, while the simulator receives the complete structure. The representation reduces redundant solutions without removing the structural edits available to the evolutionary operators.
+
+\subsection{Grammar-Legal Mutation and Crossover Operators}
+% [~1.25 pages, table-heavy] MARKING: Understanding and Analysis (HIGH) -
+% the "why masking, not reject-and-retry or a soft penalty" justification
+% called out below is exactly the kind of original-design-reasoning that
+% separates a Merit from a Distinction on this criterion.
+% The 10 grammar actions (8 mutation: Add Node, Delete Node, Prune
+% Subtree, Mutate Fold Type, Mutate Hinge Angle, Reconnect Port, Toggle
+% Light Sensor, Mutate Light Hinge Angle; 2 crossover: Graft Subtree,
+% Swap Subtrees). For EACH, state its grammar-legality mask briefly
+% (port availability, module-count limit, root protection, fold
+% consistency) - a table is more space-efficient here than prose; you
+% can adapt the Action-space table already built in
+% paper/rl_hyperparameters.tex Table~II almost directly (it already has
+% target(s)/parameters per action). Explain why grammar-MASKING
+% (illegal actions never sampled) was chosen over reject-and-retry or a
+% soft penalty - tie this forward to Chapter 6's discussion of
+% "guaranteed feasibility through the representation/operators" (no
+% constraint-violation metric is needed precisely because of this design
+% choice - state that reasoning here, since it's a real design decision
+% worth defending, not just a footnote).
+The operator set contains eight mutations and two crossovers: add node, delete node, prune subtree, change fold type, change hinge angle, reconnect a port, toggle a light sensor, change the light hinge angle, graft a subtree and swap subtrees. Each action is masked according to the current graph. Addition requires a free port and the module limit, deletion protects the root and targets a removable leaf, and reconnection must leave valid port assignments.
+
+Grammar masking was selected instead of generating an illegal graph and rejecting it afterwards. Reject-and-retry wastes simulation and policy samples, while a soft penalty asks the policy to learn rules that can be enforced directly. Masking guarantees that sampled structural edits are legal and leaves simulation failure to represent physical or numerical problems rather than simple grammar errors.
+
+\section{Multi-Objective Fitness Formulation}
+\label{sec:objectives}
+% [~1 page excl. 4.2.1-4.2.3 below] MARKING: Scientific Conventions
+% (HIGH - equations/symbols must be precisely and completely defined,
+% Guidelines.md is explicit about this) + Understanding (MED).
+% Reuse paper/main.tex's fitness-vector equation directly (Eq. in
+% Section~\ref{sec:objectives} there) - note ONE important thing to
+% get right: paper/main.tex's equation currently shows $f_1 = v_b$
+% (baseline velocity) as a 4-element vector without an explicit $f_2$
+% shape-entropy term spelled out consistently with your CURRENT
+% (already-renamed) f1..f4 schema (f1 folded-gait velocity, f2 entropy,
+% f3 pheromone yaw response, f4 pheromone speed response) - double check
+% paper/main.tex's equation against src/objectives\_api.py's actual
+% OBJECTIVE\_NAMES before copying it in, and fix any mismatch (this
+% project went through an objective RENUMBERING mid-project - see
+% src/objectives\_api.py's migrate\_legacy\_objectives - make sure the
+% dissertation reflects the FINAL schema only, not an intermediate one).
+\begin{equation}
+\mathbf{f}=
+\left[
+\underbrace{v_b}_{f_1},\;
+\underbrace{\tilde{H}_{3D}-\tilde{H}_{2D}}_{f_2},\;
+\underbrace{\Delta\psi_L-\Delta\psi_b}_{f_3},\;
+\underbrace{\frac{v_F-v_b}{v_b}}_{f_4}
+\right]
+\label{eq:objectives}
+\end{equation}
+Here, $v_b$ is the baseline folded-gait velocity, $\tilde H_{2D}$ and $\tilde H_{3D}$ are the normalised shape entropies before and after folding, $\Delta\psi_b$ and $\Delta\psi_L$ are the baseline and left-stimulus yaw changes, and $v_F$ is the velocity under the front stimulus. The four components are maximised in the attractive run. In the repulsive run, the signs of the two light-response preferences are reversed by the objective configuration rather than by changing the measured signed quantities.
+The objective vector is evaluated after folding and actuation. The first component measures folded-gait velocity. The second measures the change in normalised shape entropy between the flat and folded forms. The final two components measure changes in yaw and speed under light stimulation relative to their baselines. All four objectives are maximised in the attractive run; the optimisation direction of the two light-response objectives is changed in the repulsive run.
+% Define every symbol in prose immediately after the equation
+% (Guidelines.md: "Always define in the text what symbols mean").
+% $v_b$ = baseline folded-gait velocity; $\tilde H_{2D}$/$\tilde H_{3D}$
+% = normalized multiscale shape entropy of the flat/folded morphology;
+% $\Delta\psi_b$/$\Delta\psi_L$ = baseline/left-stimulus yaw rotation;
+% $v_F$ = front-stimulus velocity. State the maximize/minimize
+% convention and the attractive-vs-repulsive sign flip on $f_3$/$f_4$
+% explicitly (objectives\_api.configure\_pheromone\_response).
+
+\subsection{Folded-Gait Locomotion and Shape-Entropy Objectives}
+% [~0.75 page]
+% $f_1$, $f_2$ in detail: how average velocity is measured post
+% torque-ramp; how multiscale shape entropy is computed (voxelization,
+% window radii, normalization) - can summarize entropy\_api.py's method
+% at a level of detail appropriate for a reader who hasn't seen the
+% code (equations optional here, a clear verbal description may suffice
+% given the page budget).
+Velocity is measured after the torque ramp so that the initial settling period does not dominate the result. The entropy calculation voxelises the morphology at more than one spatial scale and combines the resulting occupancy variation into a normalised value. The reported folding-complexity objective is $f_2=\tilde H_{3D}-\tilde H_{2D}$, so a positive value indicates greater measured structural complexity after folding. The raw two-dimensional and three-dimensional entropy values are retained for the later relationship analysis.
+
+\subsection{Pheromone Reaction-Primitive Tests}
+\label{sec:pheromone-tests}
+% [~1 page] MARKING: Understanding and Analysis (HIGH) - this section
+% (with 4.2.3) is the METHODOLOGY evidence for AO-1 in its final,
+% pivoted form (Section 1.3) - the non-trivial travel-frame design
+% decision described below is worth defending carefully since it is
+% original problem-solving, not boilerplate.
+% Reuse paper/main.tex Section~\ref{sec:rp} (left stage / front stage).
+% Explain the two-stage protocol and why EACH objective needs its OWN
+% dedicated no-light baseline stage measured in a travel-aligned local
+% frame (not the primary rollout's own trajectory, and not by physically
+% rotating the settled pose) - this was a real, non-trivial design
+% decision this project made (see the roblet\_simulator.py travel-frame
+% fix) and is worth 1 paragraph of justification, not just a mention.
+Each light-response objective uses two stages. The first stage measures the baseline behaviour without the relevant light stimulus. The second stage applies either a left-side stimulus for yaw or a front stimulus for speed and measures the changed response. The yaw objective is the difference between the light and baseline rotations, while the speed objective is the relative change from baseline speed.
+
+A separate baseline stage is important because the robot can naturally curve or drift during its magnetic gait. The comparison must therefore use a travel-aligned local frame established for that objective, rather than the trajectory produced during the stimulated rollout. The settled pose is also not physically rotated simply to define the frame. This keeps the measured difference attributable to the light condition as far as the simulation permits and avoids confusing pre-existing gait direction with reaction behaviour.
+
+\subsection{Attractive versus Repulsive Response Configuration}
+% [~0.5 page] MARKING: Understanding and Analysis (MED-HIGH) - continues
+% the AO-1 methodology evidence started in 4.2.2.
+% Explain why attractive/repulsive are two SEPARATE evolutionary runs
+% sharing one design-variable lever ($\theta_{light}$ above/below
+% $\theta_i$) rather than two objectives in one run - the
+% self-contradictory-objective-pair argument. This motivates Chapter 6's
+% side-by-side attractive/repulsive results presentation.
+Attractive and repulsive behaviour were implemented as separate evolutionary runs. Both runs use the same signed measurements: positive yaw denotes turning towards the light and positive speed response denotes speeding up. The optimisation direction is then changed for the repulsive run so that turning away and slowing down are preferred. A single run containing both directions would ask the same light-hinge variable to increase and decrease at once, creating a self-contradictory objective pair. Separate runs make the intended behaviour explicit and allow their morphologies to be compared directly.
+
+\section{RL-Guided Actor-Critic for Structural Edits}
+\label{sec:rl-actor-critic}
+% [~2.5 pages, table-heavy] MARKING: Understanding and Analysis (HIGH) -
+% this is the O-1 "specific ML approach... selected following a review
+% of relevant literature" (Section 1.3) made concrete; Chapter 2
+% Section 2.5's comparison against Neural Graph Evolution/Evolving
+% Embodied Intelligence is what JUSTIFIES this being the chosen
+% approach, so make sure this section and that one read as one
+% continuous argument, not two disconnected facts.
+% This is the technically densest section - budget accordingly. Reuse
+% paper/rl\_hyperparameters.tex almost wholesale (it is ALREADY written
+% at dissertation-appropriate detail: state-space table, action-space
+% table, reward equation derivation) - \input{} it or copy its table/
+% equation environments directly rather than re-deriving. Content:
+%   - Graph Transformer encoder architecture (TransformerConv, hidden
+%     dim, blocks, heads) - Table from paper/rl_hyperparameters.tex Table I.
+%   - State representation (parent$_a$, parent$_b$ pair, 9-dim node
+%     features) - Table II.
+%   - Action space (10 actions, hierarchical sampling) - Table III.
+%   - Reward formulation - Eq.~1-3 from paper/rl_hyperparameters.tex,
+%     INCLUDING the honest methodological note already written there
+%     about the reward using the CURRENT 4-objective vector.
+%   - [IF the shared-encoder / entropy-schedule / collision-penalty
+%     rescale work described earlier in this project's development is
+%     finalized by submission] describe it here as the CURRENT
+%     architecture, not as a "recent change" - present the final design,
+%     and put the BEFORE/AFTER comparison and the diagnostic reasoning
+%     in Chapter 6 (Results) where it belongs as evidence, not method.
+The structural-edit policy receives an ordered pair of parent half-genotypes. Each graph is represented by nine node features: module type, normalised hinge angle, depth, free-port fraction, root status, light sensitivity and light-hinge angle. A Graph Transformer encoder produces representations for the variable-size graphs, using hidden dimension 32, two Transformer blocks and four attention heads. Separate actor and critic networks use this graph representation and a global mean readout.
+
+The action is sampled hierarchically. First, the actor selects one of eight mutation actions or two crossover actions. It then selects legal target nodes, ports and parameters. The mask is applied at each stage, so the policy cannot select a root deletion, an unavailable port or an action that exceeds the module limit. The reward is the change in scalarised four-objective fitness from parent to child, with a penalty for an unstable or failed simulation. PPO is updated once per generation using the offspring decisions as one-step transitions.
+
+This policy guides variation, not locomotion control. The policy chooses how the graph is changed, while MuJoCo supplies the physical evaluation. \missinginfo{Confirm whether the final submitted implementation uses a shared actor-critic encoder and redesigned entropy schedule; the available hyperparameter notes describe separate actor and critic weights and a fixed entropy coefficient.}
+
+\section{NSGA-III Environmental Selection}
+% [~1 page] MARKING: Understanding and Analysis (MED-HIGH); also directly
+% supports O-4 ("performance-based metrics across generations", Section
+% 1.3), which Chapter 6 Section 6.1/6.2 provides the evidence for.
+% Reference-direction-based non-dominated sorting over the full
+% 4-objective vector (no scalarization at selection time - contrast
+% with the scalarized reward used for RL training in 4.5, and explain
+% why these are deliberately different: NSGA-III explores the full
+% Pareto front, while RL needs a single scalar training signal).
+% Feasibility-first selection (constraint = simulation success/failure -
+% NOT the structural constraints, which are enforced by construction;
+% state this distinction explicitly, it directly supports your decision
+% NOT to report a constraint-violation-rate metric - see Section 6.1).
+% Explain reference-direction count and why it should scale with
+% population size (das-Dennis partitions vs. population size) if this
+% was addressed in your implementation.
+NSGA-III ranks individuals using the complete four-objective vector rather than the scalarised value used for the PPO reward. All objectives are converted to a minimisation form for pymoo, while the attractive or repulsive configuration determines the direction of the two light-response objectives. Reference directions are used to retain solutions across the objective space. This is appropriate for four objectives because a single best score would hide useful trade-offs, while reference-direction niching helps maintain spread.
+
+Feasibility is handled before objective comparison. Structural validity is enforced during graph construction, mirroring and grammar-masked variation, so illegal structural individuals do not need a separate violation score. Simulation failure or instability is treated separately as an infeasible evaluation. Thus, the collision gate handles representation-level feasibility, whereas the simulation constraint records whether a legal structure can also be evaluated successfully.
+
+\section{Implementation and Computational Pipeline}
+% [~1.25 pages incl. figure] MARKING: Understanding and Analysis (MED) -
+% the evaluation-caching design is a genuine, quantifiable efficiency
+% contribution; state the actual measured speed-up if you have it, not
+% just that caching exists.
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=\linewidth]{framework_pipeline.pdf}
+    \caption{End-to-end evolutionary pipeline. The PPO actor selects a structural edit (mutation or crossover) from the population pool, which is grammar-masked, mirrored for bilateral symmetry, and passed through a 3D collision gate before parallel MuJoCo evaluation (magnetic B-sweep gait, then the pheromone reaction-primitive tests). Resulting objectives feed both the PPO reward/advantage signal and NSGA-III's reference-direction non-dominated sorting, which determines the next generation.}
+    \label{fig:pipeline}
+\end{figure}
+% Describe: parallel OS-process MuJoCo evaluation (sim_executor.py),
+% per-generation MJCF/XML generation, checkpointing/resume design,
+% deterministic-physics evaluation caching (moo_api.\_EVAL\_CACHE - a
+% genuine efficiency contribution worth mentioning: avoids re-simulating
+% unchanged carried-over survivors). Quantify: report actual wall-clock
+% per generation from your own runs (see report/project\_summary.md:
+% "~1.2 min per generation, fully parallelized" - update this number if
+% it changed after later performance work).
+The implementation evaluates individuals in parallel operating-system processes. For each generation, graph data are converted to MJCF files, checked and passed to MuJoCo workers. Results are stored with the individual and are used by both the PPO update and NSGA-III selection. Checkpoints contain the generation, population, random-number state, training state and objective-normalisation information, allowing a run to resume without restarting from the initial population.
+
+An evaluation cache hashes deterministic graph evaluations and avoids simulating unchanged individuals again, including carried-over survivors. The project summary reports approximately 1.2 minutes per generation with parallel evaluation. \missinginfo{Replace this approximate runtime with the measured runtime of the final run, and report the cache hit count or measured speed-up if available.}
+
+
+\chapter{Experimental Methodology}
+% [~3 pages total] MARKING WEIGHT: Report Quality (MED) - this chapter's
+% job is to make Chapter 6 CREDIBLE (a marker checking "are these
+% results trustworthy" looks here first) rather than to earn marks
+% directly itself. Keep it tight - Guidelines.md rewards conciseness,
+% and a bloated methodology chapter steals page budget from Chapter 6
+% where marks are actually won.
+% Short chapter (~3 pages) - the "how were the reported results
+% produced" chapter, kept separate from Ch4 (which is about what the
+% system IS) and Ch6 (which is about what happened). One paragraph
+% opener previewing 5.1-5.3.
+
+\section{Simulation and Training Configuration}
+% [~1.25 pages]
+% State plainly, as a table: population size, number of generations,
+% simulation seconds per rollout, B-sweep candidate values, random seed
+% policy (single seed vs. the multi-seed protocol if you ran one by
+% submission time - be honest about how many seeds/generations the
+% REPORTED results in Chapter 6 actually reflect; don't imply a larger
+% scale than what was run). If final results are from a SHORT
+% preliminary run (the collision-rate/convergence-comparison figures
+% currently only span 5 generations - see Fig.~\ref{fig:collision-rate-comparison}),
+% say so explicitly here and flag it as a scale limitation revisited in
+% Chapter 7.
+The reported experiments used a population of 30 and five generations. Each locomotion rollout was configured for seven seconds. The magnetic-field sweep used 0.001, 0.008 and 0.05 T, and the fresh-run random seed was 42. The comparison figures therefore describe a short preliminary experiment rather than a full convergence study. Only one seed is documented in the available run configuration, so variation between independent runs has not yet been measured.
+
+The same simulation and objective definitions were used for attractive and repulsive response runs. A candidate had to pass the graph and collision checks before being evaluated; simulation instability was still recorded as a failed evaluation. \missinginfo{Confirm the exact number of completed generations for each reported output directory and add the final training hyperparameters if they differ from the current source configuration.}
+
+\section{Baseline Comparison Arm}
+% [~0.75 page] MARKING: Understanding and Analysis (MED) - a well-
+% justified controlled-comparison design is itself evidence of technical
+% competence, independent of what the comparison later shows.
+% Describe random\_baseline.py: identical grammar, masks, collision-
+% gating, and NSGA-III survival to the RL-assisted arm; the ONLY
+% difference is uniform-random choice of action/parameters instead of
+% the trained policy. State explicitly why this is the correct
+% controlled comparison (isolates what the LEARNED POLICY specifically
+% contributes, holding everything else fixed) - this is a strong
+% methodological point, make it clearly.
+The random baseline uses the same genotype, grammar masks, collision gate, simulation, objective calculation and NSGA-III survival procedure as the RL-assisted arm. Its only change is that action types and parameters are selected uniformly rather than by the trained PPO policy. This makes the comparison useful because any difference is more directly associated with learned variation choices, rather than with a different simulator or selection rule.
+
+\section{Evaluation Metrics}
+% [~1 page] MARKING: Understanding and Analysis (MED) - the HV-not-
+% GD/IGD justification below is a genuine methodological argument, worth
+% stating carefully rather than as a footnote.
+% List and briefly justify each metric used in Chapter 6:
+%   - Hypervolume (HV) as the primary MOO convergence indicator - and
+%     WHY GD/IGD/IGD+ were deliberately NOT used (no known true Pareto
+%     front for a real engineering problem; an empirically-best-known
+%     reference front would be partly self-referential/circular - state
+%     this as a considered methodological decision, since it is one,
+%     not an omission).
+%   - Scalarized best/mean fitness (GA convergence view).
+%   - Action-type distribution over generations (diagnostic for
+%     variation-operator behaviour, e.g. crossover collapse).
+%   - Per-action-type reward and policy loss (diagnostic for WHY an
+%     action type's usage changes).
+%   - Collision rate (n\_collided/n\_offspring) as the feasibility-
+%     constraint indicator (ties back to Section 4.6's constraint
+%     discussion).
+Hypervolume (HV) is the main many-objective convergence measure because it combines improvement and spread of the non-dominated set. GD, IGD and IGD+ were not used because this engineering problem has no known true Pareto front; constructing a best-known front from the same experiments would make the comparison partly circular. Best and mean scalarised fitness are included as a simpler view of population progress, but they are not used as the NSGA-III selection criterion.
+
+The action distribution records how often each structural operator is chosen and can reveal collapse of mutation or crossover actions. Per-action reward and policy-loss plots help investigate why an action becomes common or rare. Finally, collision rate, defined as $n_{\mathrm{collided}}/n_{\mathrm{offspring}}$, indicates how many proposed offspring fail the geometric feasibility check. These metrics together describe optimisation progress and the behaviour of the operator policy.
+
+
+\chapter{Results and Discussion}
+\label{ch:results}
+% [~13 pages total] *** THE HIGHEST-STAKES CHAPTER IN THE DOCUMENT ***
+% MARKING WEIGHT: Results (HIGH, direct - 30 marks) + Understanding and
+% Analysis (HIGH, direct - 30 marks) = 60/100 of the total mark is
+% earned primarily HERE. Spend your best drafting and redrafting effort
+% in this chapter, not just your most pages - a figure with two flat
+% descriptive sentences under it earns almost nothing on either
+% criterion; the ARGUMENT built from the figure is what's marked.
+% Opening paragraph: state that results are presented in the order basic
+% objectives -> advanced objectives -> honest critical findings, matching
+% Chapter 1's O-1..AO-2 objective numbering (Section 1.3), and previewing
+% 6.1-6.7. Guidelines.md "Results" marksheet band (15-18, "achieved all
+% basic and most advanced") and "Understanding and analysis" Distinction
+% band ("evidence of some original thinking") are BOTH earned primarily
+% in this chapter - don't just present figures, argue from them.
+
+\section{Evolutionary Convergence and Hypervolume}
+% [~2 pages, 2 figures] MARKING: Results (MED-HIGH) - direct evidence
+% for O-4. Evidence weight: MEDIUM (standard convergence plots; the
+% "original thinking" marks come more from 6.3/6.5/6.6 below).
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\linewidth]{fitness_convergence.png}
+    \caption{GA convergence: best and mean scalarized population fitness (objectives\_api.scalarize, equal-weight normalized combination of $f_1$-$f_4$) across generations.}
+    \label{fig:convergence}
+\end{figure}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\linewidth]{hypervolume.png}
+    \caption{Hypervolume of the non-dominated front, per generation, normalized against the run-wide observed objective range (Section 5.3). Rising hypervolume indicates the evolving population's Pareto front is expanding/improving in aggregate, independent of any single scalarization choice.}
+    \label{fig:hypervolume}
+\end{figure}
+% Report O-4 (NSGA-III integration) as achieved, citing both figures as
+% joint evidence (scalarized convergence is one lens, hypervolume is a
+% scalarization-independent lens - explain why showing BOTH is stronger
+% evidence than either alone). Quantify: state the actual HV range
+% observed (e.g. "rising from X to Y over N generations") and the
+% generation range where it plateaus, if it does - relate any plateau/
+% dip pattern to population turnover or NSGA-III niching behaviour.
+Together, the scalarised fitness and hypervolume plots provide two views of progress. The scalarised curve gives a compact summary, whereas hypervolume considers improvement and spread across all four objectives. \imageinference{The plotted curves appear to improve over the early generations, with later changes that should be read from the final figure and reported numerically.} This supports the implementation of the evolutionary loop and gives partial evidence for O-4, but the short run is not sufficient to establish long-term convergence.
+
+\section{Pareto Front and Trade-off Analysis}
+% [~1.75 pages, 1 figure] MARKING: Results (MED-HIGH, O-4 evidence) +
+% Understanding (HIGH) - the "dominance resistance" explanation below is
+% exactly the kind of thing that turns a plot into an argument.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\linewidth]{pareto_front_last_gen.png}
+    \caption{Pairwise Pareto front of the final generation's population across all four objective pairs ($f_1$ vs $f_2$, $f_2$ vs $f_3$, $f_3$ vs $f_4$, $f_4$ vs $f_1$), each axis min-max normalized within the generation. Points are coloured by NSGA-III non-dominated rank.}
+    \label{fig:pareto-front}
+\end{figure}
+% Discuss trade-offs visible in each panel. IMPORTANT honest point to
+% address here (you raised this yourself during development): with 4
+% objectives it is common, not a bug, for most/all of a modest
+% population to land at rank 0 simultaneously ("dominance resistance") -
+% explain this explicitly so a reader doesn't mistake it for a
+% degenerate/uninformative front. Reference the parallel-coordinates
+% companion view if you include it as a second figure (this project also
+% built a plot\_pareto\_parallel\_coordinates figure not currently in
+% paper/Figures - consider regenerating and adding it here if space
+% allows, or explicitly note it exists in the appendix).
+The final population contains solutions with different compromises between speed, folding complexity and light response. A four-objective problem can produce many rank-zero individuals because one candidate may be better in one objective and worse in another. This dominance resistance is expected for a modest population and should not be interpreted as proof that all designs are equally useful. \imageinference{The visible spread and rank colours in the Pareto figure should be checked against the final plot before adding numerical claims about particular trade-offs.}
+
+\section{Morphological Complexity versus Locomotion}
+% [~1.5 pages, 1 figure] MARKING: Results (HIGH, direct AO-2 evidence) +
+% Understanding and Analysis (HIGH) - one of the two or three strongest
+% "original thinking" opportunities in the whole document, see below.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\linewidth]{entropy_vs_velocity.png}
+    \caption{Folding-complexity gain ($f_2 = \tilde H_{3D} - \tilde H_{2D}$) versus folded-gait velocity ($f_1$), every individual across every generation, coloured by generation.}
+    \label{fig:entropy-velocity}
+\end{figure}
+% This is AO-2. State the relationship observed directly from the data
+% (don't just describe the axes) - e.g. is there a visible trade-off
+% between structural complexity and raw speed, does it change over
+% generations (colour trend), and what does that imply about whether
+% folding complexity is "free" or costs locomotion performance in this
+% design space. This is exactly where "evidence of original thinking"
+% marks are earned - go beyond "the plot shows X" to "this suggests Y
+% because Z".
+The entropy--velocity plot addresses AO-2 by comparing a measure of change during folding with the resulting gait speed. \imageinference{The plotted point cloud should be used to state whether high entropy gain is associated with lower, higher or similarly varied velocity, and whether later-generation points occupy a different region.} A visible concentration or slope would suggest that folding complexity is not independent of locomotion, while a broad cloud would suggest that connectivity and actuation dominate this relationship. The available evidence supports examining the relationship, but it does not justify a causal claim.
+
+\section{Evolved Morphologies: Attractive and Repulsive Response}
+% [~2.25 pages, 3 figures incl. 1 full-width] MARKING: Results (HIGH) -
+% this is the direct visual evidence for O-1 through O-3 AND for AO-1 in
+% its final pivoted form (Section 1.3 - the pheromone-response objective
+% work, NOT the RL-vs-random comparison in 6.5). State that mapping
+% explicitly in the text here, don't leave the AO-1 evidence implicit.
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.95\textwidth]{morphology_grid.png}
+    \caption{Representative evolved morphologies sampled across generations for both pheromone-response configurations (attractive, repulsive), rendered from the MuJoCo digital twin at a fixed shared scale so relative morphology size is directly comparable across the grid.}
+    \label{fig:morphology-grid}
+\end{figure*}
+\begin{figure}[h]
+    \centering
+    \begin{subfigure}[b]{0.47\linewidth}
+        \includegraphics[width=\linewidth]{phermone_attracting_evolved_morph.png}
+        \caption{Attractive configuration}
+        \label{fig:morph-attractive}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.47\linewidth}
+        \includegraphics[width=\linewidth]{Phermone_repelling_evolved_morph.png}
+        \caption{Repulsive configuration}
+        \label{fig:morph-repulsive}
+    \end{subfigure}
+    \caption{Representative individual evolved morphologies, attractive (a) versus repulsive (b) pheromone-response configuration, both rendered from the MuJoCo digital twin. Green markers indicate light-sensitive joints.}
+    \label{fig:evolved-morphologies}
+\end{figure}
+% This is O-1 through O-3 combined evidence (genotype+grammar+simulation
+% all functioning end-to-end, producing valid, diverse, physically
+% simulated morphologies) AND the primary visual evidence for AO-1
+% (pheromone-response metrics adapted for evolution, Section 1.3/4.2.2).
+% Point out concrete visual differences between
+% attractive/repulsive individuals if any are apparent (module count,
+% light-sensitive joint placement/count, symmetry pattern) - don't just
+% caption-and-move-on, interpret what's shown.
+The morphology figures provide end-to-end evidence for O-1 to O-3: graph designs were generated, converted into assemblies, folded and evaluated in the physics simulator. They also show how AO-1 was changed from surrogate fitness prediction to light-response objectives. \imageinference{The images appear to show bilateral structures with light-sensitive joints marked in green; the module counts, joint counts and any consistent attractive-versus-repulsive difference should be confirmed directly from the rendered individuals.} The two response modes should therefore be read as separate design problems, not as proof that one morphology can optimise both behaviours at once.
+
+\section{RL-Assisted versus Random-Baseline Comparison}
+\label{sec:rl-vs-random}
+% [~2 pages, 2 figures] MARKING: Understanding and Analysis (HIGHEST
+% PRIORITY in the chapter) - this section is your single best
+% opportunity for the Distinction-band "evidence of some original
+% thinking" language in the marksheet, precisely BECAUSE the headline
+% result is not the one you hoped for. See the honesty note below.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\linewidth]{convergence_comparison_random_vs_rl.png}
+    \caption{Best and mean scalarized fitness, RL-assisted breeding versus the uniform-random baseline (Section 5.2), over a preliminary 5-generation comparison run.}
+    \label{fig:convergence-comparison}
+\end{figure}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\linewidth]{collision_rate_comparison_random_vs_rl.png}
+    \caption{Collision rate ($n_{\mathrm{collided}}/n_{\mathrm{offspring}}$), RL-assisted versus random-baseline breeding, over the same preliminary comparison run.}
+    \label{fig:collision-rate-comparison}
+\end{figure}
+% CORRECTION vs. earlier drafts: this section validates O-1's "specific
+% ML approach... selected following a review of relevant literature"
+% (Section 1.3) - i.e. whether choosing PPO + Graph Transformer over
+% blind random variation was actually justified - NOT AO-1 (which is the
+% pheromone-response work evidenced in Section 6.4). Frame the whole
+% section around O-1, not AO-1.
+%
+% CRITICAL: BE HONEST HERE. At the scale shown, the random baseline's
+% best scalarized fitness (Fig.~\ref{fig:convergence-comparison}) is
+% HIGHER than the RL-assisted arm's - this is a genuine, currently
+% unresolved challenge to O-1's design choice, not a minor caveat.
+% Guidelines.md "Understanding and analysis" Distinction band
+% explicitly rewards "evidence of some original thinking" - a critical,
+% well-reasoned discussion of an unexpected/negative result earns more
+% credit than silently omitting it or overstating a marginal positive.
+% Do NOT bury or spin this. State it plainly, then:
+%   1. Note the run is small-scale (5 generations, small population) -
+%      not yet conclusive, explicitly say what scale WOULD be needed to
+%      draw a confident conclusion (link to Section 5.1's stated
+%      configuration and Chapter 7's future-work scale-up).
+%   2. Connect it to Section 6.6's diagnostic findings (if the RL
+%      diagnostic/redesign work is included) - this is exactly the kind
+%      of result that MOTIVATED that redesign work, so tell that story
+%      here: observed the gap -> diagnosed the cause -> redesigned ->
+%      (state current validation status honestly, whether re-tested at
+%      this writing or still pending).
+%   3. Collision rate (Fig.~\ref{fig:collision-rate-comparison}):
+%      compare the two arms' trends - does RL reduce collisions faster/
+%      slower than random, and what does that say about whether the
+%      policy is learning to avoid wasted proposals even if it isn't
+%      yet winning on fitness.
+At the scale shown, the random baseline has a higher best scalarised fitness than the RL-assisted arm. This is an important negative result: the learned policy has not yet demonstrated an advantage over uniform random variation. The comparison covers only five generations and a population of 30, so it should be treated as preliminary. A stronger conclusion would require longer runs and several independent seeds under the same settings.
+
+The collision-rate plot should be used to determine whether the RL policy reduced failed proposals even while losing on fitness. \imageinference{The relative collision-rate trend must be read from the figure before describing one arm as better or worse; the current text deliberately avoids inventing a direction or value.} The action-distribution result gives a plausible explanation for the fitness gap: crossover became rare, limiting the policy's access to potentially useful structural combinations.
+
+\section{RL Training Behaviour and Diagnostics}
+% [~2.25 pages, 2 figures] MARKING: Understanding and Analysis (HIGHEST
+% PRIORITY, tied with 6.5) - the observe->investigate->redesign->validate
+% narrative below IS the single clearest demonstration of "original
+% thinking" available in this project; write it as a connected argument,
+% not four separate captions.
+% [Only include the sub-parts below that reflect what was ACTUALLY
+% implemented/validated by submission time - cut generously rather than
+% overclaim.]
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\linewidth]{genetic_action_distribution.png}
+    \caption{Fraction of breeding decisions by grammar action type, per generation.}
+    \label{fig:action-distribution}
+\end{figure}
+\begin{figure}[h]
+    \centering
+    \begin{subfigure}[b]{0.48\linewidth}
+        \includegraphics[width=\linewidth]{rl_diagnostics_reward.png}
+        \caption{Reward per mutation step}
+    \end{subfigure}\hfill
+    \begin{subfigure}[b]{0.48\linewidth}
+        \includegraphics[width=\linewidth]{rl_diagnostics_entropy_coef.png}
+        \caption{Entropy coefficient schedule}
+    \end{subfigure}
+    \par\vspace{0.6em}
+    \begin{subfigure}[b]{0.48\linewidth}
+        \includegraphics[width=\linewidth]{rl_diagnostics_policy_loss.png}
+        \caption{Actor policy loss}
+    \end{subfigure}\hfill
+    \begin{subfigure}[b]{0.48\linewidth}
+        \includegraphics[width=\linewidth]{rl_diagnostics_value_loss.png}
+        \caption{Critic value loss}
+    \end{subfigure}
+    \caption{PPO training diagnostics across the run.}
+    \label{fig:rl-diagnostics}
+\end{figure}
+% Tell the diagnostic story explicitly, in order (this is your strongest
+% "original thinking" evidence in the whole report if written up
+% properly):
+%   1. Observation: hand-inspecting breeding\_events.json (or, if built
+%      by submission, Fig.~\ref{fig:action-distribution} directly) showed
+%      crossover actions (Graft Subtree, Swap Subtrees) becoming rare or
+%      collapsing to near-zero probability within roughly the first 10
+%      generations, in BOTH pheromone-response arms independently.
+%   2. Investigation: ruled out module-count budget as the cause
+%      (checked actual module counts stayed well under the cap
+%      throughout); identified the mechanism as premature policy-entropy
+%      collapse compounded by a reward-scale mismatch (the collision
+%      penalty was an order of magnitude larger than any legitimate
+%      reward delta, so a few early bad crossover outcomes could
+%      dominate the advantage estimate).
+%   3. [If implemented] Redesign: entropy-coefficient decay schedule
+%      (Fig.~\ref{fig:rl-diagnostics}b) instead of a fixed coefficient;
+%      collision-penalty rescaled to be proportionate to the real reward
+%      scale; shared Graph Transformer encoder between actor and critic
+%      for better sample efficiency at this population size.
+%   4. Validation: report the concrete before/after evidence (e.g.
+%      crossover's share of all actions across a real multi-generation
+%      run before vs. after the fix) - use REAL numbers from your own
+%      verification runs, not just "it improved qualitatively".
+% If any of steps 3-4 were NOT completed/validated by submission, say so
+% plainly and move that item to Chapter 7 Future Work instead of
+% implying it's finished.
+The action-distribution diagnostic indicates that crossover actions became uncommon during training. The available implementation notes associate this with early entropy reduction and a reward-scale problem in which collision penalties could dominate ordinary fitness improvements. This interpretation is consistent with the baseline result, but it should be checked with the stored action counts and reward values rather than inferred from the plots alone.
+
+The diagnostic figures separate policy behaviour from evolutionary selection. \imageinference{The direction and magnitude of changes in reward, entropy coefficient, policy loss and value loss should be transcribed from the final plots if exact training claims are required.} At the time of writing, the redesign and its effect on crossover use have not been validated by a full-scale comparison. It is therefore more accurate to describe this section as diagnosis and partial investigation than as proof of successful RL improvement.
+
+\section{Discussion}
+% [~1.25 pages] MARKING: Understanding and Analysis (HIGH) - marksheet
+% 15-18 band language ("conclusions set in context of the project") is
+% almost a direct description of what this section must do.
+% Synthesis, not new results - pull 6.1-6.6 together against the
+% Chapter 1 objectives explicitly, one short paragraph per objective:
+% achieved / partially achieved / not yet achieved, with the evidence
+% figure number cited each time. Use the CORRECT mapping (Section 1.3):
+% O-1 -> Section 6.5 (ML-approach validation vs. random baseline, honest
+% about the current gap); O-2/O-3 -> Section 6.4 (self-folding + physics
+% simulation + fitness feedback, end-to-end); O-4 -> Sections 6.1/6.2
+% (hypervolume/Pareto trends across generations); AO-1 -> Sections
+% 4.2.2/4.2.3 (method) and 6.4 (evidence) - pheromone-response metrics,
+% NOT the RL-vs-random comparison; AO-2 -> Section 6.3 (entropy vs.
+% velocity). This section is what "conclusions set in context of the
+% project" is specifically asking for - don't skip straight to Chapter 7
+% without this synthesis paragraph.
+
+
+O-1 was partially achieved. The graph policy and its integration were implemented, but the random baseline achieved the higher best scalarised fitness in the short comparison (Fig.~\ref{fig:convergence-comparison}). O-2 and O-3 were achieved at simulation level: legal graphs were folded, actuated and scored in MuJoCo, as illustrated by the evolved assemblies in Fig.~\ref{fig:evolved-morphologies}. O-4 was addressed through the convergence, hypervolume and Pareto analyses (Figs.~\ref{fig:convergence}, \ref{fig:hypervolume} and \ref{fig:pareto-front}), although the short run limits the strength of the conclusion.
+
+AO-1 was changed and partially achieved through the attractive and repulsive pheromone-response objectives and their morphology results (Fig.~\ref{fig:evolved-morphologies}). AO-2 was addressed by comparing entropy gain with folded-gait velocity (Fig.~\ref{fig:entropy-velocity}); this relationship should not be treated as statistically established without longer, multi-seed experiments. The overall system is functional, while the advantage of the learned variation policy remains unresolved.
+
+\chapter{Conclusions and Future Work}
+% [~4 pages total] MARKING WEIGHT: Understanding and Analysis (MED-HIGH)
+% - Section 7.1's evidence-linked contributions list and Section 7.2's
+% limitations are the LAST things a marker reads carrying analytical
+% weight; Report Quality (MED) - a report that closes cleanly and
+% doesn't overreach reads as more professional.
+% No new figures/results here - purely synthesis and forward-
+% looking statement. Needs its own brief opening framing (1-2 sentences)
+% even though it's exempt from the "every chapter needs a scene-setter"
+% rule per Guidelines.md (intro and conclusions are the two exceptions) -
+% a short lead-in still helps readability.
+
+\section{Summary of Contributions}
+% [~1.25 pages] MARKING: Understanding and Analysis (MED-HIGH).
+% Restate Chapter 1's Contributions list, but now past-tense and
+% evidence-linked (cite the specific Chapter 6 figure/result that
+% demonstrates each one was actually delivered) - this is different from
+% Chapter 1's forward-looking claim and from Chapter 6's per-objective
+% discussion; keep it tight (bullet list is appropriate here).
+The project delivered a graph representation, grammar masks and symmetry construction for Roblet morphologies. These components supported the valid evolved assemblies shown in Fig.~\ref{fig:evolved-morphologies}. A MuJoCo digital twin was connected to magnetic actuation and objective evaluation, providing the end-to-end simulation evidence for O-2 and O-3.
+
+The four-objective formulation and NSGA-III loop produced convergence, hypervolume and Pareto outputs (Figs.~\ref{fig:convergence}, \ref{fig:hypervolume} and \ref{fig:pareto-front}). The light-response objectives provided the revised form of AO-1, while the entropy--velocity analysis addressed AO-2 (Fig.~\ref{fig:entropy-velocity}). Finally, the PPO operator policy, random baseline and diagnostics identified the unresolved crossover-use problem rather than hiding it (Figs.~\ref{fig:convergence-comparison} and \ref{fig:action-distribution}).
+
+\section{Limitations}
+% [~1 page] MARKING: Understanding and Analysis (HIGH) - honest,
+% specific limitations are explicitly what separates a Merit/Distinction
+% "comprehensive discussion set in context" from a pass-level report that
+% just claims success.
+% Be explicit and specific, not generic. At minimum address:
+%   - Scale: if final reported results are from a short/small run
+%     (Section 5.1), state plainly that conclusions (especially the
+%     RL-vs-random comparison, Section 6.5) are preliminary and need
+%     validation at the full planned scale (e.g. 300 generations,
+%     population 30, multi-seed - whatever your actual target ended up
+%     being).
+%   - No swarm/multi-robot experiments were run (single-robot pheromone
+%     RESPONSE was evolved and tested, not swarm-level communication
+%     between multiple physical or simulated Roblets).
+%   - No physical hardware validation of evolved morphologies (simulation
+%     only - state this even though it's also Future Work, since it's
+%     also a genuine current limitation of the claims made in Chapter 6).
+%   - Any known unresolved issues from the RL diagnostic work (Section
+%     6.6) that were identified but not fully fixed/validated.
+The main limitation is scale. The documented configuration contains only five generations and one seed, so the convergence and RL-versus-random results are preliminary. The random-baseline result cannot establish a general advantage without longer runs and repeated seeds.
+
+The light-response tests were performed on one simulated robot at a time. They do not demonstrate communication or coordination in a multi-robot swarm. The evolved morphologies were also not tested on physical Roblet hardware, so the conclusions are limited by the accuracy of the digital twin and its contact, folding and magnetic assumptions.
+
+The RL diagnostics identified a remaining issue: crossover actions became uncommon, and the available redesign has not yet been validated at full scale. \missinginfo{Add measured crossover proportions, collision rates and before/after diagnostic values if available in the final run files.}
+
+\section{Future Work}
+% [~1.75 pages] MARKING: Understanding and Analysis (MED) - a specific,
+% well-justified future-work list (not generic "more testing needed")
+% still counts as evidence of understanding the project's real
+% trajectory.
+% Directly reuse/expand report/project\_summary.md's Future Work bullets
+% (already aligned with this project's own real priorities):
+%   - Scale to $\geq 300$ generations, larger population, with the
+%     scale-appropriate NSGA-III reference-direction count (Section
+%     4.6).
+%   - Close/re-evaluate the RL-vs-random-baseline gap (Section 6.5) at
+%     full scale, following up on the diagnostic redesign in Section 6.6.
+%   - Multi-seed trials for statistical robustness (state a concrete
+%     seed count and justify it, e.g. "5 seeds at full generation
+%     budget, following the standard convention in RL/EA literature
+%     \citep{...}" - cite something from Chapter 2 if a reference
+%     discusses this convention, otherwise justify from first
+%     principles).
+%   - Physical hardware validation of top evolved morphologies on real
+%     Roblet units.
+%   - [Add any items from this project's own later-stage RL/architecture
+%     work that remained open at submission - e.g. reward normalization
+%     warm-start effects at scale, shared-encoder ablations, entropy-
+%     schedule hyperparameter sensitivity.]
+The next stage should run at least 300 generations with a larger population and a reference-direction count chosen for that population size. This would test whether the early trends persist and whether the Pareto set becomes more informative as more designs are evaluated.
+
+The RL and random arms should then be repeated under identical settings with five independent seeds. This would provide a practical first estimate of run-to-run variation without treating one favourable run as a general result. The crossover collapse should be re-evaluated after reward rescaling and entropy-schedule changes, with action proportions reported explicitly.
+
+The best evolved designs should be checked on real Roblet units. This would test the assumptions about folding, connector placement, magnetic torque and light-sensitive joints. Further useful studies include ablations of the shared encoder, sensitivity to the entropy schedule and tests of reward-normalisation warm-starting. These experiments would show whether the learned policy contributes beyond random variation and whether the simulated light responses transfer to hardware.
+
+
+%%% List of references starts here.
+\renewcommand{\bibname}{REFERENCES}
+% MARKING WEIGHT: Scientific and Professional Conventions (MED-HIGH) -
+% "ensure you use a consistent and correct approach to referencing
+% throughout" is graded here directly; not page-counted, but still
+% marked, so don't neglect it because it's "just the bibliography".
+% Guidelines.md: "ensure you use a consistent and correct approach to
+% referencing throughout." natbib+numbers (already configured in the
+% preamble) gives IEEE-style [1], [2] numeric citations - consistent
+% with paper/main.tex's own IEEEtran bibliography style, so citation
+% KEYS can be shared between both documents without rework. Before
+% submission: add the missing NSGA-III original-paper citation flagged
+% in Section 2.4, and double check every \citep{} key used above
+% actually exists in Bibliography_uRL.bib (12 entries currently there -
+% see report/Bibliography_uRL.bib).
+\addcontentsline{toc}{chapter}{REFERENCES}
+\bibliographystyle{unsrt}
+\bibliography{Bibliography_uRL}
+
+
+% ------------------------------------------------------------------
+% APPENDICES (not marked, not counted in the page limit - Guidelines.md:
+% "should not be used to simply keep the main report within the page
+% limit"; only put things here a reader does NOT need for the main
+% argument to make sense).
+% ------------------------------------------------------------------
+\appendix
+
+\chapter{Glossary of Abbreviations}
+% Guidelines.md: required if abbreviations are used throughout (they
+% are, heavily - RL, PPO, MOO, NSGA-III, MJCF, GNN, EA, etc.). Simple
+% two-column list: abbreviation -> expansion. Populate from every
+% abbreviation actually used above.
+\begin{tabular}{ll}
+\textbf{EA} & Evolutionary algorithm \\
+\textbf{GNN} & Graph neural network \\
+\textbf{HV} & Hypervolume \\
+\textbf{MJCF} & MuJoCo model format \\
+\textbf{MOO} & Multi-objective optimisation \\
+\textbf{NSGA-III} & Non-dominated Sorting Genetic Algorithm III \\
+\textbf{PPO} & Proximal policy optimisation \\
+\textbf{RL} & Reinforcement learning \\
+\end{tabular}
+
+\chapter{Extended Results Figures}
+% Anything from paper/Figures/ or generated during the project that
+% didn't fit the ~13-page Results budget but might substantiate a
+% reader's follow-up question - e.g. the full pareto-front parallel-
+% coordinates plot, additional per-action reward/loss breakdowns, the
+% full RL-diagnostics entropy panel not already placed in Section 6.6.
+% Remember Guidelines.md's rule: if something is ESSENTIAL to the main
+% argument it belongs in the main body, not here.
+The extended figures and diagnostic files are retained in the project output directories. \missinginfo{Insert the names or paths of any additional figures included in the submitted appendix.}
+
+\chapter{Repository and Code Structure}
+% Brief map of the codebase for a reader who wants to reproduce results:
+% src/ (core simulation, grammar, objectives, RL, MOO, plotting),
+% helper\_scripts/ (MJCF generation, results visualizer, manual pattern
+% editor), paper/ (this project's ICRA draft and figure-generation
+% script). State the repository location/access if appropriate for
+% submission (or omit if not permitted).
+The repository is organised into three main areas. The \texttt{src/} directory contains the simulation, genotype grammar, objective functions, reinforcement-learning policy, multi-objective loop and plotting code. The \texttt{helper\_scripts/} directory contains MJCF generation and result-visualisation utilities. The \texttt{paper/} directory contains the paper draft, hyperparameter material and figure-generation resources. Input graph descriptions are stored in \texttt{graphs/}, generated models in \texttt{models/}, and run outputs in the \texttt{output/} and \texttt{old\_output/} directories. \missinginfo{Add the approved repository link or access instructions if the code will be made available to the examiner.}
+
+\end{document}
+% ----------------------------------------------------------------

@@ -438,12 +438,14 @@ def plot_pareto_parallel_coordinates(out_dir, filename="pareto_parallel_coordina
 
 
 def plot_fitness_trends(out_dir):
-    """One subplot per objective (2x2 grid, f1..f4): each generation's
-    BEST value (in that objective's own "higher/lower is better" direction
-    per objectives_api.MAXIMIZE) - a single clean line, no markers, no mean
-    line (the mean is a population-homogeneity signal, which
-    plot_convergence already covers) - just "is the best individual
-    actually getting better," with proper units on every y-axis."""
+    """One subplot per objective (2x2 grid, f1..f4): each generation's BEST
+    value (in that objective's own "higher/lower is better" direction per
+    objectives_api.MAXIMIZE) as a solid line, PLUS the population MEAN
+    (raw arithmetic mean of that objective, not sign-corrected - unlike
+    "best," a mean has no direction to chase, it's a homogeneity readout)
+    as a dashed line - so a gap that isn't closing (mean far below best)
+    is visible per-OBJECTIVE here, not just once as one scalarized number
+    in plot_convergence."""
     generations = _load_all_generations(out_dir)
     if not generations:
         return None
@@ -457,13 +459,18 @@ def plot_fitness_trends(out_dir):
         title, ylabel = _OBJECTIVE_DISPLAY[name]
         best_fn = max if obj_api.MAXIMIZE[name] else min
         best_vals = [best_fn(entry["objectives"].get(name, 0.0) for entry in pop) for _, pop in generations]
-        ax.plot(gen_indices, best_vals, color=_OBJECTIVE_COLOR[name])
+        mean_vals = [
+            float(np.mean([entry["objectives"].get(name, 0.0) for entry in pop])) for _, pop in generations
+        ]
+        ax.plot(gen_indices, best_vals, color=_OBJECTIVE_COLOR[name], label="Best")
+        ax.plot(gen_indices, mean_vals, color=_OBJECTIVE_COLOR[name], linestyle="--", alpha=0.6, label="Mean")
         ax.set_title(title)
         ax.set_xlabel("Generation")
         ax.set_ylabel(ylabel)
+        ax.legend(loc="best", fontsize=8)
         _integer_x_axis(ax)
 
-    fig.suptitle("Fitness Trends Across Generations - Best Individual per Generation", fontsize=15, fontweight="bold")
+    fig.suptitle("Fitness Trends Across Generations - Best vs. Mean per Objective", fontsize=15, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
 
     path = os.path.join(out_dir, "fitness_trends.png")
@@ -864,11 +871,11 @@ def plot_convergence_comparison(run_dirs, comparison_out_dir, filename="converge
 
 def plot_fitness_trends_comparison(run_dirs, comparison_out_dir, filename="fitness_trends_comparison.png"):
     """Multi-run counterpart to plot_fitness_trends(): one subplot per
-    objective (2x2 grid, f1..f4), each generation's BEST value only - no
-    mean line, same reasoning as plot_fitness_trends (the mean is a
-    population-homogeneity signal that plot_convergence_comparison already
-    covers) - one line per run so the two arms' actual best-so-far progress
-    is directly comparable. Saved at this module's usual DPI=600 - see
+    objective (2x2 grid, f1..f4), each generation's BEST value (solid) AND
+    population MEAN (dashed, same color) per run - so a run's best-so-far
+    progress AND how far the rest of its population lags behind it are
+    both visible per-objective, not just once as one scalarized number in
+    plot_convergence_comparison. Saved at this module's usual DPI=600 - see
     plot_convergence_comparison's docstring for why.
 
     `run_dirs`: dict[label -> OUTPUT_DIR]."""
@@ -888,14 +895,18 @@ def plot_fitness_trends_comparison(run_dirs, comparison_out_dir, filename="fitne
         for color, (label, generations) in zip(run_colors, runs.items()):
             gen_indices = [g for g, _ in generations]
             best_vals = [best_fn(entry["objectives"].get(name, 0.0) for entry in pop) for _, pop in generations]
-            ax.plot(gen_indices, best_vals, color=color, label=label)
+            mean_vals = [
+                float(np.mean([entry["objectives"].get(name, 0.0) for entry in pop])) for _, pop in generations
+            ]
+            ax.plot(gen_indices, best_vals, color=color, label=f"{label} - best")
+            ax.plot(gen_indices, mean_vals, color=color, linestyle="--", alpha=0.6, label=f"{label} - mean")
         ax.set_title(title)
         ax.set_xlabel("Generation")
         ax.set_ylabel(ylabel)
-        ax.legend(loc="best", fontsize=8)
+        ax.legend(loc="best", fontsize=7)
         _integer_x_axis(ax)
 
-    fig.suptitle("Fitness Trends Across Generations - Best Individual per Generation", fontsize=15, fontweight="bold")
+    fig.suptitle("Fitness Trends Across Generations - Best vs. Mean per Objective", fontsize=15, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
 
     path = os.path.join(comparison_out_dir, filename)

@@ -1006,7 +1006,7 @@ def run_headless(
     model_path, stats_output_path, max_sim_time=None,
     capture_img=False, capture_gif=False, media_dir="../output", gif_fps=15,
     model=None, target_angles=None, light_target_angles=None,
-    include_light_tests=False,
+    include_light_tests=False, compute_shape_entropy_3d=False,
 ):
     """Runs one closed-loop simulation to completion with no viewer and no
     real-time pacing, so it steps as fast as the CPU allows.
@@ -1046,6 +1046,21 @@ def run_headless(
     whatever the module-level B_INTENSITY currently is, same as this run's
     own gait (the global default for a standalone call, or the sweep's
     winning B when called from run_headless_b_sweep()'s final re-run).
+
+    compute_shape_entropy_3d=True runs the settle-to-folded-pose pass (see
+    the "3D shape entropy" block below) and computes shape_entropy_3d even
+    when capture_img is False - separated from capture_img (which used to
+    be the ONLY thing gating that pass) because sim_executor.py always
+    calls run_headless_b_sweep() with capture_img=False for speed, which
+    silently meant shape_entropy_3d was NEVER computed during a normal
+    evolutionary run - stuck at its 0.0 initial value for every individual,
+    every generation, collapsing objectives_api's f2_entropy =
+    shape_entropy_3d - shape_entropy_2d into just -shape_entropy_2d. Left
+    False by default, same reasoning as include_light_tests:
+    run_headless_b_sweep()'s per-candidate-B trial runs get thrown away
+    except for their avg_velocity, so they shouldn't pay for a settle pass
+    whose entropy result would never be read - only its final re-run of
+    the winning B passes this as True.
     """
     parent_body_magnet_map.clear()
     torque_history.clear()
@@ -1135,11 +1150,15 @@ def run_headless(
 
     try:
         # Settle to the folded pose (used for BOTH the screenshot and 3D
-        # shape entropy below) - kept on `capture_img` alone, not
-        # `capture_img and renderer is not None`, so a renderer/GPU
+        # shape entropy below) - gated on capture_img OR compute_shape_entropy_3d
+        # (either alone is enough to need it), not capture_img alone - see
+        # compute_shape_entropy_3d's docstring for why that used to silently
+        # skip shape_entropy_3d for every normal evolutionary run. Screenshot
+        # rendering below stays its own separate `capture_img and renderer is
+        # not None` check, not nested under this one, so a renderer/GPU
         # failure only costs the screenshot, never the entropy computation
         # (they need the same settled pose, but are otherwise independent).
-        if capture_img:
+        if capture_img or compute_shape_entropy_3d:
             for _ in range(SETTLE_MAX_STEPS):
                 set_angle_to_joint(model, data, target_angle_deg=target_angles)
                 get_light_sensor_values(model, data)
@@ -1173,7 +1192,7 @@ def run_headless(
                     window_sizes=SHAPE_ENTROPY_WINDOW_SIZES, cell_size=entropy_cell_size,
                 )
 
-            if physics_ok and renderer is not None:
+            if capture_img and physics_ok and renderer is not None:
                 try:
                     os.makedirs(media_dir, exist_ok=True)
                     renderer.update_scene(data, camera=camera)
@@ -1321,7 +1340,11 @@ def run_headless_b_sweep(
     b_values, picks the one with the highest average velocity among those
     that both succeeded and weren't flagged unstable, then re-runs just
     that winning B for real (with the caller's actual capture_img/
-    capture_gif) so media is never spent rendering a discarded candidate.
+    capture_gif, and ALWAYS compute_shape_entropy_3d=True regardless of
+    capture_img - see run_headless's docstring for why that's decoupled
+    from capture_img now) so media/entropy is never spent on a discarded
+    candidate, but shape_entropy_3d always gets computed for the one
+    result that's actually kept and scored.
 
     Winner selection:
       1. Prefer the highest avg_velocity_mmps among physics_ok=True,
@@ -1419,7 +1442,7 @@ def run_headless_b_sweep(
                 capture_img=capture_img, capture_gif=capture_gif,
                 media_dir=media_dir, gif_fps=gif_fps,
                 model=model, target_angles=target_angles, light_target_angles=light_target_angles,
-                include_light_tests=include_light_tests,
+                include_light_tests=include_light_tests, compute_shape_entropy_3d=True,
             )
         finally:
             B_INTENSITY = original_b

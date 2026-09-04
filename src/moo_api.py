@@ -233,6 +233,28 @@ def _prepare_assembly(G, work_dir, tag):
     return xml_path
 
 
+# Every evaluate_population() call with at least one cache hit forces a
+# fresh re-simulation of up to this many of them anyway - a "trust but
+# verify" spot check against _EVAL_CACHE going stale/wrong (see
+# run_generation's docstring on the same class of hazard for survivor
+# bookkeeping). Without this, a cache entry that was ever wrong - however
+# it happened - silently wins repeated NSGA-III selection for the rest of
+# the process's life, since an unchanged survivor normally never gets
+# re-simulated again; this bounds how many generations that can go
+# undetected instead of relying on something incidental (a checkpoint
+# resume, which clears this in-memory cache entirely) to ever catch it.
+# Small and constant, not a fraction of the population, so its extra cost
+# stays flat regardless of pop_size.
+_CACHE_SPOT_CHECK_MAX_PER_CALL = 1
+# A cache entry is flagged stale if a fresh re-simulation's avg_velocity_mmps
+# disagrees with the cached value by more than this fraction of whichever
+# magnitude is larger - loose enough that it never fires on values that
+# are merely close (there shouldn't be ANY discrepancy - the physics is
+# meant to be deterministic - so any consistent drift is worth a look),
+# tight enough to reliably catch an order-of-magnitude-wrong cached value.
+_CACHE_SPOT_CHECK_TOLERANCE = 0.10
+
+
 def evaluate_population(graphs, work_dir, sim_seconds=7.0, max_workers=None):
     """Writes an MJCF assembly for every graph, runs every valid one
     through roblet_simulator.py --headless in parallel OS processes
@@ -248,13 +270,15 @@ def evaluate_population(graphs, work_dir, sim_seconds=7.0, max_workers=None):
     its previous screenshot copied forward into THIS generation's
     work_dir, so every downstream reader (objectives_api,
     evolution_results_visualizer.py) sees the same per-generation file
-    layout as before, just without paying for a redundant simulation."""
+    layout as before, just without paying for a redundant simulation -
+    except for up to _CACHE_SPOT_CHECK_MAX_PER_CALL of them, which get
+    re-simulated anyway as a spot check (see its docstring)."""
     os.makedirs(work_dir, exist_ok=True)
 
     stats_paths = [None] * len(graphs)
     hashes = [None] * len(graphs)
     jobs = []
-    cache_hits = 0
+    cache_hit_indices = []
     for i, G in enumerate(graphs):
         xml_path = _prepare_assembly(G, work_dir, tag=f"ind{i}")
         if xml_path is None:
@@ -269,7 +293,7 @@ def evaluate_population(graphs, work_dir, sim_seconds=7.0, max_workers=None):
             jobs.append((xml_path, stats_path))
             continue
 
-        cache_hits += 1
+        cache_hit_indices.append(i)
         with open(stats_path, "w", encoding="utf-8") as f:
             json.dump(cached["stats"], f, indent=4)
         src_screenshot = cached.get("screenshot_path")
@@ -279,9 +303,19 @@ def evaluate_population(graphs, work_dir, sim_seconds=7.0, max_workers=None):
             except OSError:
                 logger.warning("Could not copy forward cached screenshot for ind%d", i)
 
+    # Redirect a few cache hits back into `jobs` for a fresh re-simulation -
+    # their stats_path already has the cached copy written above, which the
+    # fresh run below simply overwrites once it finishes.
+    spot_checked = random.sample(cache_hit_indices, min(_CACHE_SPOT_CHECK_MAX_PER_CALL, len(cache_hit_indices)))
+    spot_check_old_stats = {}
+    for i in spot_checked:
+        spot_check_old_stats[i] = _EVAL_CACHE[hashes[i]]["stats"]
+        xml_path = os.path.join(work_dir, f"ind{i}_assembly.xml")
+        jobs.append((xml_path, stats_paths[i]))
+
     logger.info(
-        "Evaluating population: %d graphs, work_dir=%s (%d cache hits, %d simulated)",
-        len(graphs), work_dir, cache_hits, len(jobs),
+        "Evaluating population: %d graphs, work_dir=%s (%d cache hits, %d simulated, %d spot-checked)",
+        len(graphs), work_dir, len(cache_hit_indices) - len(spot_checked), len(jobs), len(spot_checked),
     )
     sim_executor.run_batch(jobs, max_workers=max_workers, max_sim_time=sim_seconds)
     logger.info("Finished simulation batch: %d jobs", len(jobs))
@@ -294,7 +328,22 @@ def evaluate_population(graphs, work_dir, sim_seconds=7.0, max_workers=None):
             with open(stats_path, "r", encoding="utf-8") as f:
                 stats = json.load(f)
             h = hashes[i]
-            if h is not None and h not in _EVAL_CACHE:
+            if i in spot_check_old_stats:
+                old_v = spot_check_old_stats[i].get("avg_velocity_mmps", 0.0)
+                new_v = stats.get("avg_velocity_mmps", 0.0)
+                if abs(new_v - old_v) > _CACHE_SPOT_CHECK_TOLERANCE * max(abs(old_v), abs(new_v), 1e-9):
+                    logger.warning(
+                        "Stale/wrong _EVAL_CACHE entry caught by spot check on ind%d (hash %s): "
+                        "cached avg_velocity_mmps=%.4f, fresh re-simulation=%.4f - overwriting the "
+                        "cache entry with the fresh result.",
+                        i, h[:12], old_v, new_v,
+                    )
+                    screenshot_path = os.path.join(work_dir, f"screenshot_ind{i}_assembly.png")
+                    _EVAL_CACHE[h] = dict(
+                        stats=stats,
+                        screenshot_path=screenshot_path if os.path.exists(screenshot_path) else None,
+                    )
+            elif h is not None and h not in _EVAL_CACHE:
                 screenshot_path = os.path.join(work_dir, f"screenshot_ind{i}_assembly.png")
                 _EVAL_CACHE[h] = dict(
                     stats=stats,
@@ -559,14 +608,6 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
     _write_breeding_events(work_dir, pop_size, len(offspring_records), breeding_events)
 
     all_records = parent_records + offspring_records
-    obj_lookup = {id(r["graph"]): r["objectives"] for r in all_records}
-    # Position in all_records == position in the ind0..indN batch
-    # evaluate_population() just wrote/simulated (parents first, then
-    # offspring in breeding order) - kept per-survivor so the visualizer
-    # can tell exactly which screenshot/XML/stats.json belongs to each
-    # surviving individual, and which survivors are newly-bred offspring
-    # vs. carried-over parents (ind_id >= n_parents).
-    ind_id_lookup = {id(r["graph"]): i for i, r in enumerate(all_records)}
 
     # Feasibility-first selection: ReferenceDirectionSurvival._do() does
     # pure Pareto/niche sorting on F alone - it has no idea `constraint`
@@ -580,12 +621,27 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
     # individuals (constraint <= 0) are selected first; only if there
     # aren't enough of them to fill the population are infeasible ones
     # used to pad it out, so the population size never shrinks.
+    #
+    # `objectives`/`ind_id` are attached directly onto each Individual
+    # (pymoo's .set()/.get() payload, same mechanism ReferenceDirectionSurvival
+    # itself uses for "rank") rather than looked up afterward from a dict
+    # keyed by id(r["graph"]) - Python's id() is only unique for an object's
+    # LIFETIME; a discarded object's id() can be reused by an unrelated
+    # later object once garbage collected, silently returning the WRONG
+    # individual's objectives/ind_id (the exact hazard _EVAL_CACHE's own
+    # docstring already warns about, keying itself by content hash instead -
+    # this brings survivor bookkeeping in line with that same rule).
     def _survive(indices, n_survive):
         if not indices or n_survive <= 0:
             return []
         sub_records = [all_records[i] for i in indices]
         sub_F = np.array([r["F"] for r in sub_records])
-        sub_individuals = [Individual(X=r["graph"], F=sub_F[j]) for j, r in enumerate(sub_records)]
+        sub_individuals = []
+        for j, (i, r) in enumerate(zip(indices, sub_records)):
+            ind = Individual(X=r["graph"], F=sub_F[j])
+            ind.set("objectives", r["objectives"])
+            ind.set("ind_id", i)
+            sub_individuals.append(ind)
         sub_pop = Population.create(*sub_individuals)
         ref_dirs = _reference_directions(sub_F.shape[1], n_partitions=ref_partitions)
         survival = ReferenceDirectionSurvival(ref_dirs)
@@ -622,8 +678,8 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
     next_generation = [ind.X for ind in survivors]
     updated_archive = update_pareto_archive(archive or [], [all_records[i] for i in feasible_idx])
     log = dict(
-        survivor_objectives=[obj_lookup[id(ind.X)] for ind in survivors],
-        survivor_ind_ids=[ind_id_lookup[id(ind.X)] for ind in survivors],
+        survivor_objectives=[ind.get("objectives") for ind in survivors],
+        survivor_ind_ids=[ind.get("ind_id") for ind in survivors],
         survivor_rank=[ind.get("rank") for ind in survivors],
         n_parents=len(parent_records),
         n_offspring=len(offspring_records),

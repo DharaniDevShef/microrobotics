@@ -438,12 +438,14 @@ def plot_pareto_parallel_coordinates(out_dir, filename="pareto_parallel_coordina
 
 
 def plot_fitness_trends(out_dir):
-    """One subplot per objective (2x2 grid, f1..f4): each generation's
-    BEST value (in that objective's own "higher/lower is better" direction
-    per objectives_api.MAXIMIZE) - a single clean line, no markers, no mean
-    line (the mean is a population-homogeneity signal, which
-    plot_convergence already covers) - just "is the best individual
-    actually getting better," with proper units on every y-axis."""
+    """One subplot per objective (2x2 grid, f1..f4): each generation's BEST
+    value (in that objective's own "higher/lower is better" direction per
+    objectives_api.MAXIMIZE) as a solid line, PLUS the population MEAN
+    (raw arithmetic mean of that objective, not sign-corrected - unlike
+    "best," a mean has no direction to chase, it's a homogeneity readout)
+    as a dashed line - so a gap that isn't closing (mean far below best)
+    is visible per-OBJECTIVE here, not just once as one scalarized number
+    in plot_convergence."""
     generations = _load_all_generations(out_dir)
     if not generations:
         return None
@@ -457,13 +459,18 @@ def plot_fitness_trends(out_dir):
         title, ylabel = _OBJECTIVE_DISPLAY[name]
         best_fn = max if obj_api.MAXIMIZE[name] else min
         best_vals = [best_fn(entry["objectives"].get(name, 0.0) for entry in pop) for _, pop in generations]
-        ax.plot(gen_indices, best_vals, color=_OBJECTIVE_COLOR[name])
+        mean_vals = [
+            float(np.mean([entry["objectives"].get(name, 0.0) for entry in pop])) for _, pop in generations
+        ]
+        ax.plot(gen_indices, best_vals, color=_OBJECTIVE_COLOR[name], label="Best")
+        ax.plot(gen_indices, mean_vals, color=_OBJECTIVE_COLOR[name], linestyle="--", alpha=0.6, label="Mean")
         ax.set_title(title)
         ax.set_xlabel("Generation")
         ax.set_ylabel(ylabel)
+        ax.legend(loc="best", fontsize=8)
         _integer_x_axis(ax)
 
-    fig.suptitle("Fitness Trends Across Generations - Best Individual per Generation", fontsize=15, fontweight="bold")
+    fig.suptitle("Fitness Trends Across Generations - Best vs. Mean per Objective", fontsize=15, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
 
     path = os.path.join(out_dir, "fitness_trends.png")
@@ -508,20 +515,116 @@ def plot_entropy_vs_velocity(out_dir, filename="entropy_vs_velocity.png"):
     return _save_fig(fig, path)
 
 
+def _scalarize_offline(generations):
+    """Same formula as objectives_api.scalarize() (equal-weight mean of
+    each objective normalized to [0,1] against its own observed range),
+    but with a running range built LOCALLY here instead of read from
+    objectives_api's module-global _RUNNING_MIN/_RUNNING_MAX.
+
+    That global is intentionally online/incremental (see scalarize()'s
+    docstring) - correct for moo_api.py's live RL reward, where every
+    individual passes through objectives_api.compute_objectives() (which
+    updates the global) before anything ever scalarizes it. But this
+    module's plotting functions are explicitly designed to also work
+    standalone, from a fresh process that never called compute_objectives()
+    at all - e.g. compare.py, which only ever reads pre-computed objectives
+    back out of population_history.json (see _load_all_generations'
+    docstring: "so these plots stay correct... called standalone"). In
+    that context the global stays completely empty for every generation,
+    so scalarize() silently falls through to its raw-UNnormalized-sum
+    fallback the whole time instead of the intended equal-weighted [0,1]
+    mean - a completely different scale (dominated by whichever objective
+    has the largest raw units, e.g. yaw response in degrees) that doesn't
+    match what the SAME run's convergence.png shows when plotted live by
+    main.py (where the global genuinely is populated). That mismatch is
+    exactly what makes plot_convergence() and plot_convergence_comparison()
+    disagree about identical underlying data depending on which process
+    generated them - rebuilding the range here removes that dependency
+    entirely, so both always agree regardless of calling context.
+
+    Rebuilt chronologically (by generation, in the order given) to
+    preserve scalarize()'s own documented "normalization range widens as
+    the run progresses" behavior, rather than normalizing every generation
+    against the full run's final range (which would let a later
+    generation's discoveries retroactively reshape how an earlier
+    generation's score is read).
+
+    `generations`: [(gen_idx, population), ...] as returned by
+    _load_all_generations()/_load_comparison_runs(). Returns
+    dict[gen_idx -> list[float]] - one scalarized score per individual in
+    that generation's population, same order as the input population."""
+    running_min, running_max = {}, {}
+    scores_by_gen = {}
+    for gen_idx, pop in generations:
+        # Pass 1: fold this WHOLE generation's individuals into the running
+        # range before scoring ANY of them. Updating-and-scoring one
+        # individual at a time (the obvious single-pass approach) would
+        # make an individual's score depend on which OTHER individuals in
+        # the SAME generation happened to be processed before it - an
+        # arbitrary, population_history.json-list-order artifact with no
+        # live equivalent (in a live run, every individual in a generation
+        # has already gone through compute_objectives() - which updates
+        # the range - before anything ever calls scalarize() on that
+        # generation's results, so the range is always complete for the
+        # WHOLE generation by the time any of it is scored). Worst case
+        # under the single-pass version: the very first individual ever
+        # processed sees a fully degenerate (single-point) range on every
+        # objective and falls through to scalarize()'s raw-unnormalized-
+        # sum fallback while its 29 generation-mates get properly
+        # normalized scores right next to it - producing a score with no
+        # relation to its real quality (confirmed directly: this was
+        # exactly what put a lone 1.5 spike at generation 0 in an earlier
+        # version of this function, on a scale where every other value
+        # sits in roughly [0.3, 0.8]).
+        for entry in pop:
+            objectives = entry["objectives"]
+            for n in obj_api.OBJECTIVE_NAMES:
+                v = objectives.get(n, 0.0)
+                if n not in running_min or v < running_min[n]:
+                    running_min[n] = v
+                if n not in running_max or v > running_max[n]:
+                    running_max[n] = v
+
+        # Pass 2: score every individual in this generation against the
+        # now-complete-for-this-generation range.
+        scores = []
+        for entry in pop:
+            objectives = entry["objectives"]
+            contributions = []
+            for n in obj_api.OBJECTIVE_NAMES:
+                lo, hi = running_min.get(n), running_max.get(n)
+                if lo is None or (hi - lo) < 1e-9:
+                    continue
+                norm = (objectives.get(n, 0.0) - lo) / (hi - lo)
+                contributions.append(norm if obj_api.MAXIMIZE[n] else (1.0 - norm))
+
+            if not contributions:
+                scores.append(float(sum(
+                    objectives.get(n, 0.0) if obj_api.MAXIMIZE[n] else -objectives.get(n, 0.0)
+                    for n in obj_api.OBJECTIVE_NAMES
+                )))
+            else:
+                scores.append(float(np.mean(contributions)))
+        scores_by_gen[gen_idx] = scores
+    return scores_by_gen
+
+
 def plot_convergence(out_dir):
-    """Best vs. population-mean SCALARIZED fitness (objectives_api.scalarize
-    - the equal-weight, normalized combination across f1..f4) per
-    generation: the classic GA "convergence" view - a healthy run's mean
-    climbs toward the best line as the population homogenizes around good
-    solutions."""
+    """Best vs. population-mean SCALARIZED fitness (_scalarize_offline -
+    the equal-weight, normalized combination across f1..f4, computed
+    standalone so it never depends on objectives_api's live-run-only
+    running-range state - see that function's docstring) per generation:
+    the classic GA "convergence" view - a healthy run's mean climbs toward
+    the best line as the population homogenizes around good solutions."""
     generations = _load_all_generations(out_dir)
     if not generations:
         return None
 
     gen_indices = [g for g, _ in generations]
+    scores_by_gen = _scalarize_offline(generations)
     best_vals, mean_vals = [], []
-    for _, pop in generations:
-        scalarized = [obj_api.scalarize(entry["objectives"]) for entry in pop]
+    for gen_idx, _ in generations:
+        scalarized = scores_by_gen[gen_idx]
         best_vals.append(max(scalarized))
         mean_vals.append(float(np.mean(scalarized)))
 
@@ -843,9 +946,14 @@ def plot_convergence_comparison(run_dirs, comparison_out_dir, filename="converge
 
     for color, (label, generations) in zip(run_colors, runs.items()):
         gen_indices = [g for g, _ in generations]
+        # Each run gets its OWN independently-rebuilt running range (see
+        # _scalarize_offline's docstring) - matching how each run's own
+        # live main.py process would have built its range from only its
+        # own individuals, never the other arm's.
+        scores_by_gen = _scalarize_offline(generations)
         best_vals, mean_vals = [], []
-        for _, pop in generations:
-            scalarized = [obj_api.scalarize(entry["objectives"]) for entry in pop]
+        for gen_idx, _ in generations:
+            scalarized = scores_by_gen[gen_idx]
             best_vals.append(max(scalarized))
             mean_vals.append(float(np.mean(scalarized)))
         ax.plot(gen_indices, best_vals, color=color, label=f"{label} - best")
@@ -864,11 +972,11 @@ def plot_convergence_comparison(run_dirs, comparison_out_dir, filename="converge
 
 def plot_fitness_trends_comparison(run_dirs, comparison_out_dir, filename="fitness_trends_comparison.png"):
     """Multi-run counterpart to plot_fitness_trends(): one subplot per
-    objective (2x2 grid, f1..f4), each generation's BEST value only - no
-    mean line, same reasoning as plot_fitness_trends (the mean is a
-    population-homogeneity signal that plot_convergence_comparison already
-    covers) - one line per run so the two arms' actual best-so-far progress
-    is directly comparable. Saved at this module's usual DPI=600 - see
+    objective (2x2 grid, f1..f4), each generation's BEST value (solid) AND
+    population MEAN (dashed, same color) per run - so a run's best-so-far
+    progress AND how far the rest of its population lags behind it are
+    both visible per-objective, not just once as one scalarized number in
+    plot_convergence_comparison. Saved at this module's usual DPI=600 - see
     plot_convergence_comparison's docstring for why.
 
     `run_dirs`: dict[label -> OUTPUT_DIR]."""
@@ -888,14 +996,18 @@ def plot_fitness_trends_comparison(run_dirs, comparison_out_dir, filename="fitne
         for color, (label, generations) in zip(run_colors, runs.items()):
             gen_indices = [g for g, _ in generations]
             best_vals = [best_fn(entry["objectives"].get(name, 0.0) for entry in pop) for _, pop in generations]
-            ax.plot(gen_indices, best_vals, color=color, label=label)
+            mean_vals = [
+                float(np.mean([entry["objectives"].get(name, 0.0) for entry in pop])) for _, pop in generations
+            ]
+            ax.plot(gen_indices, best_vals, color=color, label=f"{label} - best")
+            ax.plot(gen_indices, mean_vals, color=color, linestyle="--", alpha=0.6, label=f"{label} - mean")
         ax.set_title(title)
         ax.set_xlabel("Generation")
         ax.set_ylabel(ylabel)
-        ax.legend(loc="best", fontsize=8)
+        ax.legend(loc="best", fontsize=7)
         _integer_x_axis(ax)
 
-    fig.suptitle("Fitness Trends Across Generations - Best Individual per Generation", fontsize=15, fontweight="bold")
+    fig.suptitle("Fitness Trends Across Generations - Best vs. Mean per Objective", fontsize=15, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
 
     path = os.path.join(comparison_out_dir, filename)
@@ -945,23 +1057,76 @@ def plot_collision_rate_comparison(run_dirs, comparison_out_dir, filename="colli
     return _save_fig(fig, path)
 
 
+def plot_hypervolume_comparison(run_dirs, comparison_out_dir, filename="hypervolume_comparison.png"):
+    """Multi-run counterpart to plot_hypervolume(): one HV line per run,
+    each computed via compute_hypervolume() exactly as plot_hypervolume()
+    does for that run alone - normalized against THAT RUN'S OWN observed
+    range, independently of the other run(s) - so every line here is
+    identical to that run's own standalone hypervolume.png, not a rescaled
+    version of it. Same principle plot_convergence_comparison() already
+    uses for scalarized fitness (see its "each run gets its OWN
+    independently-rebuilt running range" comment) - kept consistent here
+    rather than mixing normalization philosophies across comparison plots.
+
+    Trade-off worth knowing: because each run is normalized against its
+    own range, the two lines' absolute HV magnitudes aren't strictly
+    apples-to-apples (a run that happened to explore a narrower slice of
+    objective space can show a numerically larger HV purely from having a
+    smaller yardstick) - what's directly comparable here is each run's own
+    SHAPE/TREND (still improving? plateaued? crashed?), not a precise
+    "whose number is bigger" reading. An earlier version of this function
+    used one shared cross-run-pooled range instead specifically to make
+    the raw magnitudes comparable - reverted because it made each run's
+    line disagree with that run's own trusted standalone chart, which
+    matters more here than strict cross-run magnitude comparability.
+
+    `run_dirs`: dict[label -> OUTPUT_DIR]."""
+    os.makedirs(comparison_out_dir, exist_ok=True)
+    run_colors = ["#1f77ff", "#e8382b", "#22b14c", "#a349e6"]
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    any_data = False
+
+    for color, (label, out_dir) in zip(run_colors, run_dirs.items()):
+        data = compute_hypervolume(out_dir)
+        if not data:
+            continue
+        any_data = True
+        ax.plot(data["generations"], data["hv"], color=color, label=label)
+
+    if not any_data:
+        plt.close(fig)
+        return None
+
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Hypervolume (each run normalized against its own range)")
+    ax.set_title("Hypervolume Across Generations - RL vs. Baseline", fontsize=15, fontweight="bold")
+    ax.legend(loc="best", fontsize=8)
+    _integer_x_axis(ax)
+    fig.tight_layout()
+
+    path = os.path.join(comparison_out_dir, filename)
+    return _save_fig(fig, path)
+
+
 def plot_rl_vs_baseline_comparison(run_dirs, comparison_out_dir):
     """The RL_ASSISTED_GENETIC_OPERATIONS comparison plots: GA convergence
-    (with mean), fitness trends (best only, no mean), and collision rate -
-    each its own separate PNG (see plot_convergence_comparison /
-    plot_fitness_trends_comparison / plot_collision_rate_comparison) - so
-    the effect of the learned policy vs. random_baseline.py's blind
-    variation is visible directly, generation by generation.
+    (with mean), fitness trends (best only, no mean), collision rate, and
+    hypervolume - each its own separate PNG (see plot_convergence_comparison
+    / plot_fitness_trends_comparison / plot_collision_rate_comparison /
+    plot_hypervolume_comparison) - so the effect of the learned policy vs.
+    random_baseline.py's blind variation is visible directly, generation by
+    generation.
 
     `run_dirs`: dict[label -> OUTPUT_DIR] - e.g.
     {"RL-assisted": ".../evolution_run", "Random baseline": ".../evolution_run_norl"}.
     Runs with no data yet are silently skipped (so this is safe to call
     while one arm is still in progress). Returns {name: path_or_None} for
-    the three files."""
+    the four files."""
     return dict(
         convergence=plot_convergence_comparison(run_dirs, comparison_out_dir),
         fitness_trends=plot_fitness_trends_comparison(run_dirs, comparison_out_dir),
         collision_rate=plot_collision_rate_comparison(run_dirs, comparison_out_dir),
+        hypervolume=plot_hypervolume_comparison(run_dirs, comparison_out_dir),
     )
 
 # A real scalarize()-delta reward (scalarize(child) - scalarize(parent))

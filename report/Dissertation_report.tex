@@ -102,6 +102,7 @@
 \usepackage{booktabs}          % \toprule/\midrule/\bottomrule - reuse paper/main.tex's hyperparameter table
 \usepackage[hidelinks]{hyperref} % clickable cross-references/citations - remove if your supervisor prefers not
 \usepackage{xcolor}
+\usepackage{pgfgantt}           % \begin{ganttchart} - project timeline (Guidelines.md)
 
 \newcommand{\imageinference}[1]{\textcolor{blue}{#1}}
 \newcommand{\missinginfo}[1]{\textcolor{red}{[TO COMPLETE: #1]}}
@@ -227,9 +228,7 @@ An additional contribution was the adaptation of light-based reaction primitives
 % thank..."). Thank your supervisor (Dr Shuhei Miyashita) and anyone who
 % supplied hardware/CAD data/prior code (see Individual Contribution
 % above for exactly who that might be).
-Automated robot design is useful when the number of possible shapes and behaviours is too large for manual testing. Here, morphology is not treated as a fixed container for a controller. Module type, connectivity and folding parameters affect physical motion, while the same morphology also determines which light-sensitive joints can be used. Co-design therefore means that these structural and response variables are changed within the same evolutionary representation.
-
-The approach is physics-aware because candidate designs are scored after assembly and motion in a simulator. This avoids selecting shapes that look promising in two dimensions but fail after folding. It also makes the objective values easier to interpret: a design is rewarded for the behaviour of its folded body rather than for a proxy that may not reflect contact, mass or actuation.
+I would like to sincerely thank my supervisor, Dr Shuhei Miyashita, for suggesting this research topic based on my interests and for his valuable advice, encouragement, and feedback throughout the project. I would also like to express my gratitude to the PhD candidates of the Sheffield Microrobotics Lab for their valuable insights, assistance, and discussions during the development of this work.
 
 %%% Table of Contents
 \tableofcontents
@@ -285,16 +284,62 @@ The approach is physics-aware because candidate designs are scored after assembl
 %      bridge into the Motivation/Problem Statement below.
 
 \subsection{Automated and Physics-Aware Robot Co-Design}
-% [~0.7 page]
-% What "co-design" means here specifically: morphology (module type,
-% connectivity, hinge angle) and light-triggered behaviour
-% (light-sensitive joint selection, light-detection hinge angle) are
-% evolved TOGETHER, not morphology-then-controller in two stages.
-% Contrast briefly with the alternative (fixed-morphology RL control
-% tuning) to justify why co-design is the right framing - this sets up
-% Chapter 2's literature review (Section 2.2) rather than duplicating it
-% here; keep this to 1-2 paragraphs.
-Roblets are small, modular units with magnetic bonding sites and foldable sections. The units can be assembled from a two-dimensional arrangement and then folded into a three-dimensional robot. Locomotion is produced by an externally applied oscillating magnetic field rather than by motors placed in every module. This combination makes Roblets a useful test case for automated design because morphology affects assembly, folding, magnetic response and motion at the same time \citep{han2023roblets}.
+
+Imagine asking a robot to design its own body. The fundamental challenge is not simply training a neural network policy to make a fixed physical platform walk; it is discovering the machine's geometric shape, joint distribution, and dynamic behavior simultaneously. A morphology optimized purely for forward locomotion speed often exhibits poor physical stability. Similarly, a modular body that folds elegantly may fail to transmit magnetic torque effectively, while a configuration that maximizes light-sensor sensitivity might sacrifice movement velocity. In this setting, physical morphology is not a passive container for intelligence, it is an active component of the computational process.
+
+Traditional robotic engineering strictly decouples these design choices into a sequential pipeline. An engineer first specifies the geometric topology, a mechanical modeler tunes joint kinematics, and a control engineer subsequently searches for a control policy that makes the completed platform behave correctly. While effective for highly structured environments, this manual approach restricts exploration to human intuition, often filtering out non-intuitive, high-performing structures before they are ever evaluated in simulation. Automated robot co-design reverses this pipeline: candidate morphologies are generated algorithmically, instantiated in a physics engine, evaluated against task-specific fitness metrics, and returned to the search loop. As illustrated in Figure~\ref{fig:automated-design-hook}, this paradigm merges evolutionary algorithms for macro-level structural search with reinforcement learning to evaluate or guide architectural edits.
+
+This computational playbook is reflected across key milestones in modern robotics. Large-scale GPU environments such as NVIDIA Isaac Sim (Figure~\ref{fig:isaac-sim}) demonstrate how evaluating thousands of parallel physics instances drastically accelerates policy learning. In physical hardware, platforms like Boston Dynamics' Atlas (Figure~\ref{fig:boston-dynamics}) highlight how structural dynamics and high-bandwidth control must operate in tight coupling for agile, highly dynamic movement. Crucially, benchmarks like Evolution Gym (Figure~\ref{fig:evolution-gym}) establish formal abstractions for morphology-control co-design, decoupling structural generation from behavioral evaluation \citep{bhatia2021evolution,li2023modular,yang2024machine}.
+
+The challenge becomes significantly sharper when applied to modular, self-assembling systems. Unlike fixed quadruped or humanoid frames, modular units can combine into an exponential number of topological graphs. For planar systems like Roblets, each graph topology directly determines how 2D flat sheets transform into 3D folded modules (Figure~\ref{fig:self-folding}), how folded contacts interact with ground friction, and how the physical body responds to external magnetic fields or light signals. Furthermore, local mechanical interlocks and light responses offer a direct pathway toward collective swarm intelligence.
+
+The objective of this dissertation is to bridge these paradigms: uniting evolutionary multi-objective search, deep reinforcement learning structural edit policies, and physics-in-the-loop evaluation inside a modular pipeline where a candidate design begins as an abstract graph, self-folds into a 3D physical body, and is evaluated directly by its embodied physical capabilities.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[b]{0.48\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{nvidia_isaac_gym.png}
+        \caption{Parallel physics simulation (NVIDIA)}
+        \label{fig:isaac-sim}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{boston_dynamics_atlas.png}
+        \caption{Embodied dynamic platform (Atlas)}
+        \label{fig:boston-dynamics}
+    \end{subfigure}
+
+    \vspace{0.5em}
+
+    \begin{subfigure}[b]{0.48\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{self_folding_robot.png}
+        \caption{Planar 2D-to-3D self-folding mechanism}
+        \label{fig:self-folding}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{evolution_gym_codesign.png}
+        \caption{Morphology-control co-design loop}
+        \label{fig:evolution-gym}
+    \end{subfigure}
+    
+    \caption{Key paradigms informing automated modular robot design: (a) large-scale parallelized physics simulation on GPUs; (b) dynamic physical hardware requiring tight body-brain integration; (c) planar sheet transformations into 3D folded morphologies via thermal hinges; and (d) computational co-design loops combining evolutionary search with policy learning \citep{bhatia2021evolution, li2023modular, yang2024machine}.}
+    \label{fig:automated-design-hook}
+\end{figure}
+
+\noindent\textit{Image sources and attributions:} 
+\begin{itemize}
+    \item \textbf{(a)} Source: Page capture from the official \href{https://developer.nvidia.com/isaac/sim}{NVIDIA Isaac Sim} website, accessed 4 September 2026.
+    \item \textbf{(b)} Source: Page capture from the official \href{https://bostondynamics.com/}{Boston Dynamics} website, accessed 4 September 2026.
+    \item \textbf{(c)} Source: Page capture from the official \href{https://robotics.stanford.edu/}{Stanford Robotics} website, accessed 4 September 2026.
+    \item \textbf{(d)} Source: Page capture from the official \href{https://www.csail.mit.edu/}{MIT CSAIL} website, accessed 4 September 2026.
+\end{itemize}
+
+
 
 \subsection{The Roblet Platform}
 % [~0.6 page]
@@ -303,6 +348,13 @@ Roblets are small, modular units with magnetic bonding sites and foldable sectio
 % 3D-printed units, magnetic bonding, self-folding, external magnetic
 % actuation, light-based pheromone signalling. Cite \citep{han2023roblets}.
 Roblets are small, modular units with magnetic bonding sites and foldable sections. The units can be assembled from a two-dimensional arrangement and then folded into a three-dimensional robot. Locomotion is produced by an externally applied oscillating magnetic field rather than by motors placed in every module. This combination makes Roblets a useful test case for automated design because morphology affects assembly, folding, magnetic response and motion at the same time \citep{han2023roblets}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.6\linewidth]{roblet_paper_image_on_assembly_folding_actuation.png}
+    \caption{Roblet assembly, folding and actuation. (a) Magnetic self-assembly of modules into a 2D configuration. (b) Heat-triggered self-folding into a 3D structure. (c) Locomotion under an oscillating magnetic field. Source: Han et al., IROS 2023 \citep{han2023roblets}.}
+    \label{fig:roblet-assembly-folding-actuation}
+\end{figure}
 
 \subsection{Swarm Communication via Light-Based Virtual Pheromones}
 % [~0.7 page]
@@ -468,7 +520,36 @@ The intended contribution is the combination of policy-guided graph editing for 
 %     kind of "actual progress against original plan" Guidelines.md
 %     asks for, and honest scope adjustment reads as competence, not
 %     failure.
-Text...
+The development and execution of this project were tracked against a structured 17-week schedule running from 15 May 2026 to 07 September 2026. Table~\ref{tab:project_schedule} details the planned task timelines alongside actual completion dates and key technical outcomes recorded during development.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Planned vs. actual project timeline across major engineering and evaluation phases.}
+\label{tab:project_schedule}
+\begin{tabular}{p{4.2cm} p{1.6cm} p{1.6cm} p{6.4cm}}
+\hline
+\textbf{Project Phase} & \textbf{Planned Dates} & \textbf{Actual Dates} & \textbf{Key Technical Outcomes} \\ \hline
+Literature Review \& Background & 15 May -- 12 Jun & 15 May -- 27 Jul & Initial background review; extended through mid-July during formal review submission. \\
+Simulation Framework \& Physics Engine & 12 Jun -- 26 Jun & 02 Jul -- 25 Jul & Self-folding XML setup, joint torque control, and oscillating magnetic actuation. \\
+Morphology Representation & 26 Jun -- 10 Jul & 13 Jul -- 01 Aug & Directed graph serialization, visualizer interface, and port connection logic. \\
+Evolutionary Framework Integration & 10 Jul -- 24 Jul & 02 Aug -- 23 Aug & EA pipeline initialization, grammar-masking collision gates, symmetry enforcement, and shape entropy. \\
+ML-Assisted Optimisation (PPO / RL) & 07 Aug -- 14 Aug & 24 Aug -- 02 Sep & Pheromone response metrics, RL actor-critic integration, and action-penalty tuning. \\
+Simulation Experiments \& Analysis & 14 Aug -- 28 Aug & 12 Aug -- 31 Aug & Headless parallel simulations, magnetic sweep optimization, and convergence plotting. \\
+Dissertation Writing \& Revision & 14 Aug -- 04 Sep & 26 Aug -- 04 Sep & Final thesis compilation, manuscript drafting, and algorithmic bug fixes. \\ \hline
+\end{tabular}
+\end{table}
+
+Initial development proceeded on schedule, with foundational XML generation and hinge self-folding mechanisms established in early July. However, actual progress diverged from the baseline plan across key technical phases:
+
+\textbf{Simulation Framework Bottlenecks and Downstream Schedule Shifts:}
+Building the physics simulation environment and dynamic assembly generator consumed nearly four weeks of intensive development (from early July through late July), significantly longer than the planned two-week allocation. Debugging low-level physical dynamics—such as hinge joint flapping, accurate module spatial layout in XML, connector inertial mass adjustments for embedded magnets, dynamic torque actuation under oscillating magnetic fields, and fluid/glass interactions, required extensive iteration across dozens of code refinements. Because multi-objective optimization (MOO) and reinforcement learning (RL) both rely on a stable, bug-free physics evaluator, downstream framework integration was intentionally held back until high-fidelity simulation and headless parallel execution were completely validated in mid-August.
+
+\textbf{Pivot from ML Surrogate Fitness to Direct Pheromone Metrics (AO-1 Adjustment):}
+The original project objectives specified training a machine learning surrogate model to predict physical locomotion fitness to accelerate evolutionary search. During mid-August, when headless parallel MuJoCo simulations achieved high throughput (around 1.2 minutes per generation), surrogate fitness prediction was deemed unnecessary. Instead, the advanced objective was pivoted toward implementing direct light-response and virtual pheromone attraction/repulsion behavior metrics. This modification aligned the physics-in-the-loop pipeline with high-fidelity behavioral evaluation without relying on surrogate approximations.
+
+\textbf{Delayed RL Integration and Redesign Phase:}
+While evolutionary pipeline integration was scheduled for late July, establishing stable multi-objective constraints (collision checks, mirror symmetry, and shape entropy) extended through mid-August. Consequently, the implementation of the PPO actor-critic network for RL-guided graph edits commenced later than planned, in late August. Initial diagnostic runs revealed policy collapse caused by excessively severe penalties on invalid grammar actions and elitism handling issues in NSGA-III. Reallocating contingency time in late August enabled targeted redesign of penalty structures and operator selection routines, successfully stabilizing the actor-critic policy before final thesis compilation.
 
 \section{Dissertation Structure}
 % [~0.5 page]
@@ -499,6 +580,9 @@ Chapter 3 introduces the hardware and explains how its main physical effects wer
 % Opening paragraph (required, not optional, per the "every chapter
 % needs a scene-setter" rule): state the 5 themes covered below and how
 % they build toward your own approach.
+Designing autonomous modular robots requires addressing both physical mechanics and algorithmic optimization. Historically, creating functional robot morphologies depended heavily on human engineering intuition, a process that inherently restricts exploration to familiar configurations. To overcome this, the automated design of self-assembling and self-folding modular robots demands a synthesis of physical hardware platforms, evolutionary multi-objective optimization, graph-structured representations, and reinforcement learning.
+
+This literature review evaluates the foundational frameworks and recent advances across five key domain areas. Section 2.1 surveys the landscape of modular and self-reconfigurable robots, positioning the unique physical traits of Roblets relative to existing hardware systems. Section 2.2 examines evolutionary robotics, focusing on structural representation and search-space management. Section 2.3 critically evaluates reinforcement learning techniques applied to structural search versus control optimization. Section 2.4 analyzes multi-objective evolutionary algorithms, focusing on high-dimensional Pareto optimization. Section 2.5 reviews graph-structured representations and graph neural network policies for variable-morphology systems. Finally, Section 2.6 synthesizes these findings to define the precise research gap addressed in this work.
 
 \section{Modular and Self-Reconfigurable Robots}
 % [~1.3 pages] MARKING: Scientific Conventions (HIGH).
@@ -513,6 +597,13 @@ Chapter 3 introduces the hardware and explains how its main physical effects wer
 % Roblets \citep{han2023roblets} within this landscape: what makes it
 % distinct (magnetic self-assembly + heat-folding + light-pheromone
 % signalling combined) from the other systems surveyed.
+Modular robotic systems build functional machines by combining standardized physical building blocks. The foundational principles of programmable self-assembly established by Klavins (2007) demonstrated that complex physical macro-structures could emerge from simple units governed by local stochastic interactions and discrete bonding rules \citep{4272328}. Early modular architectures, however, relied primarily on rigid mechanical latches and required structured, high-energy environments to successfully assemble.
+
+Over the last two decades, hardware platforms have progressed significantly toward parallelized self-assembly and higher operational autonomy. Systems such as SMORES-EP (Liu et al., 2023) achieve versatile reconfiguration by leveraging electro-permanent magnets, enabling low-power dynamic coupling \citep{liu2023smores}. Similarly, recent advancements in spherical freeform modular robots (Tu et al., 2026) demonstrate high degrees of self-reconfiguration autonomy and flexible locomotion across unstructured terrain \citep{tu2026locomotion}. Taking the concept of physical adaptation further, Wyder et al. (2025) proposed the concept of "robot metabolism," where machines dynamically adapt by consuming and reallocating structural components from other modular units \citep{wyder2025robot}. While these platforms illustrate significant mechanical flexibility, comprehensive surveys of the field (Alattas et al., 2019) highlight a recurring bottleneck: as the number of available physical interfaces scales, hand-crafting effective topologies quickly becomes intractable due to the massive combinatorial search space \citep{alattas2019evolutionary}.
+
+The Roblet platform (Han et al., 2023) represents a distinct paradigm within modular robotics. A Roblet begins as a flat, 2D 3D-printed unit equipped with magnetic "jigsaw smart-glue" passive bonding interfaces. When exposed to thermal activation (e.g., hot water), heat-responsive PVC hinges trigger precise self-folding mechanisms that transform the 2D sheet into a 3D functional module. Once folded, locomotion is driven externally through oscillating magnetic fields, while light-based "virtual pheromones" govern collective swarm behavior without requiring bulky onboard motors or battery packs. 
+
+However, despite these innovative mechanics, existing Roblet configurations reported in prior art (Han et al., 2023) remain strictly hand-designed. Human intuition struggles to predict how complex 2D planar layouts will fold into 3D multi-hinge structures, or how those 3D shapes will interact with oscillating magnetic fields to produce stable gaits. To unlock the potential of the Roblet platform, an automated, computational co-design approach is required.
 
 \section{Evolutionary Robotics and Morphology-Control Co-Design}
 % [~1.3 pages] MARKING: Scientific Conventions (HIGH).
@@ -528,6 +619,11 @@ Chapter 3 introduces the hardware and explains how its main physical effects wer
 % (Evolution Gym benchmark - mention as the benchmark-standard this
 % project does NOT use, and justify why: Roblet-specific physical
 % constraints, not a generic voxel/soft-robot benchmark).
+Evolutionary Robotics (ER) applies the principles of natural selection to simultaneously synthesize a robot's physical morphology (body) and controller (brain). A broad survey of modular design automation (Li et al., 2023) categorizes the field into three core challenges: representation (genotype-to-phenotype mapping), search space exploration, and controller-morphology co-optimization \citep{li2023modular}.
+
+A central challenge in evolving modular structures is managing a large, constrained design space. Work on evolutionary robot design also considers interactions among design variables, including epistatic effects, while Evolution Gym highlights the importance of expressive design representations and the difficulty of co-optimizing body structure and control as the search space grows \citep{miras2026epistatic,bhatia2021evolution}. In this project, grammar masking is introduced as a method contribution: it enforces topological and kinematic constraints, such as valid port adjacency, before a candidate is sent to physics simulation. This implementation choice is intended to reduce evaluations of plainly illegal designs; it is not presented as an established conclusion of the cited literature.
+
+In terms of structural representation, graph-based heuristic search methods (Xu et al., 2021) provide one example of modeling robot topologies for design search \citep{xu2021multi}. Representing robot bodies as directed graphs allows evolutionary operators to operate on discrete subtrees. However, evaluating candidate morphologies presents a computational bottleneck. Benchmark platforms such as Evolution Gym (Bhatia et al., 2021) provide standardized grid/voxel-based soft-robot environments for large-scale evaluation \citep{bhatia2021evolution}. While useful for general algorithm comparison, generic voxel benchmarks do not capture all of the specific physical constraints of Roblets, such as planar 2D-to-3D self-folding kinematics, magnetic field actuation, and directional light-sensing responses. Consequently, a dedicated, physics-in-the-loop simulation environment grounded in MuJoCo is necessary to evaluate Roblet candidate designs against real-world physical dynamics.
 
 \section{Reinforcement Learning for Robot Design}
 % [~1.3 pages] MARKING: Scientific Conventions (HIGH) + Understanding
@@ -548,6 +644,13 @@ Chapter 3 introduces the hardware and explains how its main physical effects wer
 % choice). \citep{brown2025reinforcement} (RL-inspired GA for global
 % optimisation - note this uses RL ideas to INFORM a GA's operators
 % rather than a trained policy directly selecting them; contrast).
+Reinforcement Learning (RL) is widely used to learn control policies for existing robot bodies, including in micro- and nanorobotics \citep{yang2024machine}. By contrast, morphology-control co-design remains a computationally demanding problem: surveys and co-design studies identify the interaction between body and controller search as a central challenge, while Evolution Gym notes that combining design optimization with deep RL remains difficult in harder environments \citep{li2023modular,sun2023co,bhatia2021evolution}.
+
+Applying RL to structural design can therefore involve discrete design decisions in addition to continuous control. The cited literature includes RL-based morphology decisions and joint morphology-control optimization, but it does not establish PPO graph-edit actions as a standard alternative to other EA-RL hybrids \citep{li2024reinforcement,sun2023co,li2024bridging}. The present thesis uses PPO to select structural actions within an evolutionary loop; this is the design being evaluated here, rather than a capability claimed for the cited studies.
+
+Hybrid frameworks combining Evolutionary Algorithms (EAs) and RL are consequently relevant to this problem. Across the cited work, EAs commonly provide population-based morphology search while RL learns or refines behaviour, although the division of labour varies between methods \citep{li2023modular,sun2023co,li2024bridging}. Other work uses RL-inspired signals to inform evolutionary operator choices, illustrating that hybridisation need not mean that an RL policy directly performs every structural edit \citep{brown2025reinforcement}.
+
+The approach developed in this thesis uses a Proximal Policy Optimization (PPO) agent to select structural actions, such as node additions, subtree prunings, and crossover subtree swaps, on candidate graph genotypes inside an active evolutionary loop. Within the supplied corpus, this appears distinct from the cited co-design baselines because those sources do not directly test PPO over graph mutations and crossover. The distinction is therefore a positioning of the present method, not a claim that all prior body-brain co-design methods restrict RL to motor control.
 
 \section{Multi-Objective Evolutionary Algorithms in Robotics}
 % [~1.2 pages] MARKING: Scientific Conventions (HIGH).
@@ -562,6 +665,18 @@ Chapter 3 introduces the hardware and explains how its main physical effects wer
 % >3) needs reference-direction niching rather than crowding-distance
 % NSGA-II - this motivates NSGA-III specifically over the more common
 % NSGA-II baseline.
+Real-world robot design inherently involves balancing conflicting performance requirements. A morphology optimized purely for forward locomotion speed often exhibits poor stability or excessive structural complexity. Multi-Objective Evolutionary Algorithms (MOEAs) address this by discovering a Pareto front, a set of non-dominated solutions representing optimal trade-offs between competing criteria.
+
+Standard multi-objective algorithms, such as NSGA-II, rely on crowding distance metrics to maintain population diversity along the Pareto front. However, when the optimization problem involves more than three objectives (many-objective optimization), crowding distance metrics lose selectivity because almost all individuals become non-dominated relative to one another. To resolve this, Deb and Jain (2014) developed NSGA-III, which replaces crowding-distance sorting with reference-direction-based niching. By projecting candidate solutions onto uniformly distributed reference lines in objective space, NSGA-III maintains high population diversity and convergence pressure across higher-dimensional trade-off surfaces.
+
+In robotic co-design, integrating machine learning with MOEAs is relevant when the design space is constrained. Ming et al. (2024) provides a related example of deep reinforcement learning selecting genetic operators in constrained multi-objective optimization \citep{ming2024constrained}. This project applies NSGA-III to a four-objective optimization landscape:
+\begin{enumerate}
+    \item Maximize folded-gait locomotion velocity ($f_1$),
+    \item Maximize entropy-based folding complexity gain ($\Delta H = H_{\text{3D}} - H_{\text{2D}}$) ($f_2$),
+    \item Maximize/minimize light-based pheromone yaw response ($f_3$),
+    \item Maximize/minimize light-based pheromone speed response ($f_4$).
+\end{enumerate}
+NSGA-III is well-justified for this many-objective setting because its reference-direction niching is designed to maintain diversity and selection pressure when several objectives make ordinary crowding-based selection less discriminating \citep{fan2014evolutionary}.
 
 \section{Graph-Structured Policies for Variable Morphology}
 % [~1.2 pages] MARKING: Scientific Conventions (HIGH) + Understanding
@@ -581,6 +696,17 @@ Chapter 3 introduces the hardware and explains how its main physical effects wer
 % \citep{sun2023co} (hierarchical DRL co-optimization of morphology and
 % behaviour - another close comparator, discuss what "hierarchical"
 % means there vs. your single-policy design).
+A persistent challenge in evolving variable modular architectures is learning across candidates that differ in node counts, degrees of freedom, and topological layouts. Variable morphologies create changing dynamics and state-action distributions, which complicate shared learning across designs \citep{sun2023co,li2023modular}.
+
+Graph-based policies appear promising for variable-morphology settings because they can represent relationships between modules and connections directly. Existing work in the supplied corpus also uses graph-based search for robot design and morphology-aware or morphology-agnostic policy learning \citep{xu2021multi,luo2025gcnt,wang2019neural,wang2026evolving}. These sources do not establish a single standard graph-policy architecture or directly document the particular attention and operator details used in this thesis.
+
+These studies motivate morphology-aware representations, while leaving open how a policy should select legal graph edits within an evolutionary search loop. This thesis addresses that narrower design question with a graph encoder and PPO policy. The broader literature also includes studies of adaptive or life-like behaviour in flexible and active structures, which reinforces the value of evaluating morphology together with behaviour rather than treating shape as an isolated variable \citep{wei2026life}.
+
+This work makes two implementation choices beyond the cited representations:
+\begin{enumerate}
+    \item \textbf{Per-Edge Multi-Head Attention:} A dedicated Graph Transformer encoder with multi-head attention per edge is used to capture directional flow and structural dependencies across Roblet connection ports.
+    \item \textbf{Unified Structural Edit Policy:} Rather than using graph policies strictly to produce motor control torques, the Continuously-trained PPO agent uses the Graph Transformer encoder to directly output probability distributions over discrete structural edits (mutation and crossover subtree operations) across arbitrarily sized modular genotypes.
+\end{enumerate}
 
 \section{Summary and Research Gap}
 % [~0.7 page] MARKING: Understanding and Analysis (MED-HIGH) - a crisp,
@@ -593,6 +719,17 @@ Chapter 3 introduces the hardware and explains how its main physical effects wer
 % direct justification for Chapter 4's design, not a repeat of the
 % Contributions list in Chapter 1 - tie it forward explicitly ("Chapter
 % 4 describes how this gap is addressed...").
+While substantial progress has been achieved in modular robotics, evolutionary algorithms, and reinforcement learning, existing methodologies remain fragmented across these domains:
+\begin{itemize}
+    \item Modular platforms like Roblets (Han et al., 2023) offer compelling mechanical properties, such as heat-driven 2D-to-3D self-folding and external magnetic actuation, but their design space remains limited by manual human engineering.
+    \item The supplied co-design literature supports a distinction between RL for control and evolutionary search over design, but does not establish a direct robot-morphology example of PPO choosing graph-edit mutations and crossover.
+    \item The cited sources motivate combining learned decision-making with evolutionary and many-objective search, while the particular integration of PPO-selected graph edits, NSGA-III and Roblet-specific constraints is the method evaluated in this thesis.
+\end{itemize}
+
+\textbf{Research Gap Statement:} 
+Within the supplied corpus, no directly comparable study is identified that combines (a) policy-guided evolutionary graph editing for both structural mutation and crossover, (b) high-dimensional (4-objective) NSGA-III Pareto search, and (c) domain-specific kinematic, folding, and light-response grammar constraints within a unified, physics-in-the-loop co-design pipeline. This corpus-bounded gap motivates the method developed in the following chapters; it is not an exhaustive claim about all prior work.
+
+The following chapters detail the methodology developed to address this gap, presenting an automated evolutionary framework capable of discovering functional, highly non-intuitive Roblet morphologies.
 
 
 \chapter{The Roblet Platform and Physics Simulation}
@@ -622,7 +759,20 @@ Chapter 3 introduces the hardware and explains how its main physical effects wer
 %     description of Han et al.'s own figure.
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.6\linewidth]{real_setup.png}
+    \begin{subfigure}[b]{0.48\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{real_setup.png}
+        \caption{Top view.}
+        \label{fig:real-setup-top}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{real_setup_sideview.jpg}
+        \caption{Side view.}
+        \label{fig:real-setup-side}
+    \end{subfigure}
+
     \caption{Physical Roblet modules under the microscope/camera setup used for hardware validation, showing the translucent 3D-printed module bodies and embedded permanent magnets (red markers) at each port. Photograph of the physical platform developed by the Miyashita Lab \citep{han2023roblets}; shown here for direct comparison with the simulated digital twin (Fig.~\ref{fig:sim-setup}).}
     \label{fig:real-setup}
 \end{figure}
@@ -916,7 +1066,7 @@ Feasibility is handled before objective comparison. Structural validity is enfor
 % just that caching exists.
 \begin{figure}[h!]
     \centering
-    \includegraphics[width=\linewidth]{framework_pipeline.pdf}
+    \includegraphics[width=0.85\linewidth]{framework_pipeline.pdf}
     \caption{End-to-end evolutionary pipeline. The PPO actor selects a structural edit (mutation or crossover) from the population pool, which is grammar-masked, mirrored for bilateral symmetry, and passed through a 3D collision gate before parallel MuJoCo evaluation (magnetic B-sweep gait, then the pheromone reaction-primitive tests). Resulting objectives feed both the PPO reward/advantage signal and NSGA-III's reference-direction non-dominated sorting, which determines the next generation.}
     \label{fig:pipeline}
 \end{figure}
@@ -1022,6 +1172,12 @@ The action distribution records how often each structural operator is chosen and
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.85\linewidth]{fitness_convergence.png}
+    \caption{Fitness trends: best and mean raw population fitness across generations, for each of the four objectives $f_1$-$f_4$.}
+    \label{fig:convergence}
+\end{figure}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\linewidth]{convergence.png}
     \caption{GA convergence: best and mean scalarized population fitness (objectives\_api.scalarize, equal-weight normalized combination of $f_1$-$f_4$) across generations.}
     \label{fig:convergence}
 \end{figure}
@@ -1338,11 +1494,11 @@ The RL diagnostics identified a remaining issue: crossover actions became uncomm
 %     work that remained open at submission - e.g. reward normalization
 %     warm-start effects at scale, shared-encoder ablations, entropy-
 %     schedule hyperparameter sensitivity.]
-The next stage should run at least 300 generations with a larger population and a reference-direction count chosen for that population size. This would test whether the early trends persist and whether the Pareto set becomes more informative as more designs are evaluated.
+% The next stage should run at least 300 generations with a larger population and a reference-direction count chosen for that population size. This would test whether the early trends persist and whether the Pareto set becomes more informative as more designs are evaluated.
 
-The RL and random arms should then be repeated under identical settings with five independent seeds. This would provide a practical first estimate of run-to-run variation without treating one favourable run as a general result. The crossover collapse should be re-evaluated after reward rescaling and entropy-schedule changes, with action proportions reported explicitly.
+% The RL and random arms should then be repeated under identical settings with five independent seeds. This would provide a practical first estimate of run-to-run variation without treating one favourable run as a general result. The crossover collapse should be re-evaluated after reward rescaling and entropy-schedule changes, with action proportions reported explicitly.
 
-The best evolved designs should be checked on real Roblet units. This would test the assumptions about folding, connector placement, magnetic torque and light-sensitive joints. Further useful studies include ablations of the shared encoder, sensitivity to the entropy schedule and tests of reward-normalisation warm-starting. These experiments would show whether the learned policy contributes beyond random variation and whether the simulated light responses transfer to hardware.
+% The best evolved designs should be checked on real Roblet units. This would test the assumptions about folding, connector placement, magnetic torque and light-sensitive joints. Further useful studies include ablations of the shared encoder, sensitivity to the entropy schedule and tests of reward-normalisation warm-starting. These experiments would show whether the learned policy contributes beyond random variation and whether the simulated light responses transfer to hardware.
 
 
 %%% List of references starts here.

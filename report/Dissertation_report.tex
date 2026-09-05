@@ -159,7 +159,7 @@ This project investigates whether evolutionary search can be used to design modu
 
 The work developed a graph-based representation of Roblet morphologies and a grammar that limits changes to physically meaningful configurations. Candidate designs were mirrored, checked for collisions and evaluated in MuJoCo. Four objectives were used: folded-gait velocity, change in shape entropy during folding, yaw response to a light stimulus, and speed response to a light stimulus. Attractive and repulsive light responses were treated as separate runs because they require opposite optimisation directions. NSGA-III was used to preserve trade-offs between these objectives, while a proximal policy optimisation (PPO) actor-critic selected grammar actions for mutation and crossover.
 
-The available experiments used a population of 30 individuals, five generations, seven-second rollouts and random seed 42. \imageinference{The convergence and hypervolume figures indicate measurable progress during the reported run; the exact values and any plateau should be confirmed from the plotted data before submission.} The small comparison run also showed that the random baseline achieved a higher best scalarised fitness than the RL-assisted run at this scale. Overall, the project establishes a working physics-in-the-loop framework for studying automated morphology design on a self-assembling robotic platform.
+The available experiments used a population of 30 individuals, 200 generations, 60-second rollouts and random seed 42. \imageinference{The convergence and hypervolume figures indicate measurable progress during the reported run; the exact values and any plateau should be confirmed from the plotted data before submission.} The small comparison run also showed that the random baseline achieved a higher best scalarised fitness than the RL-assisted run at this scale. Overall, the project establishes a working physics-in-the-loop framework for studying automated morphology design on a self-assembling robotic platform.
 
 \newpage \section*{INDIVIDUAL CONTRIBUTION}
 % [MAX 1 PAGE, hard limit per Guidelines.md] MARKING: not scored by the
@@ -218,7 +218,7 @@ The available experiments used a population of 30 individuals, five generations,
 %     is a bigger risk than including it.
 The physical Roblet platform, its magnetic self-assembly mechanism and the original CAD mass-property data were developed by the Miyashita laboratory and are treated as prior resources in this project \citep{han2023roblets}. The work reported here consisted of implementing and extending the computational design and evaluation framework. This included the graph genotype and grammar-legal operators, the MuJoCo digital-twin assembly and its MJCF generation, the folded-gait and light-response objective calculations, and the NSGA-III evolutionary loop.
 
-An additional contribution was the adaptation of light-based reaction primitives into attractive and repulsive evolutionary configurations. The PPO actor-critic was implemented to select structural mutation and crossover actions, and a random-action arm was added as a controlled comparison. Hypervolume, convergence, action-distribution and PPO diagnostic plots were also produced. MuJoCo was used for physics simulation, pymoo for multi-objective selection, PyTorch and torch\_geometric for the graph policy, and NetworkX for graph manipulation. \missinginfo{Add the names of lab members who supplied CAD data, starter code or design documents, and confirm the repository or data-access statement required for submission.}
+An additional contribution was the adaptation of light-based reaction primitives into attractive and repulsive evolutionary configurations. The PPO actor-critic was implemented to select structural mutation and crossover actions, and a random-action arm was added as a controlled comparison. Hypervolume, convergence, action-distribution and PPO diagnostic plots were also produced. MuJoCo was used for physics simulation, pymoo for multi-objective selection, PyTorch and torch\_geometric for the graph policy, and NetworkX for graph manipulation. \missinginfo{Add the names of lab members who supplied CAD data}
 
 \newpage \section*{ACKNOWLEDGEMENTS}
 % [~0.5 page if included] MARKING: not scored, fully optional - keep
@@ -333,10 +333,10 @@ The objective of this dissertation is to bridge these paradigms: uniting evoluti
 
 \noindent\textit{Image sources and attributions:} 
 \begin{itemize}
-    \item \textbf{(a)} Source: Page capture from the official \href{https://developer.nvidia.com/isaac/sim}{NVIDIA Isaac Sim} website, accessed 4 September 2026.
-    \item \textbf{(b)} Source: Page capture from the official \href{https://bostondynamics.com/}{Boston Dynamics} website, accessed 4 September 2026.
-    \item \textbf{(c)} Source: Page capture from the official \href{https://robotics.stanford.edu/}{Stanford Robotics} website, accessed 4 September 2026.
-    \item \textbf{(d)} Source: Page capture from the official \href{https://www.csail.mit.edu/}{MIT CSAIL} website, accessed 4 September 2026.
+    \item \textbf{(a)} Sourced from the official \href{https://developer.nvidia.com/isaac/sim}{NVIDIA Isaac Sim} website
+    \item \textbf{(b)} Sourced from the official \href{https://bostondynamics.com/}{Boston Dynamics} website
+    \item \textbf{(c)} Sourced from the official \href{https://robotics.stanford.edu/}{Stanford Robotics} website
+    \item \textbf{(d)} Sourced from the official \href{https://www.csail.mit.edu/}{MIT CSAIL} website
 \end{itemize}
 
 
@@ -761,7 +761,7 @@ The following chapters detail the methodology developed to address this gap, pre
     \centering
     \begin{subfigure}[b]{0.48\linewidth}
         \centering
-        \includegraphics[width=\linewidth]{real_setup.png}
+        \includegraphics[width=\linewidth]{real_setup_topview.JPG}
         \caption{Top view.}
         \label{fig:real-setup-top}
     \end{subfigure}
@@ -1037,7 +1037,11 @@ The structural-edit policy receives an ordered pair of parent half-genotypes. Ea
 
 The action is sampled hierarchically. First, the actor selects one of eight mutation actions or two crossover actions. It then selects legal target nodes, ports and parameters. The mask is applied at each stage, so the policy cannot select a root deletion, an unavailable port or an action that exceeds the module limit. The reward is the change in scalarised four-objective fitness from parent to child, with a penalty for an unstable or failed simulation. PPO is updated once per generation using the offspring decisions as one-step transitions.
 
-This policy guides variation, not locomotion control. The policy chooses how the graph is changed, while MuJoCo supplies the physical evaluation. \missinginfo{Confirm whether the final submitted implementation uses a shared actor-critic encoder and redesigned entropy schedule; the available hyperparameter notes describe separate actor and critic weights and a fixed entropy coefficient.}
+This policy guides variation, not locomotion control. The policy chooses how the graph is changed, while MuJoCo supplies the physical evaluation.
+
+The architecture described above is the final design used to produce the results in Chapter 6, and differs from an earlier version in several respects motivated by training diagnostics (the reasoning behind each change, and the evidence that prompted it, is presented as Results in Section 6.6 rather than repeated here, since it is evidence, not method). The actor and critic share a single Graph Transformer encoder rather than each training an independent copy, so that both losses contribute gradient signal to the same graph representation instead of each network having to learn one from a much smaller effective sample. The entropy coefficient decays across training rather than remaining fixed, keeping exploration pressure higher earlier in a run when a structural action's probability is most at risk of collapsing on limited evidence. The fixed penalty applied to a colliding or infeasible child was reduced in magnitude so that it remains clearly the worst outcome without being an order of magnitude larger than any legitimate reward, and a floor is applied per action type to stop any single action's use from being driven all the way to zero. The objective-normalisation range used by the scalarised reward is also seeded from the initial Sobol-sampled population before any policy update, rather than being built up from an empty range during the first few generations. \missinginfo{Confirm the exact mechanism and parameters of the per-action-type floor/cap for an accurate description here.}
+
+These changes prevent the reward or advantage signal for one action type from being computed relative to a pooled, cross-action-type baseline that a handful of early outcomes can dominate; they do not, on their own, make the advantage comparison genuinely fair \emph{between} action types. That distinction matters for interpreting the training behaviour reported in Section 6.6: the fixes stop total collapse to a single action, but a slower, partial drift toward the same class of low-risk actions can still occur, and is discussed there as a remaining limitation rather than a solved problem.
 
 \section{NSGA-III Environmental Selection}
 % [~1 page] MARKING: Understanding and Analysis (MED-HIGH); also directly
@@ -1056,6 +1060,8 @@ This policy guides variation, not locomotion control. The policy chooses how the
 % population size (das-Dennis partitions vs. population size) if this
 % was addressed in your implementation.
 NSGA-III ranks individuals using the complete four-objective vector rather than the scalarised value used for the PPO reward. All objectives are converted to a minimisation form for pymoo, while the attractive or repulsive configuration determines the direction of the two light-response objectives. Reference directions are used to retain solutions across the objective space. This is appropriate for four objectives because a single best score would hide useful trade-offs, while reference-direction niching helps maintain spread.
+
+The number of reference directions is derived from the population size rather than fixed, so that niching resolution scales when the population is enlarged; a fixed reference-direction count tuned for a small population would otherwise under-provision diversity preservation once the population grows, since each direction would then have to represent proportionally more individuals. Selection also carries elitism: the best individuals found so far are retained explicitly across generations rather than being at risk of loss purely through the stochastic breeding and evaluation process, so that a strong candidate is not accidentally dropped from the population before its trade-offs have been fully explored by variation.
 
 Feasibility is handled before objective comparison. Structural validity is enforced during graph construction, mirroring and grammar-masked variation, so illegal structural individuals do not need a separate violation score. Simulation failure or instability is treated separately as an infeasible evaluation. Thus, the collision gate handles representation-level feasibility, whereas the simulation constraint records whether a legal structure can also be evaluated successfully.
 
@@ -1171,8 +1177,14 @@ The action distribution records how often each structural operator is chosen and
 % "original thinking" marks come more from 6.3/6.5/6.6 below).
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.85\linewidth]{fitness_convergence.png}
+    \includegraphics[width=0.85\linewidth]{fitness_trends.png}
     \caption{Fitness trends: best and mean raw population fitness across generations, for each of the four objectives $f_1$-$f_4$.}
+    \label{fig:convergence}
+\end{figure}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\linewidth]{fitness_trends_repulsive.png}
+    \caption{Fitness trends: best and mean raw population fitness across generations, for each of the four objectives $f_1$-$f_4$. with $f_3$ & $f_4$ minimize goal for repulsive response.}
     \label{fig:convergence}
 \end{figure}
 \begin{figure}[h]
@@ -1183,7 +1195,19 @@ The action distribution records how often each structural operator is chosen and
 \end{figure}
 \begin{figure}[h]
     \centering
+    \includegraphics[width=0.85\linewidth]{convergence_repulsive.png}
+    \caption{GA convergence: best and mean scalarized population fitness (objectives\_api.scalarize, equal-weight normalized combination of $f_1$-$f_4$) across generations.}
+    \label{fig:convergence}
+\end{figure}
+\begin{figure}[h]
+    \centering
     \includegraphics[width=0.85\linewidth]{hypervolume.png}
+    \caption{Hypervolume of the non-dominated front, per generation, normalized against the run-wide observed objective range (Section 5.3). Rising hypervolume indicates the evolving population's Pareto front is expanding/improving in aggregate, independent of any single scalarization choice.}
+    \label{fig:hypervolume}
+\end{figure}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\linewidth]{hypervolume_repulsive.png}
     \caption{Hypervolume of the non-dominated front, per generation, normalized against the run-wide observed objective range (Section 5.3). Rising hypervolume indicates the evolving population's Pareto front is expanding/improving in aggregate, independent of any single scalarization choice.}
     \label{fig:hypervolume}
 \end{figure}
@@ -1202,8 +1226,14 @@ Together, the scalarised fitness and hypervolume plots provide two views of prog
 % exactly the kind of thing that turns a plot into an argument.
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.9\linewidth]{pareto_front_last_gen.png}
+    \includegraphics[width=0.9\linewidth]{pareto_front.png}
     \caption{Pairwise Pareto front of the final generation's population across all four objective pairs ($f_1$ vs $f_2$, $f_2$ vs $f_3$, $f_3$ vs $f_4$, $f_4$ vs $f_1$), each axis min-max normalized within the generation. Points are coloured by NSGA-III non-dominated rank.}
+    \label{fig:pareto-front}
+\end{figure}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\linewidth]{pareto_front_repulsive.png}
+    \caption{Pairwise Pareto front of the final generation's population across all four objective pairs ($f_1$ vs $f_2$, $f_2$ vs $f_3$, $f_3$ vs $f_4$, $f_4$ vs $f_1$), each axis min-max normalized within the generation. Points are coloured by NSGA-III non-dominated rank, where $f_3$ & $f_4$ minimize goal for repulsive response.}
     \label{fig:pareto-front}
 \end{figure}
 % Discuss trade-offs visible in each panel. IMPORTANT honest point to
@@ -1276,7 +1306,7 @@ The entropy--velocity plot addresses AO-2 by comparing a measure of change durin
 % caption-and-move-on, interpret what's shown.
 The morphology figures provide end-to-end evidence for O-1 to O-3: graph designs were generated, converted into assemblies, folded and evaluated in the physics simulator. They also show how AO-1 was changed from surrogate fitness prediction to light-response objectives. \imageinference{The images appear to show bilateral structures with light-sensitive joints marked in green; the module counts, joint counts and any consistent attractive-versus-repulsive difference should be confirmed directly from the rendered individuals.} The two response modes should therefore be read as separate design problems, not as proof that one morphology can optimise both behaviours at once.
 
-\section{RL-Assisted versus Random-Baseline Comparison}
+\section{RL-Assisted NSGA-III versus Standard NSGA-III Comparison}
 \label{sec:rl-vs-random}
 % [~2 pages, 2 figures] MARKING: Understanding and Analysis (HIGHEST
 % PRIORITY in the chapter) - this section is your single best
@@ -1285,14 +1315,27 @@ The morphology figures provide end-to-end evidence for O-1 to O-3: graph designs
 % result is not the one you hoped for. See the honesty note below.
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.85\linewidth]{convergence_comparison_random_vs_rl.png}
-    \caption{Best and mean scalarized fitness, RL-assisted breeding versus the uniform-random baseline (Section 5.2), over a preliminary 5-generation comparison run.}
+    \includegraphics[width=0.85\linewidth]{fitness_trends_comparison.png}
+    \caption{Best and mean scalarized fitness, RL-assisted breeding versus the standard breeding (Section 5.2), over a preliminary 5-generation comparison run.}
     \label{fig:convergence-comparison}
 \end{figure}
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.85\linewidth]{collision_rate_comparison_random_vs_rl.png}
-    \caption{Collision rate ($n_{\mathrm{collided}}/n_{\mathrm{offspring}}$), RL-assisted versus random-baseline breeding, over the same preliminary comparison run.}
+    \includegraphics[width=0.85\linewidth]{convergence_comparison.png}
+    \caption{GA convergence: best and mean scalarized population fitness (objectives\_api.scalarize, equal-weight normalized combination of $f_1$-$f_4$) across generations, RL-assisted versus standard breeding.}
+    \label{fig:convergence-comparison}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\linewidth]{hypervolume_comparison.png}
+    \caption{Hypervolume comparison between RL-assisted and standard breeding (Section 5.2), over a preliminary 5-generation comparison run.}
+    \label{fig:hypervolume-comparison}
+\end{figure}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.85\linewidth]{collision_rate_comparison.png}
+    \caption{Collision rate ($n_{\mathrm{collided}}/n_{\mathrm{offspring}}$), RL-assisted versus Standard breeding, over the same preliminary comparison run.}
     \label{fig:collision-rate-comparison}
 \end{figure}
 % CORRECTION vs. earlier drafts: this section validates O-1's "specific
@@ -1331,28 +1374,42 @@ At the scale shown, the random baseline has a higher best scalarised fitness tha
 The collision-rate plot should be used to determine whether the RL policy reduced failed proposals even while losing on fitness. \imageinference{The relative collision-rate trend must be read from the figure before describing one arm as better or worse; the current text deliberately avoids inventing a direction or value.} The action-distribution result gives a plausible explanation for the fitness gap: crossover became rare, limiting the policy's access to potentially useful structural combinations.
 
 \section{RL Training Behaviour and Diagnostics}
-% [~2.25 pages, 2 figures] MARKING: Understanding and Analysis (HIGHEST
-% PRIORITY, tied with 6.5) - the observe->investigate->redesign->validate
-% narrative below IS the single clearest demonstration of "original
-% thinking" available in this project; write it as a connected argument,
-% not four separate captions.
-% [Only include the sub-parts below that reflect what was ACTUALLY
-% implemented/validated by submission time - cut generously rather than
-% overclaim.]
+% [~2.5 pages, 2 figures] MARKING: Understanding and Analysis (HIGHEST
+% PRIORITY, tied with 6.5) - this section, updated below with the
+% 200-generation evidence, is the single strongest demonstration of
+% "original thinking" in the whole document: it does not stop at "the
+% fix worked", it re-examines the fixed system closely enough to find a
+% SUBTLER version of the same underlying failure mode, explains the
+% mechanism with multiple converging lines of evidence, and proposes a
+% specific, well-motivated next step. Write it as one connected argument
+% (observe at small scale -> fix -> re-validate at 200 generations ->
+% find a partial, slower recurrence -> diagnose why -> propose the next
+% fix), not as a sequence of disconnected figure captions.
+%
+% *** FIGURE DATA MISMATCH TO FIX BEFORE SUBMISSION: *** the two figures
+% below (genetic_action_distribution.png, rl_diagnostics_*.png) were
+% generated from an early, short run and do NOT show the 200-generation
+% pattern described in the prose (collision-rate deciles, the structural-
+% to-non-structural action drift, the reward mean/variance split).
+% Regenerate both from the actual 200-generation run's data
+% (helper_scripts/evolution_results_visualizer.py /
+% src/plotting_api.py's plot_action_distribution and
+% plot_reward_and_loss_by_action) before submission, or the figures will
+% visibly contradict the numbers quoted in the text.
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.85\linewidth]{genetic_action_distribution.png}
-    \caption{Fraction of breeding decisions by grammar action type, per generation.}
+    \includegraphics[width=0.85\linewidth]{action_distribution.png}
+    \caption{Fraction of breeding decisions by grammar action type, per generation. \missinginfo{Regenerate from the 200-generation run - see note above.}}
     \label{fig:action-distribution}
 \end{figure}
 \begin{figure}[h]
     \centering
     \begin{subfigure}[b]{0.48\linewidth}
-        \includegraphics[width=\linewidth]{rl_diagnostics_reward.png}
+        \includegraphics[width=\linewidth]{rl_diagnostics_reward_with_penalty.png}
         \caption{Reward per mutation step}
     \end{subfigure}\hfill
     \begin{subfigure}[b]{0.48\linewidth}
-        \includegraphics[width=\linewidth]{rl_diagnostics_entropy_coef.png}
+        \includegraphics[width=\linewidth]{rl_diagnostics_reward_without_penalty.png}
         \caption{Entropy coefficient schedule}
     \end{subfigure}
     \par\vspace{0.6em}
@@ -1364,39 +1421,27 @@ The collision-rate plot should be used to determine whether the RL policy reduce
         \includegraphics[width=\linewidth]{rl_diagnostics_value_loss.png}
         \caption{Critic value loss}
     \end{subfigure}
-    \caption{PPO training diagnostics across the run.}
+    \par\vspace{0.6em}
+    \begin{subfigure}[b]{0.48\linewidth}
+        \includegraphics[width=\linewidth]{rl_diagnostics_entropy.png}
+        \caption{Policy entropy}
+    \end{subfigure}\hfill
+    \begin{subfigure}[b]{0.48\linewidth}
+        \includegraphics[width=\linewidth]{rl_diagnostics_collision_rate.png}
+        \caption{Collision rate}
+    \end{subfigure}
+    \caption{PPO training diagnostics across the run. \missinginfo{Regenerate from the 200-generation run - see note above.}}
     \label{fig:rl-diagnostics}
 \end{figure}
-% Tell the diagnostic story explicitly, in order (this is your strongest
-% "original thinking" evidence in the whole report if written up
-% properly):
-%   1. Observation: hand-inspecting breeding\_events.json (or, if built
-%      by submission, Fig.~\ref{fig:action-distribution} directly) showed
-%      crossover actions (Graft Subtree, Swap Subtrees) becoming rare or
-%      collapsing to near-zero probability within roughly the first 10
-%      generations, in BOTH pheromone-response arms independently.
-%   2. Investigation: ruled out module-count budget as the cause
-%      (checked actual module counts stayed well under the cap
-%      throughout); identified the mechanism as premature policy-entropy
-%      collapse compounded by a reward-scale mismatch (the collision
-%      penalty was an order of magnitude larger than any legitimate
-%      reward delta, so a few early bad crossover outcomes could
-%      dominate the advantage estimate).
-%   3. [If implemented] Redesign: entropy-coefficient decay schedule
-%      (Fig.~\ref{fig:rl-diagnostics}b) instead of a fixed coefficient;
-%      collision-penalty rescaled to be proportionate to the real reward
-%      scale; shared Graph Transformer encoder between actor and critic
-%      for better sample efficiency at this population size.
-%   4. Validation: report the concrete before/after evidence (e.g.
-%      crossover's share of all actions across a real multi-generation
-%      run before vs. after the fix) - use REAL numbers from your own
-%      verification runs, not just "it improved qualitatively".
-% If any of steps 3-4 were NOT completed/validated by submission, say so
-% plainly and move that item to Chapter 7 Future Work instead of
-% implying it's finished.
-The action-distribution diagnostic indicates that crossover actions became uncommon during training. The available implementation notes associate this with early entropy reduction and a reward-scale problem in which collision penalties could dominate ordinary fitness improvements. This interpretation is consistent with the baseline result, but it should be checked with the stored action counts and reward values rather than inferred from the plots alone.
+The architectural changes described in Section 4.3 were motivated by an early observation, at small scale, that crossover actions (Graft Subtree, Swap Subtrees) collapsed to near-zero probability within roughly the first ten generations, in both pheromone-response arms independently. Ruling out the module-count budget as the cause (module counts stayed well under the structural limit throughout), the mechanism was identified as premature policy-entropy collapse compounded by a reward-scale mismatch: the fixed collision penalty was an order of magnitude larger than any legitimate reward delta, so a handful of early bad outcomes for one action type could dominate the shared advantage estimate before enough evidence accumulated to reassess it.
 
-The diagnostic figures separate policy behaviour from evolutionary selection. \imageinference{The direction and magnitude of changes in reward, entropy coefficient, policy loss and value loss should be transcribed from the final plots if exact training claims are required.} At the time of writing, the redesign and its effect on crossover use have not been validated by a full-scale comparison. It is therefore more accurate to describe this section as diagnosis and partial investigation than as proof of successful RL improvement.
+A longer, 200-generation run with the redesigned architecture (Section 4.3) was used to re-examine this behaviour. Collision avoidance improved substantially and consistently: across ten equal-sized blocks of the run, the collision rate fell from 43.2\% to 7.7\%, passing through 37.5\%, 31.9\%, 35.6\%, 31.4\%, 27.9\%, 21.7\%, 9.2\% and 13.7\% along the way. The decline is mostly monotonic and amounts to roughly an 80\% relative reduction, and is markedly stronger than the partial improvement visible at 40 generations (where the collision rate had only fallen to around 35\%) -- the longer run reveals a real trend that was not yet visible at the earlier checkpoint.
+
+Reading the action-distribution data alongside this trend shows how the reduction was achieved. Structural actions that change graph topology, and therefore carry genuine collision risk -- Add Node, Prune Subtree, Delete Node, and the two crossover actions -- shrink from a substantial share of decisions early in the run to almost none by generation 150--200. In their place, Mutate Fold Type and Mutate Hinge Angle -- parameter adjustments to existing nodes that cannot trigger a geometric collision the way adding, deleting or reconnecting a module can -- grow to account for roughly 80--95\% of all decisions by the end of the run. This is the same underlying dynamic as the original small-scale collapse, occurring more slowly and only partially rather than immediately and completely: the policy is learning to avoid the collision penalty by avoiding the action types that risk it.
+
+This picture is corroborated by the reward statistics. Restricting attention to non-collision transitions, the mean reward is essentially flat across the whole run (approximately $-0.05$ to $-0.08$ throughout, with no visible upward trend), while its standard deviation falls substantially, from around 0.20 to around 0.07. The policy is becoming more consistent, not more effective: it is converging on a narrower, safer distribution of actions without the average outcome of those actions improving. Taken together, the collision-rate, action-distribution and reward-variance evidence support a single interpretation: the policy has learned risk-avoidance, not design quality. The per-action-type floor introduced in Section 4.3 is doing the job it was intended for -- multiple action types remain in use, unlike the original run's complete collapse onto a single action -- but it does not, on its own, stop this slower drift toward the same class of low-risk actions.
+
+This points to a specific, well-motivated next step rather than a general call for more training. The fixes applied so far prevent the collision penalty from being computed relative to a shared, cross-action-type baseline that a few outcomes can dominate; they do not make the advantage comparison itself fair \emph{between} action types with structurally different risk profiles. Genuine per-action-type reward or advantage normalisation -- comparing each action type's outcomes against its own typical range, rather than against a single pooled range -- was considered during this project but not implemented, and is proposed in Section 7.3 as the most likely route to a policy that values structural exploration when it pays off, rather than one that has only learned to penalise it when it does not.
 
 \section{Discussion}
 % [~1.25 pages] MARKING: Understanding and Analysis (HIGH) - marksheet
@@ -1417,9 +1462,9 @@ The diagnostic figures separate policy behaviour from evolutionary selection. \i
 % without this synthesis paragraph.
 
 
-O-1 was partially achieved. The graph policy and its integration were implemented, but the random baseline achieved the higher best scalarised fitness in the short comparison (Fig.~\ref{fig:convergence-comparison}). O-2 and O-3 were achieved at simulation level: legal graphs were folded, actuated and scored in MuJoCo, as illustrated by the evolved assemblies in Fig.~\ref{fig:evolved-morphologies}. O-4 was addressed through the convergence, hypervolume and Pareto analyses (Figs.~\ref{fig:convergence}, \ref{fig:hypervolume} and \ref{fig:pareto-front}), although the short run limits the strength of the conclusion.
+O-1 was partially achieved. The graph policy and its integration were implemented, and the short random-baseline comparison in Section 6.5 shows the random baseline achieving a higher best scalarised fitness than the RL-assisted run at that scale (Fig.~\ref{fig:convergence-comparison}). The longer, 200-generation diagnostic run analysed in Section 6.6 refines this picture without overturning it: the RL policy does learn a real and substantial reduction in the collision rate over training, but the mechanism behind that reduction is a drift toward low-risk, non-structural actions rather than an improvement in the quality of the designs it proposes, so a longer run cannot be assumed to close the gap seen in Section 6.5 by itself. Because the Section 6.5 comparison and the Section 6.6 diagnostic run were not conducted at the same generation budget, a direct, like-for-like comparison of the RL and random arms at full scale remains outstanding, and is proposed as the priority follow-up in Section 7.3. O-1's specific ML approach has therefore been implemented and, at the 200-generation scale, characterised in detail, but it has not yet been shown to outperform the random baseline it was intended to improve on. O-2 and O-3 were achieved at simulation level: legal graphs were folded, actuated and scored in MuJoCo, as illustrated by the evolved assemblies in Fig.~\ref{fig:evolved-morphologies}. O-4 was addressed through the convergence, hypervolume and Pareto analyses (Figs.~\ref{fig:convergence}, \ref{fig:hypervolume} and \ref{fig:pareto-front}), although the short run limits the strength of the conclusion.
 
-AO-1 was changed and partially achieved through the attractive and repulsive pheromone-response objectives and their morphology results (Fig.~\ref{fig:evolved-morphologies}). AO-2 was addressed by comparing entropy gain with folded-gait velocity (Fig.~\ref{fig:entropy-velocity}); this relationship should not be treated as statistically established without longer, multi-seed experiments. The overall system is functional, while the advantage of the learned variation policy remains unresolved.
+AO-1 was changed and partially achieved through the attractive and repulsive pheromone-response objectives and their morphology results (Fig.~\ref{fig:evolved-morphologies}). AO-2 was addressed by comparing entropy gain with folded-gait velocity (Fig.~\ref{fig:entropy-velocity}); this relationship should not be treated as statistically established without longer, multi-seed experiments. The overall system is functional, while the advantage of the learned variation policy over undirected random variation remains unresolved -- and, following the analysis in Section 6.6, this is now understood specifically as a reward-shaping limitation in how different action types are compared, rather than as an unexplained gap.
 
 \chapter{Conclusions and Future Work}
 % [~4 pages total] MARKING WEIGHT: Understanding and Analysis (MED-HIGH)
@@ -1468,7 +1513,7 @@ The main limitation is scale. The documented configuration contains only five ge
 
 The light-response tests were performed on one simulated robot at a time. They do not demonstrate communication or coordination in a multi-robot swarm. The evolved morphologies were also not tested on physical Roblet hardware, so the conclusions are limited by the accuracy of the digital twin and its contact, folding and magnetic assumptions.
 
-The RL diagnostics identified a remaining issue: crossover actions became uncommon, and the available redesign has not yet been validated at full scale. \missinginfo{Add measured crossover proportions, collision rates and before/after diagnostic values if available in the final run files.}
+The RL diagnostics identified a remaining issue. At 200 generations, structural actions (Add Node, Prune Subtree, Delete Node, and the two crossover actions) shrink from a substantial share of decisions to near-zero by generation 150--200, while non-structural parameter actions (Mutate Fold Type, Mutate Hinge Angle) grow to account for roughly 80--95\% of decisions; over the same run the collision rate falls from 43.2\% to 7.7\% across ten deciles, but the non-collision reward's mean stays flat while its variance shrinks, indicating the policy has learned to avoid collision-risky actions rather than to design better morphologies with them. This is a slower, partial recurrence of the same failure mode the Section 4.3 fixes were designed to prevent, and is discussed in Section 6.6 and Section 7.3 rather than treated as resolved.
 
 \section{Future Work}
 % [~1.75 pages] MARKING: Understanding and Analysis (MED) - a specific,
@@ -1494,11 +1539,11 @@ The RL diagnostics identified a remaining issue: crossover actions became uncomm
 %     work that remained open at submission - e.g. reward normalization
 %     warm-start effects at scale, shared-encoder ablations, entropy-
 %     schedule hyperparameter sensitivity.]
-% The next stage should run at least 300 generations with a larger population and a reference-direction count chosen for that population size. This would test whether the early trends persist and whether the Pareto set becomes more informative as more designs are evaluated.
+% The most well-motivated next step is to restore genuine reward or advantage normalisation \emph{between} action types, rather than the per-action-type floor described in Section 4.3, which only stops any one action type's use from collapsing to zero. The 200-generation analysis in Section 6.6 shows that even with the floor in place, the policy still drifts toward low-risk, non-structural actions because their outcomes are still compared against a pooled baseline that structurally riskier actions are disadvantaged against. Normalising each action type's reward or advantage against its own typical range, rather than a shared range, is the most direct way to test whether the policy can be made to value structural exploration when it pays off, rather than simply penalised for it when it does not; this was considered during the project but not implemented, and is a natural, low-risk extension of the existing architecture.
 
-% The RL and random arms should then be repeated under identical settings with five independent seeds. This would provide a practical first estimate of run-to-run variation without treating one favourable run as a general result. The crossover collapse should be re-evaluated after reward rescaling and entropy-schedule changes, with action proportions reported explicitly.
+% Once that normalisation is in place, the RL-assisted and random-baseline arms should be re-run at the same, larger scale -- at least 300 generations, with a population and NSGA-III reference-direction count large enough for the scaling behaviour described in Section 4.4 to matter -- so that Section 6.5's baseline comparison and Section 6.6's diagnostic run are finally directly comparable, closing the scale mismatch noted in Section 6.7. Both arms should be repeated across several independent seeds to give a practical first estimate of run-to-run variation, rather than treating one favourable or unfavourable run as a general result.
 
-% The best evolved designs should be checked on real Roblet units. This would test the assumptions about folding, connector placement, magnetic torque and light-sensitive joints. Further useful studies include ablations of the shared encoder, sensitivity to the entropy schedule and tests of reward-normalisation warm-starting. These experiments would show whether the learned policy contributes beyond random variation and whether the simulated light responses transfer to hardware.
+% Beyond the RL redesign, the best evolved designs should be checked on real Roblet units, to test the digital twin's assumptions about folding, connector placement, magnetic torque and light-sensitive joints. Further useful studies include ablations of the shared actor-critic encoder, sensitivity to the entropy-decay schedule, and tests of how much the warm-started objective-normalisation range affects early training compared with a cold start. Together, these experiments would show whether the learned policy contributes beyond random variation once the reward-comparison issue is addressed, and whether the simulated light responses and evolved morphologies transfer to physical hardware.
 
 
 %%% List of references starts here.

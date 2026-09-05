@@ -31,6 +31,16 @@ logger = logging.getLogger(__name__)
 
 DPI = 600
 
+# Shared typography knobs - tune these instead of hunting down individual
+# fontsize= calls. FONT_FAMILY applies to every piece of text in every
+# figure (titles included) via rcParams; the two size knobs only cover
+# axis/tick labels and legend/marker-annotation text respectively (figure
+# and subplot TITLE sizes are left as each plot's own literal, since they
+# were not asked to move together with these).
+FONT_FAMILY = "Arial"
+FONT_SIZE_AXIS_LABEL = 11   # axes.labelsize + tick labels
+FONT_SIZE_LEGEND = 9        # legend text + small marker/count annotations
+
 
 def _save_fig(fig, path, dpi=DPI, **savefig_kwargs):
     """Saves and closes `fig`, but never lets a failed write (the PNG open
@@ -73,7 +83,7 @@ def _integer_x_axis(ax):
 # of its raw dict key.
 _OBJECTIVE_DISPLAY = {
     "f1_folded_gait_velocity": ("Folded-Gait Velocity", "Velocity - m/s"),
-    "f2_entropy": ("Entropy - Folding-Complexity Gain", "Entropy Δ = H₃D - H₂D"),
+    "f2_entropy": ("Entropy (Folding-Complexity Gain)", "Entropy Δ = H(3D) - H(2D)"),
     "f3_pheromone_yaw_response": ("Pheromone Yaw Response", "Yaw Response - deg"),
     "f4_pheromone_speed_response": ("Pheromone Speed Response", "Speed Response - Δv / v"),
 }
@@ -89,12 +99,24 @@ _OBJECTIVE_COLOR = {
 }
 
 _RL_METRIC_COLOR = {
-    "reward": "#1f77ff",
+    "reward": "#ff1f8f",
+    "collision_rate": "#1f77ff",
     "policy_loss": "#e8382b",
     "value_loss": "#a349e6",
     "entropy": "#22b14c",
     "entropy_coef": "#ff8c00",
 }
+
+# Single-run plot_convergence() is called once per arm from two SEPARATE
+# main.py processes (RL_ASSISTED_GENETIC_OPERATIONS True writing to
+# evolution_run/, False writing to evolution_run_norl/ - see main.py's
+# module docstring), so unlike plot_convergence_comparison() it can't just
+# zip colors against a dict of runs it can see side by side. Fixing one
+# color per arm here instead keeps every convergence.png - whichever run
+# produced it - visually consistent with the comparison plots' own
+# RL-vs-baseline coloring (same two hex values as their run_colors[0:2]).
+_RL_ARM_COLOR = "#1f77ff"
+_BASELINE_ARM_COLOR = "#e8382b"
 
 
 def _apply_bright_style():
@@ -106,14 +128,17 @@ def _apply_bright_style():
         "axes.facecolor": "white",
         "savefig.facecolor": "white",
         "axes.edgecolor": "#333333",
-        "axes.labelsize": 11,
+        "font.family": FONT_FAMILY,
+        "axes.labelsize": FONT_SIZE_AXIS_LABEL,
+        "xtick.labelsize": FONT_SIZE_AXIS_LABEL,
+        "ytick.labelsize": FONT_SIZE_AXIS_LABEL,
         "axes.titlesize": 13,
         "axes.titleweight": "bold",
         "axes.grid": True,
         "grid.color": "#cccccc",
         "grid.alpha": 0.4,
         "grid.linewidth": 0.6,
-        "legend.fontsize": 9,
+        "legend.fontsize": FONT_SIZE_LEGEND,
         "legend.frameon": True,
         "legend.framealpha": 0.9,
         "font.size": 10,
@@ -258,7 +283,7 @@ def _population_costs_and_ranks(pop):
     return costs, rank
 
 
-def plot_pareto_front_last_gen(out_dir, filename="pareto_front_last_gen.png", n_generations=5):
+def plot_pareto_front_last_gen(out_dir, filename="pareto_front.png", n_generations=5):
     """Single figure, 4 panels (f1 vs f2, f2 vs f3, f3 vs f4, f4 vs f1),
     overlaying up to `n_generations` generations' own Pareto fronts (rank-0,
     non-dominated members only - NonDominatedSorting run separately per
@@ -360,7 +385,7 @@ def plot_pareto_front_last_gen(out_dir, filename="pareto_front_last_gen.png", n_
         cbar.ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
     gens_str = ", ".join(str(g) for g, _ in selected)
-    fig.suptitle(f"Pareto Front Across Generations ({gens_str})", fontsize=15, fontweight="bold")
+    fig.suptitle(f"Pareto Front Across Generations", fontsize=15, fontweight="bold") #only few generations
 
     path = os.path.join(out_dir, filename)
     return _save_fig(fig, path, bbox_inches="tight")
@@ -420,7 +445,7 @@ def plot_pareto_parallel_coordinates(out_dir, filename="pareto_parallel_coordina
         ax.axvline(xi, color="#999999", linewidth=0.9, zorder=0)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(titles, fontsize=10)
+    ax.set_xticklabels(titles, fontsize=FONT_SIZE_AXIS_LABEL)
     ax.set_ylabel("Normalized fitness")
     ax.set_ylim(-0.05, 1.05)
     ax.set_title(f"Pareto Front — Parallel Coordinates — Generation {gen_idx}", fontsize=15, fontweight="bold")
@@ -437,7 +462,7 @@ def plot_pareto_parallel_coordinates(out_dir, filename="pareto_parallel_coordina
     return _save_fig(fig, path, bbox_inches="tight")
 
 
-def plot_fitness_trends(out_dir):
+def plot_fitness_trends(out_dir, filename="fitness_trends.png"):
     """One subplot per objective (2x2 grid, f1..f4): each generation's BEST
     value (in that objective's own "higher/lower is better" direction per
     objectives_api.MAXIMIZE) as a solid line, PLUS the population MEAN
@@ -467,13 +492,13 @@ def plot_fitness_trends(out_dir):
         ax.set_title(title)
         ax.set_xlabel("Generation")
         ax.set_ylabel(ylabel)
-        ax.legend(loc="best", fontsize=8)
+        ax.legend(loc="best", fontsize=FONT_SIZE_LEGEND)
         _integer_x_axis(ax)
 
     fig.suptitle("Fitness Trends Across Generations - Best vs. Mean per Objective", fontsize=15, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
 
-    path = os.path.join(out_dir, "fitness_trends.png")
+    path = os.path.join(out_dir, filename)
     return _save_fig(fig, path)
 
 
@@ -505,7 +530,7 @@ def plot_entropy_vs_velocity(out_dir, filename="entropy_vs_velocity.png"):
     ax.axhline(0.0, color="#999999", linewidth=1.0, linestyle=":")
     ax.set_xlabel(_OBJECTIVE_DISPLAY["f1_folded_gait_velocity"][1])
     ax.set_ylabel(_OBJECTIVE_DISPLAY["f2_entropy"][1])
-    ax.set_title("Entropy - Folding-Complexity Gain vs. Folded-Gait Velocity", fontsize=15, fontweight="bold")
+    ax.set_title("Entropy (Folding-Complexity Gain) vs. Folded-Gait Velocity", fontsize=15, fontweight="bold")
     cbar = fig.colorbar(sc, ax=ax)
     cbar.set_label("Generation")
     cbar.ax.yaxis.set_major_locator(MaxNLocator(integer=True))
@@ -609,13 +634,20 @@ def _scalarize_offline(generations):
     return scores_by_gen
 
 
-def plot_convergence(out_dir):
+def plot_convergence(out_dir, is_rl=True, filename="convergence.png"):
     """Best vs. population-mean SCALARIZED fitness (_scalarize_offline -
     the equal-weight, normalized combination across f1..f4, computed
     standalone so it never depends on objectives_api's live-run-only
     running-range state - see that function's docstring) per generation:
     the classic GA "convergence" view - a healthy run's mean climbs toward
-    the best line as the population homogenizes around good solutions."""
+    the best line as the population homogenizes around good solutions.
+
+    `is_rl`: which arm this OUTPUT_DIR belongs to (main.py's
+    RL_ASSISTED_GENETIC_OPERATIONS) - both Best and Mean are drawn in that
+    arm's single fixed color (_RL_ARM_COLOR / _BASELINE_ARM_COLOR) rather
+    than an arm-agnostic blue-for-best/red-for-mean, so a viewer looking at
+    this run's convergence.png alone (not the side-by-side comparison
+    plot) still gets the same RL=blue/baseline=red identity everywhere."""
     generations = _load_all_generations(out_dir)
     if not generations:
         return None
@@ -628,9 +660,10 @@ def plot_convergence(out_dir):
         best_vals.append(max(scalarized))
         mean_vals.append(float(np.mean(scalarized)))
 
+    color = _RL_ARM_COLOR if is_rl else _BASELINE_ARM_COLOR
     fig, ax = plt.subplots(figsize=(9, 5.5))
-    ax.plot(gen_indices, best_vals, color="#1f77ff", label="Best")
-    ax.plot(gen_indices, mean_vals, color="#e8382b", linestyle="--", label="Mean")
+    ax.plot(gen_indices, best_vals, color=color, label="Best")
+    ax.plot(gen_indices, mean_vals, color=color, linestyle="--", alpha=0.7, label="Mean")
     ax.set_xlabel("Generation")
     ax.set_ylabel("Scalarized fitness")
     ax.set_title("GA Convergence - Best vs. Mean Population Fitness", fontsize=15, fontweight="bold")
@@ -638,7 +671,7 @@ def plot_convergence(out_dir):
     _integer_x_axis(ax)
     fig.tight_layout()
 
-    path = os.path.join(out_dir, "convergence.png")
+    path = os.path.join(out_dir, filename)
     return _save_fig(fig, path)
 
 
@@ -833,7 +866,7 @@ def plot_action_distribution(out_dir, filename="action_distribution.png"):
     ax.set_ylabel("Fraction of Breeding Decisions")
     ax.set_ylim(0, 1)
     ax.set_title("Action-Type Distribution Across Generations", fontsize=15, fontweight="bold")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=5, fontsize=8)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=5, fontsize=FONT_SIZE_LEGEND)
     _integer_x_axis(ax)
     fig.tight_layout()
 
@@ -890,7 +923,7 @@ def plot_reward_and_loss_by_action(history, out_dir, filename="rl_diagnostics_by
     bars_r = ax_r.bar(labels, reward_means, color=colors, edgecolor="#333333", linewidth=0.6)
     for bar, n in zip(bars_r, reward_counts):
         ax_r.annotate(f"n={n}", (bar.get_x() + bar.get_width() / 2, bar.get_height()),
-                       textcoords="offset points", xytext=(0, 3), ha="center", fontsize=8)
+                       textcoords="offset points", xytext=(0, 3), ha="center", fontsize=FONT_SIZE_LEGEND)
     ax_r.axhline(0.0, color="#999999", linewidth=1.0, linestyle=":")
     ax_r.set_title("Mean Reward by Action Type", fontsize=13, fontweight="bold")
     ax_r.set_ylabel("Mean Reward")
@@ -900,7 +933,7 @@ def plot_reward_and_loss_by_action(history, out_dir, filename="rl_diagnostics_by
     bars_l = ax_l.bar(labels, policy_loss_means, color=colors, edgecolor="#333333", linewidth=0.6)
     for bar, n in zip(bars_l, [policy_loss_n.get(a, 0) for a in present]):
         ax_l.annotate(f"n={n}", (bar.get_x() + bar.get_width() / 2, bar.get_height()),
-                       textcoords="offset points", xytext=(0, 3), ha="center", fontsize=8)
+                       textcoords="offset points", xytext=(0, 3), ha="center", fontsize=FONT_SIZE_LEGEND)
     ax_l.set_title("Mean Policy Loss by Action Type - Final PPO Epoch per Update", fontsize=13, fontweight="bold")
     ax_l.set_ylabel("Mean Policy Loss")
     ax_l.tick_params(axis="x", rotation=30)
@@ -935,7 +968,7 @@ def plot_convergence_comparison(run_dirs, comparison_out_dir, filename="converge
     generation of a run, so there's no storage-cost reason to shrink it.
 
     `run_dirs`: dict[label -> OUTPUT_DIR] - e.g.
-    {"RL-assisted": ".../evolution_run", "Random baseline": ".../evolution_run_norl"}."""
+    {"RL-Guided NSGA-III": ".../evolution_run", "Standard NSGA-III": ".../evolution_run_norl"}."""
     os.makedirs(comparison_out_dir, exist_ok=True)
     runs = _load_comparison_runs(run_dirs)
     if not runs:
@@ -962,7 +995,7 @@ def plot_convergence_comparison(run_dirs, comparison_out_dir, filename="converge
     ax.set_xlabel("Generation")
     ax.set_ylabel("Scalarized fitness")
     ax.set_title("GA Convergence - Best vs. Mean Population Fitness", fontsize=15, fontweight="bold")
-    ax.legend(loc="best", fontsize=8)
+    ax.legend(loc="best", fontsize=FONT_SIZE_LEGEND)
     _integer_x_axis(ax)
     fig.tight_layout()
 
@@ -1004,14 +1037,24 @@ def plot_fitness_trends_comparison(run_dirs, comparison_out_dir, filename="fitne
         ax.set_title(title)
         ax.set_xlabel("Generation")
         ax.set_ylabel(ylabel)
-        ax.legend(loc="best", fontsize=7)
         _integer_x_axis(ax)
 
+    # ONE shared legend for the whole figure instead of one per subplot -
+    # every subplot plots the exact same (run, best/mean) series in the
+    # exact same order/color/linestyle, so 4 identical legend boxes just
+    # repeated the same information 4x and ate into each panel's plot
+    # area. Pulled from axes[0] (any subplot's handles are representative)
+    # and placed BELOW the grid via fig.legend (not ax.legend), so it sits
+    # outside every panel rather than overlapping one of them.
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.02),
+               ncol=min(len(labels), 4), fontsize=FONT_SIZE_LEGEND)
+
     fig.suptitle("Fitness Trends Across Generations - Best vs. Mean per Objective", fontsize=15, fontweight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.tight_layout(rect=(0, 0.06, 1, 0.96))
 
     path = os.path.join(comparison_out_dir, filename)
-    return _save_fig(fig, path)
+    return _save_fig(fig, path, bbox_inches="tight")
 
 
 def plot_collision_rate_comparison(run_dirs, comparison_out_dir, filename="collision_rate_comparison.png"):
@@ -1049,7 +1092,7 @@ def plot_collision_rate_comparison(run_dirs, comparison_out_dir, filename="colli
     ax.set_title("Collision Rate - n_collided / n_offspring", fontsize=15, fontweight="bold")
     ax.set_xlabel("Generation")
     ax.set_ylabel("Collision rate")
-    ax.legend(loc="best", fontsize=8)
+    ax.legend(loc="best", fontsize=FONT_SIZE_LEGEND)
     _integer_x_axis(ax)
     fig.tight_layout()
 
@@ -1098,9 +1141,9 @@ def plot_hypervolume_comparison(run_dirs, comparison_out_dir, filename="hypervol
         return None
 
     ax.set_xlabel("Generation")
-    ax.set_ylabel("Hypervolume (each run normalized against its own range)")
-    ax.set_title("Hypervolume Across Generations - RL vs. Baseline", fontsize=15, fontweight="bold")
-    ax.legend(loc="best", fontsize=8)
+    ax.set_ylabel("Hypervolume (run normalized) ") #(each run normalized against its own range)
+    ax.set_title("Hypervolume Across Generations", fontsize=15, fontweight="bold")
+    ax.legend(loc="best", fontsize=FONT_SIZE_LEGEND)
     _integer_x_axis(ax)
     fig.tight_layout()
 
@@ -1118,7 +1161,7 @@ def plot_rl_vs_baseline_comparison(run_dirs, comparison_out_dir):
     generation.
 
     `run_dirs`: dict[label -> OUTPUT_DIR] - e.g.
-    {"RL-assisted": ".../evolution_run", "Random baseline": ".../evolution_run_norl"}.
+    {"RL-Guided NSGA-III": ".../evolution_run", "Standard NSGA-III": ".../evolution_run_norl"}.
     Runs with no data yet are silently skipped (so this is safe to call
     while one arm is still in progress). Returns {name: path_or_None} for
     the four files."""
@@ -1141,19 +1184,30 @@ def plot_rl_vs_baseline_comparison(run_dirs, comparison_out_dir):
 _COLLISION_REWARD_THRESHOLD = (moo_api.COLLISION_PENALTY - 1.0) / 2
 
 
-def plot_rl_diagnostics(history, out_dir):
-    """One SEPARATE PNG per PPO training metric (reward, policy_loss,
-    value_loss, entropy) - previously a single 4x1 combined figure.
-    history: rl_api.PPOTrainer.history (dict of lists). Returns
-    dict[metric_key -> path] for whichever metrics had data.
+_STEP_AXIS_LABEL = "Breeding Decision Step"
 
-    The reward metric gets a 2-panel figure instead of the generic
-    single-panel treatment: full range (so collision-gate failures -
-    moo_api.COLLISION_PENALTY - are still visible as spikes) on top, and
-    the same series with those spikes excluded and the y-axis rescaled to
-    fit what remains on the bottom - see _COLLISION_REWARD_THRESHOLD.
-    Without this, the real reward signal is invisible against the -10
-    spikes on a single linear axis."""
+
+def plot_rl_diagnostics(history, out_dir, suffix=""):
+    """One SEPARATE PNG per PPO training metric (reward-with-penalty,
+    reward-without-penalty, policy_loss, value_loss, entropy) - previously
+    a single 4x1 combined figure. history: rl_api.PPOTrainer.history (dict
+    of lists). Returns dict[metric_key -> path] for whichever metrics had
+    data.
+
+    `suffix` (e.g. main.py's "_repulsive" for PHEROMONE_RESPONSE_TYPE=
+    "repulsive") is inserted before the .png extension of every filename
+    this generates - so a file copied out of its run-specific OUTPUT_DIR
+    still identifies which run it came from instead of colliding with the
+    same-named file from a different run.
+
+    The reward metric gets its own TWO separate figures (previously one
+    2x1 combined figure) instead of the generic single-panel treatment:
+    full range (so collision-gate failures - moo_api.COLLISION_PENALTY -
+    are still visible as spikes) in "..._reward_with_penalty.png", and the
+    same series with those spikes excluded and the y-axis rescaled to fit
+    what remains in "..._reward_without_penalty.png" - see
+    _COLLISION_REWARD_THRESHOLD. Without the second plot, the real reward
+    signal is invisible against the -10 spikes on a single linear axis."""
     os.makedirs(out_dir, exist_ok=True)
 
     paths = {}
@@ -1164,14 +1218,21 @@ def plot_rl_diagnostics(history, out_dir):
         n_collision = int(collision_mask.sum())
         steps = np.arange(len(values_arr))
 
-        fig, (ax_full, ax_zoom) = plt.subplots(2, 1, figsize=(8, 9))
+        fig, ax_full = plt.subplots(figsize=(9, 5.5))
         ax_full.plot(steps, values_arr, color=_RL_METRIC_COLOR["reward"], linewidth=1.0)
-        ax_full.set_title("Reward per Mutation Step - Full Range", fontsize=13, fontweight="bold")
-        ax_full.set_xlabel("Mutation Step")
+        ax_full.set_title("Reward With Collision Penalty", fontsize=15, fontweight="bold")
+        ax_full.set_xlabel(_STEP_AXIS_LABEL)
         ax_full.set_ylabel("Reward")
+        fig.tight_layout()
+
+        path = os.path.join(out_dir, f"rl_diagnostics_reward_with_penalty{suffix}.png")
+        saved = _save_fig(fig, path)
+        if saved:
+            paths["reward_with_penalty"] = saved
 
         real_steps = steps[~collision_mask]
         real_values = values_arr[~collision_mask]
+        fig, ax_zoom = plt.subplots(figsize=(9, 5.5))
         ax_zoom.plot(real_steps, real_values, color=_RL_METRIC_COLOR["reward"], linewidth=1.0)
         if len(real_values):
             span = max(float(real_values.max() - real_values.min()), 0.05)
@@ -1179,17 +1240,47 @@ def plot_rl_diagnostics(history, out_dir):
             ax_zoom.set_ylim(real_values.min() - pad, real_values.max() + pad)
         ax_zoom.axhline(0.0, color="#999999", linewidth=1.0, linestyle=":")
         ax_zoom.set_title(
-            f"Reward per Mutation Step - {n_collision} Collision-Gate Failure(s) Excluded",
-            fontsize=13, fontweight="bold",
+            f"Reward Without Collision Penalty ({n_collision} Excluded)",
+            fontsize=15, fontweight="bold",
         )
-        ax_zoom.set_xlabel("Mutation Step")
+        ax_zoom.set_xlabel(_STEP_AXIS_LABEL)
         ax_zoom.set_ylabel("Reward")
         fig.tight_layout()
 
-        path = os.path.join(out_dir, "rl_diagnostics_reward.png")
+        path = os.path.join(out_dir, f"rl_diagnostics_reward_without_penalty{suffix}.png")
         saved = _save_fig(fig, path)
         if saved:
-            paths["reward"] = saved
+            paths["reward_without_penalty"] = saved
+
+        # Collision-gate outcome per breeding decision step: collision_mask
+        # is a per-step 0/100 spike train (rejected or not), which on its
+        # own is unreadable as a trend - every spike looks identical
+        # regardless of whether rejections are getting rarer or not. Drawn
+        # here faint/thin as context, UNDER a bold rolling-window
+        # rejection-RATE line (centered moving average of the same 0/100
+        # series) that's what actually answers "is the policy learning to
+        # stop proposing collision-prone actions" at a glance - still a
+        # line plot throughout, just two layers of it instead of one.
+        fig, ax = plt.subplots(figsize=(9, 5.5))
+        ax.plot(steps, collision_mask.astype(float) * 100, color=_RL_METRIC_COLOR["collision_rate"],
+                linewidth=0.8, alpha=0.25, zorder=1, label="Per-step outcome")
+        if len(values_arr) >= 5:
+            window = max(5, min(51, len(values_arr) // 10))
+            kernel = np.ones(window) / window
+            rolling_rate = np.convolve(collision_mask.astype(float), kernel, mode="same") * 100
+            ax.plot(steps, rolling_rate, color=_RL_METRIC_COLOR["collision_rate"], linewidth=2.4, zorder=2,
+                    label=f"Rolling rejection rate (window={window})")
+            ax.legend(loc="upper right", fontsize=FONT_SIZE_LEGEND)
+        ax.set_ylim(-5, 105)
+        ax.set_xlabel(_STEP_AXIS_LABEL)
+        ax.set_ylabel("Collision-Gate Rejection Rate (%)")
+        ax.set_title("Collision-Gate Rejection Rate Over Training", fontsize=15, fontweight="bold")
+        fig.tight_layout()
+
+        path = os.path.join(out_dir, f"rl_diagnostics_collision_rate{suffix}.png")
+        saved = _save_fig(fig, path)
+        if saved:
+            paths["collision_rate"] = saved
 
     specs = [
         ("policy_loss", "Actor Policy Loss", "PPO Update Step", "Policy Loss"),
@@ -1208,7 +1299,7 @@ def plot_rl_diagnostics(history, out_dir):
         ax.set_ylabel(ylabel)
         fig.tight_layout()
 
-        path = os.path.join(out_dir, f"rl_diagnostics_{key}.png")
+        path = os.path.join(out_dir, f"rl_diagnostics_{key}{suffix}.png")
         saved = _save_fig(fig, path)
         if saved:
             paths[key] = saved

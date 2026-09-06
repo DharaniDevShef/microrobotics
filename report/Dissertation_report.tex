@@ -97,6 +97,7 @@
 % Added for this structure pass - all standard, all needed by what's below:
 \usepackage{graphicx}          % \includegraphics
 \usepackage{subcaption}        % subfigures (real_setup vs sim_setup, attractive vs repulsive, etc.)
+\captionsetup{font=footnotesize} % captions should be smaller than the main text
 \usepackage{amsmath}           % multi-objective fitness vector equation (Ch4)
 \usepackage{amssymb}           % \mathbb{R}, etc., if you reuse paper/rl_hyperparameters.tex content
 \usepackage{booktabs}          % \toprule/\midrule/\bottomrule - reuse paper/main.tex's hyperparameter table
@@ -300,14 +301,14 @@ The objective of this dissertation is to bridge these paradigms: uniting evoluti
     \begin{subfigure}[b]{0.48\linewidth}
         \centering
         \includegraphics[width=\linewidth]{nvidia_isaac_gym.png}
-        \caption{Parallel physics simulation (NVIDIA)}
+        \caption{Parallel physics simulation (NVIDIA)- Sourced from the official \href{https://developer.nvidia.com/isaac/sim}{NVIDIA Isaac Sim} website}
         \label{fig:isaac-sim}
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.48\linewidth}
         \centering
         \includegraphics[width=\linewidth]{boston_dynamics_atlas.png}
-        \caption{Embodied dynamic platform (Atlas)}
+        \caption{Embodied dynamic platform (Atlas) - Sourced from the official \href{https://bostondynamics.com/}{Boston Dynamics} website}
         \label{fig:boston-dynamics}
     \end{subfigure}
 
@@ -316,28 +317,20 @@ The objective of this dissertation is to bridge these paradigms: uniting evoluti
     \begin{subfigure}[b]{0.48\linewidth}
         \centering
         \includegraphics[width=\linewidth]{self_folding_robot.png}
-        \caption{Planar 2D-to-3D self-folding mechanism}
+        \caption{Planar 2D-to-3D self-folding mechanism - Sourced from the official \href{https://robotics.stanford.edu/}{Stanford Robotics} website}
         \label{fig:self-folding}
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.48\linewidth}
         \centering
         \includegraphics[width=\linewidth]{evolution_gym_codesign.png}
-        \caption{Morphology-control co-design loop}
+        \caption{Morphology-control co-design loop - Sourced from the official \href{https://www.csail.mit.edu/}{MIT CSAIL} website}
         \label{fig:evolution-gym}
     \end{subfigure}
     
     \caption{Key paradigms informing automated modular robot design: (a) large-scale parallelized physics simulation on GPUs; (b) dynamic physical hardware requiring tight body-brain integration; (c) planar sheet transformations into 3D folded morphologies via thermal hinges; and (d) computational co-design loops combining evolutionary search with policy learning \citep{bhatia2021evolution, li2023modular, yang2024machine}.}
     \label{fig:automated-design-hook}
 \end{figure}
-
-\noindent\textit{Image sources and attributions:} 
-\begin{itemize}
-    \item \textbf{(a)} Sourced from the official \href{https://developer.nvidia.com/isaac/sim}{NVIDIA Isaac Sim} website
-    \item \textbf{(b)} Sourced from the official \href{https://bostondynamics.com/}{Boston Dynamics} website
-    \item \textbf{(c)} Sourced from the official \href{https://robotics.stanford.edu/}{Stanford Robotics} website
-    \item \textbf{(d)} Sourced from the official \href{https://www.csail.mit.edu/}{MIT CSAIL} website
-\end{itemize}
 
 
 
@@ -826,7 +819,7 @@ The light-response mechanism is represented as a change at selected foldable joi
     \centering
     \begin{subfigure}[b]{0.47\linewidth}
         \includegraphics[width=\linewidth]{sim_setup_transparent.png}
-        \caption{Top view, transparent bodies showing embedded magnets (green)}
+        \caption{Top view, transparent bodies showing embedded magnets}
         \label{fig:sim-setup-transparent}
     \end{subfigure}
     \hfill
@@ -887,9 +880,25 @@ Each candidate is represented as a rooted directed graph. Nodes represent module
 The design variables include module type, port adjacency, module count, ordinary hinge angle, light-sensitive joint selection and light-detection hinge angle. The hinge angle controls the folded geometry, while the light angle controls the response produced when a selected joint receives light. Keeping these variables in one genotype allows the search to evaluate their interaction rather than optimising shape and response separately.
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.75\linewidth]{genotype_representation.png}
+    \includegraphics[width=0.75\linewidth]{genotype.png}
     \caption{Example half-genotype as a directed graph: nodes are modules (coloured by fold type, orange = root module 1), edges are labelled by the (source port)-(destination port) connector pair. Only this half-graph is evolved directly; the full bilaterally symmetric morphology is produced by mirroring it about the root's spine (Section~\ref{sec:symmetry}).}
     \label{fig:genotype}
+\end{figure}
+\begin{figure}[h]
+    \centering
+    \begin{subfigure}[b]{0.47\linewidth}
+        \includegraphics[width=\linewidth]{phenotype.png}
+        \caption{2D Phenotype}
+        \label{fig:morph-planar}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.47\linewidth}
+        \includegraphics[width=\linewidth]{3d_view_zoomed.png}
+        \caption{3D folded phenotype}
+        \label{fig:morph-3d}
+    \end{subfigure}
+    \caption{Example morphologies: (a) shows the 2D planar layout of the modules, while (b) shows the folded 3D configuration after self-folding.}
+    \label{fig:morphologies_example}
 \end{figure}
 
 \subsection{Bilateral Symmetry and Mirror Construction}
@@ -904,6 +913,23 @@ The design variables include module type, port adjacency, module count, ordinary
 Only one half of the morphology is evolved directly. The root module and its spine child provide the mirror anchors, while the expandable side is connected through the remaining port. During construction, the other side is generated deterministically by reflecting the evolved half. This keeps the final robot bilaterally symmetric and reduces the number of graph decisions required by the search.
 
 The mirror is applied at build time rather than treated as a separate learned action. As a result, every mutation and crossover operates on the same half-graph representation, while the simulator receives the complete structure. The representation reduces redundant solutions without removing the structural edits available to the evolutionary operators.
+
+\begin{figure}[h]
+    \centering
+    \begin{subfigure}[b]{0.47\linewidth}
+        \includegraphics[width=\linewidth]{mirror_graph.png}
+        \caption{Graph representation of the half-genotype}
+        \label{fig:mirror-graph}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.47\linewidth}
+        \includegraphics[width=\linewidth]{mirror_body.png}
+        \caption{3D folded phenotype after mirroring}
+        \label{fig:mirror-3d}
+    \end{subfigure}
+    \caption{Example of the half-genotype and its mirrored full morphology: (a) shows the directed graph of the evolved half, while (b) shows the resulting 3D folded configuration after applying the deterministic mirror operation. The mirror anchors are the root module and its spine child, ensuring bilateral symmetry in the final design.}
+    \label{fig:mirror-example}
+\end{figure}
 
 \subsection{Grammar-Legal Mutation and Crossover Operators}
 % [~1.25 pages, table-heavy] MARKING: Understanding and Analysis (HIGH) -
@@ -994,6 +1020,31 @@ Velocity is measured after the torque ramp so that the initial settling period d
 Each light-response objective uses two stages. The first stage measures the baseline behaviour without the relevant light stimulus. The second stage applies either a left-side stimulus for yaw or a front stimulus for speed and measures the changed response. The yaw objective is the difference between the light and baseline rotations, while the speed objective is the relative change from baseline speed.
 
 A separate baseline stage is important because the robot can naturally curve or drift during its magnetic gait. The comparison must therefore use a travel-aligned local frame established for that objective, rather than the trajectory produced during the stimulated rollout. The settled pose is also not physically rotated simply to define the frame. This keeps the measured difference attributable to the light condition as far as the simulation permits and avoids confusing pre-existing gait direction with reaction behaviour.
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.85\linewidth]{primitives.png}
+    \caption{Four primitive behaviors on pheromone detection: (a) baseline locomotion without light, (b) left-stimulus yaw response, (c) right-stimulus yaw response, (d) front-stimulus speed acceleration, and (e) front-stimulus speed deceleration. The yaw and speed responses are measured relative to their respective baseline stages, ensuring that the observed changes are due to the light stimulus rather than inherent locomotion drift.}
+    \label{fig:primitives}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \begin{subfigure}[b]{0.47\linewidth}
+        \includegraphics[width=\linewidth]{left_light_stage.png}
+        \caption{Luminous sheet setup in the left to turn right or left}
+        \label{fig:light-stage-left}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.47\linewidth}
+        \includegraphics[width=\linewidth]{front_light_stage.png}
+        \caption{Luminous sheet setup in the front to speed up or slow down}
+        \label{fig:light-stage-front}
+    \end{subfigure}
+    \caption{MuJoCo sim setup for the two pheromone reaction-primitive tests. Panel (a) shows the left-stimulus stage used to measure yaw response, while panel (b) shows the front-stimulus stage used to measure speed response. }
+    \label{fig:light-stages}
+\end{figure}
+
+
 
 \subsection{Attractive versus Repulsive Response Configuration}
 % [~0.5 page] MARKING: Understanding and Analysis (MED-HIGH) - continues
@@ -1179,13 +1230,13 @@ The action distribution records how often each structural operator is chosen and
     \centering
     \includegraphics[width=0.85\linewidth]{fitness_trends.png}
     \caption{Fitness trends: best and mean raw population fitness across generations, for each of the four objectives $f_1$-$f_4$.}
-    \label{fig:convergence}
+    \label{fig:fitness-trends}
 \end{figure}
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.85\linewidth]{fitness_trends_repulsive.png}
-    \caption{Fitness trends: best and mean raw population fitness across generations, for each of the four objectives $f_1$-$f_4$. with $f_3$ & $f_4$ minimize goal for repulsive response.}
-    \label{fig:convergence}
+    \caption{Fitness trends: best and mean raw population fitness across generations, for each of the four objectives $f_1$-$f_4$. with $f_3$ \& $f_4$ minimize goal for repulsive response.}
+    \label{fig:fitness-trends-repulsive}
 \end{figure}
 \begin{figure}[h]
     \centering
@@ -1197,7 +1248,7 @@ The action distribution records how often each structural operator is chosen and
     \centering
     \includegraphics[width=0.85\linewidth]{convergence_repulsive.png}
     \caption{GA convergence: best and mean scalarized population fitness (objectives\_api.scalarize, equal-weight normalized combination of $f_1$-$f_4$) across generations.}
-    \label{fig:convergence}
+    \label{fig:convergence-repulsive}
 \end{figure}
 \begin{figure}[h]
     \centering
@@ -1209,7 +1260,7 @@ The action distribution records how often each structural operator is chosen and
     \centering
     \includegraphics[width=0.85\linewidth]{hypervolume_repulsive.png}
     \caption{Hypervolume of the non-dominated front, per generation, normalized against the run-wide observed objective range (Section 5.3). Rising hypervolume indicates the evolving population's Pareto front is expanding/improving in aggregate, independent of any single scalarization choice.}
-    \label{fig:hypervolume}
+    \label{fig:hypervolume-repulsive}
 \end{figure}
 % Report O-4 (NSGA-III integration) as achieved, citing both figures as
 % joint evidence (scalarized convergence is one lens, hypervolume is a
@@ -1233,8 +1284,8 @@ Together, the scalarised fitness and hypervolume plots provide two views of prog
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.9\linewidth]{pareto_front_repulsive.png}
-    \caption{Pairwise Pareto front of the final generation's population across all four objective pairs ($f_1$ vs $f_2$, $f_2$ vs $f_3$, $f_3$ vs $f_4$, $f_4$ vs $f_1$), each axis min-max normalized within the generation. Points are coloured by NSGA-III non-dominated rank, where $f_3$ & $f_4$ minimize goal for repulsive response.}
-    \label{fig:pareto-front}
+    \caption{Pairwise Pareto front of the final generation's population across all four objective pairs ($f_1$ vs $f_2$, $f_2$ vs $f_3$, $f_3$ vs $f_4$, $f_4$ vs $f_1$), each axis min-max normalized within the generation. Points are coloured by NSGA-III non-dominated rank, where $f_3$ \& $f_4$ minimize goal for repulsive response.}
+    \label{fig:pareto-front-repulsive}
 \end{figure}
 % Discuss trade-offs visible in each panel. IMPORTANT honest point to
 % address here (you raised this yourself during development): with 4
@@ -1289,12 +1340,29 @@ The entropy--velocity plot addresses AO-2 by comparing a measure of change durin
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.47\linewidth}
-        \includegraphics[width=\linewidth]{Phermone_repelling_evolved_morph.png}
+        \includegraphics[width=\linewidth]{Phermone_attracting_with_phermone.png}
+        \caption{Yaw response to left-stimulus light}
+        \label{fig:morph-attractive-yaw-response}
+    \end{subfigure}
+    \caption{Evolved morphology for phermone attractive confirguration(a) with its yaw response(b) to a left-stimulus light}
+    \label{fig:evolved-morphologies-attractive}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \begin{subfigure}[b]{0.47\linewidth}
+        \includegraphics[width=\linewidth]{phermone_repelling_evolved_morph.png}
         \caption{Repulsive configuration}
         \label{fig:morph-repulsive}
     \end{subfigure}
-    \caption{Representative individual evolved morphologies, attractive (a) versus repulsive (b) pheromone-response configuration, both rendered from the MuJoCo digital twin. Green markers indicate light-sensitive joints.}
-    \label{fig:evolved-morphologies}
+    \hfill
+    \begin{subfigure}[b]{0.47\linewidth}
+        \includegraphics[width=\linewidth]{Phermone_repelling_with_phermone.png}
+        \caption{Yaw response to left-stimulus light}
+        \label{fig:morph-repulsive-yaw-response}
+    \end{subfigure}
+    \caption{Evolved morphology for phermone repulsive confirguration(a) with its yaw response(b) to a left-stimulus light}
+    \label{fig:evolved-morphologies-repulsive}
 \end{figure}
 % This is O-1 through O-3 combined evidence (genotype+grammar+simulation
 % all functioning end-to-end, producing valid, diverse, physically
@@ -1317,7 +1385,7 @@ The morphology figures provide end-to-end evidence for O-1 to O-3: graph designs
     \centering
     \includegraphics[width=0.85\linewidth]{fitness_trends_comparison.png}
     \caption{Best and mean scalarized fitness, RL-assisted breeding versus the standard breeding (Section 5.2), over a preliminary 5-generation comparison run.}
-    \label{fig:convergence-comparison}
+    \label{fig:fitness-trends-comparison}
 \end{figure}
 \begin{figure}[h]
     \centering
@@ -1565,6 +1633,9 @@ The RL diagnostics identified a remaining issue. At 200 generations, structural 
 \bibliographystyle{unsrt}
 \bibliography{Bibliography_uRL}
 
+\chapter*{Use of AI}
+\addcontentsline{toc}{chapter}{Use of AI}
+AI tools were used for text rephrasing and code generation. They were not used for ideation, analysis, or the generation of any figures or results. The use of AI tools was limited to improving the clarity and presentation of the report, and all content was reviewed and verified by the author.
 
 % ------------------------------------------------------------------
 % APPENDICES (not marked, not counted in the page limit - Guidelines.md:

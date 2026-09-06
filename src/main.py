@@ -67,7 +67,7 @@ PLOT_EVERY_N_GENERATIONS = 5
 # + NSGA-III selection" comparison arm, for measuring what the learned
 # policy actually contributes. Writes to a different OUTPUT_DIR (below) so
 # toggling this never disturbs an in-progress True run's checkpoint/data.
-RL_ASSISTED_GENETIC_OPERATIONS = False
+RL_ASSISTED_GENETIC_OPERATIONS = True
 
 # Which of the two pheromone-response evolution runs this is (Week 2's
 # Reaction Primitives 2.1-3.2 - see objectives_api.configure_pheromone_
@@ -199,15 +199,19 @@ def main():
             # persistence, so safe to skip most generations. Always runs on
             # the last generation so the final saved plots are current.
             if gen % PLOT_EVERY_N_GENERATIONS == 0 or gen == N_GENERATIONS - 1:
-                plotting_api.plot_pareto_front_last_gen(OUTPUT_DIR)
-                plotting_api.plot_pareto_parallel_coordinates(OUTPUT_DIR)
-                plotting_api.plot_fitness_trends(OUTPUT_DIR)
-                plotting_api.plot_convergence(OUTPUT_DIR)
-                plotting_api.plot_hypervolume(OUTPUT_DIR)
-                plotting_api.plot_entropy_vs_velocity(OUTPUT_DIR)
-                plotting_api.plot_rl_diagnostics(ppo_trainer.history, OUTPUT_DIR)
-                plotting_api.plot_action_distribution(OUTPUT_DIR)
-                plotting_api.plot_reward_and_loss_by_action(ppo_trainer.history, OUTPUT_DIR)
+                plotting_api.plot_pareto_front_last_gen(OUTPUT_DIR, filename=f"pareto_front{_pheromone_suffix}.png")
+                plotting_api.plot_pareto_parallel_coordinates(
+                    OUTPUT_DIR, filename=f"pareto_parallel_coordinates{_pheromone_suffix}.png")
+                plotting_api.plot_fitness_trends(OUTPUT_DIR, filename=f"fitness_trends{_pheromone_suffix}.png")
+                plotting_api.plot_convergence(
+                    OUTPUT_DIR, is_rl=RL_ASSISTED_GENETIC_OPERATIONS, filename=f"convergence{_pheromone_suffix}.png")
+                plotting_api.plot_hypervolume(OUTPUT_DIR, filename=f"hypervolume{_pheromone_suffix}.png")
+                plotting_api.plot_entropy_vs_velocity(
+                    OUTPUT_DIR, filename=f"entropy_vs_velocity{_pheromone_suffix}.png")
+                plotting_api.plot_rl_diagnostics(ppo_trainer.history, OUTPUT_DIR, suffix=_pheromone_suffix)
+                plotting_api.plot_action_distribution(OUTPUT_DIR, filename=f"action_distribution{_pheromone_suffix}.png")
+                plotting_api.plot_reward_and_loss_by_action(
+                    ppo_trainer.history, OUTPUT_DIR, filename=f"rl_diagnostics_by_action{_pheromone_suffix}.png")
 
             # objectives_api.scalarize() - the SAME function moo_api.py uses
             # for the RL reward, and evolution_results_visualizer.py's

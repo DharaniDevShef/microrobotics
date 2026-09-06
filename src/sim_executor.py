@@ -80,7 +80,7 @@ def run_batch(jobs, max_workers=None, max_sim_time=7.0):
                 sys.executable, _ROBLET_SIMULATOR,
                 "--m", xml_path, "--o", stats_path,
                 "--headless", "--sweep_b", "--max_sim_time", str(max_sim_time),
-                "--capture_img", 
+                #"--capture_img", 
                 #"--log-file", log_path,
             ]
             p = subprocess.Popen(cmd, cwd=_SRC_DIR, env=_SUBPROCESS_ENV)

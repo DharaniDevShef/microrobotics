@@ -392,9 +392,10 @@ def make_children_collision_free(parent_a, parent_b, ppo_trainer, rng, scratch_d
     """Wraps make_children() with a 3D collision gate: if the proposed
     child/children fail mjcf_generator.py's collision check
     (_is_collision_free), the decision is rejected and a fresh one is
-    re-sampled. When `rl_assisted`, a rejected attempt also records a flat
-    COLLISION_PENALTY reward so the policy gets a learning signal against
-    it (the random baseline has no policy to train, so it just re-draws).
+    re-sampled - both arms just retry, no RL reward is recorded for a
+    rejected attempt (see run_generation's docstring for why: collision
+    outcomes are deliberately excluded from what PPOTrainer ever sees, not
+    just penalized less).
     Falls back to a guaranteed-valid no-op copy of parent_a (parent_a is
     already known collision-free, by induction from this same gate) if
     every attempt still collides.
@@ -419,8 +420,9 @@ def make_children_collision_free(parent_a, parent_b, ppo_trainer, rng, scratch_d
             continue
         if all(_is_collision_free(child, scratch_dir, rng) for child in children):
             return children, decision
-        if rl_assisted and decision is not None:
-            ppo_trainer.record(decision, COLLISION_PENALTY)
+        # Deliberately no ppo_trainer.record() call here - see
+        # run_generation's docstring for why collision outcomes are
+        # excluded from RL's reward stream entirely rather than penalized.
     return [parent_a.copy()], None
 
 
@@ -526,6 +528,36 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
     evaluation, NSGA-III survival) is unchanged between the two, so this
     is the one knob a RL-vs-classic-GA comparison run should toggle.
 
+    Collision/instability outcomes are entirely excluded from the RL
+    reward stream (neither make_children_collision_free()'s geometry-gate
+    rejections nor a post-simulation physics/stability failure ever record
+    anything into ppo_trainer's buffer) rather than being penalized, flat
+    or otherwise. Earlier versions used a flat COLLISION_PENALTY for both:
+    that gave the policy real, measurable success at cutting its own
+    collision rate over a run (confirmed directly - see main.log/checkpoint
+    history from that era), but the mechanism behind it generalizes past
+    "avoid this specific risky move" to "avoid this whole action TYPE",
+    since every structural action (ADD_NODE, GRAFT_SUBTREE, ...) carries
+    some baseline collision risk just by being structural while several
+    non-structural ones (TOGGLE_LIGHT_SENSOR, MUTATE_LIGHT_HINGE_ANGLE)
+    structurally cannot ever trigger the gate at all - any reward
+    mechanism that can fairly compare action types across the whole buffer
+    will correctly (not incorrectly) discover and exploit that asymmetry,
+    collapsing the policy onto whichever action can never fail regardless
+    of how the penalty is scaled or normalized (confirmed twice: the
+    original -2.0-flat-penalty version collapsed onto TOGGLE_LIGHT_SENSOR,
+    and a later attempt to also restore cross-action-type comparison for
+    design-quality learning reproduced the same collapse for the same
+    reason). random_baseline.py never had this problem because it never
+    learns from ANY reward, collision or otherwise - it just re-draws
+    uniformly and eats the same wasted-retry cost every generation,
+    forever, without ever acquiring a preference. This mirrors that:
+    accept the same permanent retry cost baseline already pays, in
+    exchange for a reward stream that only ever reflects genuine
+    scalarize()-delta design quality, never collision/instability - see
+    make_children_collision_free's and this function's Phase 3 comments
+    for exactly where each removed penalty used to be recorded.
+
     `n_offspring` is the number of breeding STEPS (parent-pair draws), not
     the final offspring count: most decisions (mutation, GRAFT_SUBTREE)
     produce 1 child, but a SWAP_SUBTREES decision produces 2 - so
@@ -584,9 +616,17 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
             objectives, f_vec, constraint = all_results[cursor]
             child_ids.append(cursor)
             cursor += 1
+            # `constraint` (post-simulation infeasibility - physics_ok/
+            # is_stable failure after already passing the geometry gate)
+            # deliberately does NOT add a penalty here, same reasoning as
+            # the geometry-gate rejections in make_children_collision_free:
+            # `improvement`'s only consumer is the RL reward below, and
+            # collision/instability outcomes are excluded from that reward
+            # stream entirely, not just penalized less - see this
+            # function's docstring. `constraint` itself is still tracked
+            # on offspring_records/log["n_collided"] for feasibility-first
+            # selection and reporting, just never folded into the reward.
             improvement = obj_api.scalarize(objectives) - obj_api.scalarize(parent_records[baseline_idx]["objectives"])
-            if constraint > 0:
-                improvement += COLLISION_PENALTY
             improvements.append(improvement)
             offspring_records.append(dict(graph=child, objectives=objectives, F=f_vec, constraint=constraint))
 

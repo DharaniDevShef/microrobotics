@@ -41,16 +41,41 @@ torque_history = []
 b_field_history = []
 time_history = []
 
+# {actuator_idx: (last_angle_deg, last_time_s, last_setpoint_deg, reported)} -
+# the running state light_sensitive_joint_angle_deg()'s exponential
+# relaxation needs to trace a continuous curve across set_angle_to_joint()'s
+# reactive-fold calls, one per physics step, through any number of light
+# on/off transitions. last_setpoint_deg/reported track whether this joint's
+# arrival at its CURRENT setpoint (the evolved light_ctrl_jointN angle while
+# lit, the baseline gait angle once released) has already been logged, so
+# set_angle_to_joint() prints "reached"/"returned" once per excursion
+# instead of every step - see LIGHT_JOINT_REACHED_TOLERANCE_DEG. Cleared
+# alongside parent_body_magnet_map at the start of every
+# run_headless/run_with_viewer/run_light_tests call, same reasoning as
+# torque_history above - this module reuses the same process across many
+# independent simulation runs.
+_light_joint_state = {}
+
+# {id(model): {body_id: frozenset(body ids in the same physical module)}} -
+# get_light_sensor_values()'s multi-hit occlusion raycast uses this to skip
+# past hits on the sensor's OWN module (see _module_self_bodies) rather than
+# treating them as real occluders. Cleared alongside parent_body_magnet_map
+# at the start of every run_headless/run_with_viewer/run_light_tests call -
+# a fresh mujoco.MjModel is loaded each call, and id() can be reused once
+# the previous one is garbage-collected, so a stale entry could otherwise
+# apply to the wrong model.
+_module_self_body_cache = {}
+
 logger = logging.getLogger(__name__)
 
 # Physics constants
 # Magnetic field intensity (Tesla)
-B_INTENSITY = 0.05  # 10 mT
+B_INTENSITY = 0.025  # mT
 # Candidate drive strengths for run_headless_b_sweep() -- the field a
 # morphology needs to overcome stiction and walk (rather than stall, or
 # over-drive into a rolling/tumbling gait) is morphology-dependent, so
 # this is swept per run rather than assumed fixed.
-B_SWEEP_VALUES = (0.001, 0.008, 0.05)
+B_SWEEP_VALUES = (0.001, 0.008, 0.025)
 # 6.5 x 10^-3 Am^2 - 2mm x 2mm neodymium magnet cylinder (N42SH)
 M_MOMENT = 6.5e-3
 # Maximum torque multiplier
@@ -101,33 +126,96 @@ SHAPE_ENTROPY_WINDOW_SIZES = (3, 5, 7)  # r = 1, 2, 3
 _WALL_GEOMGROUP = np.zeros(6, dtype=np.uint8)
 _WALL_GEOMGROUP[1] = 1
 
+# mjcf_generator.py's `luminance_sheet` geom is tagged group=2 - it's a
+# purely cosmetic patch _show_luminance_sheet() can size to cover an
+# entire stage region right at sensor/light height, so
+# get_light_sensor_values()'s occlusion raycast (mj_ray, which -- unlike
+# contact detection -- ignores contype/conaffinity and would otherwise
+# treat the sheet itself as a giant real occluder) filters it out via this
+# "every group except 2" mask rather than the "wall-only" one above.
+_OCCLUSION_GEOMGROUP = np.ones(6, dtype=np.uint8)
+_OCCLUSION_GEOMGROUP[2] = 0
+
 # Duration (s) of magnetic actuation applied per run_light_tests() stage.
 LIGHT_TEST_DEFAULT_DURATION = 10
-# Default standoff distance (m) for the light source in each run_light_tests()
-# stage (how far to the left / how far above the initial COM it's placed).
-LIGHT_TEST_DEFAULT_DISTANCE = 0.1
 # How long (s) run_light_tests() moves the assembly with no light active at
 # all, before the light stages start, to get a baseline avg linear velocity.
 LIGHT_TEST_BASELINE_DURATION = 7.0
 # Extra distance (m) the "left" stage's light is pushed beyond the left
 # half-region's own centroid, further out to that side.
 LIGHT_TEST_LEFT_EXTRA_OFFSET = 0.01
-# Gap (m) the "front" stage's lit patch is pushed beyond the robot's own
-# front edge (xy_max[1] in the travel-aligned local frame), rather than
-# starting at the robot's own front-half midpoint -- so the robot starts
-# entirely in the dark and has to actually walk forward into the light,
-# instead of already having its front half lit at t=0.
-LIGHT_TEST_FRONT_EXTRA_OFFSET = 0
 # Minimum net baseline (no-light) displacement (m) run_light_tests() needs
 # before its direction is trustworthy enough to reorient the assembly by --
 # below this, "which way did it travel" is dominated by settle/numerical
 # noise, not a real heading, so the reorientation is skipped.
 LIGHT_TEST_MIN_BASELINE_TRAVEL = 0.0005
+# How far (m) below the lowest light_sensor_* site pheromone_light_height()
+# places the floor-level "luminance sheet" light - see there for why it's
+# relative to the sensors' own settled height rather than a fixed distance
+# from the floor.
+LIGHT_TEST_PHEROMONE_MARGIN_M = 0.001
+# World Z height (m) _show_luminance_sheet() renders the visible yellow
+# patch at - just above the floor (a real MuJoCo <geom type="plane">,
+# opaque, at world Z=0) so it's never hidden behind it, unlike
+# pheromone_light_height()'s own (often negative) height for the actual
+# light - see _show_luminance_sheet()'s docstring.
+LUMINANCE_SHEET_VISUAL_HEIGHT_M = 0.0003
+# How much bigger (both X and Y) _show_luminance_sheet() draws the visible
+# patch than the stage's own light_bounds rectangle it's centered on -
+# purely cosmetic (get_light_sensor_values()'s actual sensed region is
+# still exactly `bounds`, unaffected by this).
+LUMINANCE_SHEET_VISUAL_SCALE = 5.0
+# Visible RGBA of mjcf_generator.py's `luminance_sheet` placeholder geom
+# while _show_luminance_sheet() has it covering a stage's region - bright
+# yellow, matching the UV-excited fluorescent pheromone trace it represents
+# (see the wireless-pheromone-robot paper this models). Paired with the
+# "luminance_glow" material's high emission (mjcf_generator.py) so the
+# sheet reads as actually luminous/glowing on video, not just flat-colored.
+LUMINANCE_SHEET_RGBA = np.array([1.0, 0.85, 0.0, 1.0])
 # run_light_tests() reactive fold: a joint whose own light_sensor_joint_*
 # reading exceeds this (lux) gets driven to ITS OWN evolved light_ctrl_jointN
 # angle (read_light_target_angles_from_xml) -- every other joint (including
 # one with no such metadata at all) is left exactly as it was.
 LIGHT_TRIGGER_LUX_THRESHOLD = 10000.0
+# Flat lux reading get_light_sensor_values() reports for any sensor
+# physically inside a bounded light's footprint (the luminance sheet) -
+# see the light_bounds docstring there. Deliberately a fixed constant
+# safely above LIGHT_TRIGGER_LUX_THRESHOLD rather than model.light_intensity
+# itself: light_intensity also drives the light's actual rendered
+# brightness (cosmetic), and under the old physically-modeled Lambert's-law
+# + inverse-square-falloff treatment a modest intensity only ever crossed
+# the trigger threshold because of that falloff amplifying it at
+# millimeter-scale sensor distances - a plain "puddle" model has no
+# falloff to amplify anything, so reusing light_intensity directly would
+# almost never trigger. Keeping this separate preserves both directions of
+# the existing rule that cosmetic and sensing values never affect each
+# other.
+LUMINANCE_SHEET_LUX = 20000.0
+# Time constant tau_c (s) of a light-sensitive joint's exponential
+# relaxation response - see light_sensitive_joint_angle_deg(). A joint
+# doesn't jump between its evolved light_ctrl_jointN angle and its
+# baseline gait angle instantly; it eases toward whichever one currently
+# applies (light_ctrl_jointN while lit, baseline once the light is lost)
+# with this same time constant on both the entry and exit transition.
+LIGHT_JOINT_TIME_CONSTANT_S = 1
+# set_angle_to_joint()'s reactive fold: how close (deg) a light-sensitive
+# joint's eased angle has to get to its current setpoint (the evolved
+# light_ctrl_jointN angle while lit, the baseline gait angle once released)
+# before it's considered to have actually arrived there, for the one-shot
+# "reached"/"returned" log lines - see light_sensitive_joint_angle_deg(),
+# whose exponential curve only ever asymptotically approaches its setpoint
+# and never exactly equals it.
+LIGHT_JOINT_REACHED_TOLERANCE_DEG = 0.5
+# get_light_sensor_values()'s multi-hit occlusion raycast: how many bounces
+# off the sensor's own module (_module_self_bodies) it will skip past
+# before giving up and treating the ray as occluded. A folded module's own
+# geometry only overlaps itself in a couple of places near the hinge, so
+# this only ever needs to be a handful, not a large search.
+_SELF_OCCLUSION_MAX_HITS = 6
+# Distance (m) a skipped self-hit's ray origin is nudged forward by before
+# re-casting, so mj_ray doesn't immediately re-hit the exact same surface
+# (a hit at t=0 would otherwise re-trigger the same skip forever).
+_SELF_OCCLUSION_RAY_EPS = 1e-6
 
 
 
@@ -257,6 +345,34 @@ def find_main_movable_parent(model, body_id):
     return body_id
 
 
+def _module_self_bodies(model):
+    """{body_id: frozenset(body ids in the same physical module_N subtree)}
+    for every body in `model` - every bodyBase_N/bodyLink_N/bodyRigid_N/
+    connectorN_N etc. under the same top-level module_N body (found via
+    find_main_movable_parent) maps to the identical frozenset, itself
+    included. get_light_sensor_values() uses this so its occlusion
+    raycast can treat a hit on the sensor's OWN module as transparent:
+    bodyBase_N and bodyLink_N are, by construction, touching/overlapping
+    right at the fold's own hinge (that's where the sensor sits), which
+    isn't a real occluder the way a neighboring module or the floor is."""
+    children = [[] for _ in range(model.nbody)]
+    for body_id in range(1, model.nbody):
+        children[int(model.body_parentid[body_id])].append(body_id)
+
+    def subtree(root):
+        members = [root]
+        for child in children[root]:
+            members.extend(subtree(child))
+        return members
+
+    result = {}
+    for root in children[0]:  # world's direct children = the module_N bodies
+        members = frozenset(subtree(root))
+        for body_id in members:
+            result[body_id] = members
+    return result
+
+
 def find_all_magnets(model):
     """Finds all magnets in the model and maps parent body ID to magnets.
 
@@ -343,18 +459,62 @@ def read_light_target_angles_from_xml(model_path):
     return light_target_angles
 
 
+def light_sensitive_joint_angle_deg(theta_prev_deg, setpoint_deg, dt_s, tau_c=LIGHT_JOINT_TIME_CONSTANT_S):
+    """First-order exponential relaxation of a light-sensitive hinge's angle
+    toward `setpoint_deg` over one `dt_s`-second step:
+
+        theta(t) = setpoint + (theta_prev - setpoint) * e^(-dt / tau_c)
+
+    The SAME formula and time constant drive both directions: on light
+    entry, setpoint is the joint's own evolved light_ctrl_jointN angle
+    (Design Variable 6, hinge_angle_on_light_detection, range [0, 45] - see
+    roblet_grammar.py) and theta eases UP toward it from wherever it was;
+    on light exit, setpoint reverts to the joint's baseline (non-light)
+    gait angle and theta eases back DOWN toward that instead. Starting from
+    theta_prev=0 with a constant setpoint this reduces to the textbook
+    charging curve theta(t) = setpoint * (1 - e^(-t/tau_c)); starting from
+    theta_prev=setpoint and driving setpoint to 0 gives the matching
+    discharge curve theta(t) = theta_prev * e^(-t/tau_c). set_angle_to_joint()
+    calls this once per physics step with dt_s = that step's elapsed time
+    and feeds each return value back in as the next call's theta_prev_deg
+    (see _light_joint_state), tracing one continuous curve through any
+    number of light on/off transitions rather than just those two
+    closed-form special cases. tau_c defaults to LIGHT_JOINT_TIME_CONSTANT_S
+    (1s)."""
+    if dt_s <= 0:
+        return theta_prev_deg
+    return setpoint_deg + (theta_prev_deg - setpoint_deg) * np.exp(-dt_s / tau_c)
+
+
 def set_angle_to_joint(model, data, target_angle_deg, light_bounds=None, light_target_angles=None, frame=None):
     """Set actuator position targets from a scalar, ordered sequence, or name map.
 
     light_target_angles: optional {"light_ctrl_jointN": angle_deg} map
     (roblet_simulator.read_light_target_angles_from_xml) - the evolved
     Design Variable 6 (hinge_angle_on_light_detection) for each
-    light-sensitive joint. When a joint's own light_sensor_* reading
-    exceeds LIGHT_TRIGGER_LUX_THRESHOLD, its actuator target is overridden
-    to THIS joint's own evolved value - and ONLY if that value is actually
-    present in light_target_angles; a joint with no evolved metadata at all
+    light-sensitive joint. For any joint that has an evolved value here,
+    its actuator target continuously eases toward whichever setpoint
+    currently applies - THIS joint's own evolved value while its
+    light_sensor_* reading exceeds LIGHT_TRIGGER_LUX_THRESHOLD, or back to
+    the baseline (non-light) gait angle once it drops below - via
+    light_sensitive_joint_angle_deg()'s exponential relaxation (same
+    tau_c = LIGHT_JOINT_TIME_CONSTANT_S on entry and exit), rather than
+    jumping instantly either way. A joint with no evolved metadata at all
     (e.g. a hand-built model missing that custom numeric) is left at
-    whatever the baseline pass already set, never a made-up flat angle.
+    whatever the baseline pass already set, with no reactive fold in
+    either direction. _light_joint_state records, per actuator, the last
+    eased angle and the data.time it was computed at, so repeated calls
+    trace one continuous curve across steps instead of restarting it every
+    time.
+
+    Each light-sensitive joint also gets exactly one logger.info() line per
+    excursion (not a per-step print): one when its eased angle first comes
+    within LIGHT_JOINT_REACHED_TOLERANCE_DEG of its evolved light_ctrl_jointN
+    angle after triggering, and one when it comes back within that same
+    tolerance of its baseline angle after the light is lost. Tracked via
+    _light_joint_state's own `reported` flag, reset whenever the setpoint
+    itself changes (light on -> off or off -> on), so repeated calls while
+    already settled at the current setpoint stay silent.
 
     frame: optional (origin_xy, forward) forwarded to
     get_light_sensor_values() - see there - so light_bounds can be
@@ -394,17 +554,51 @@ def set_angle_to_joint(model, data, target_angle_deg, light_bounds=None, light_t
         readings = get_light_sensor_values(model, data, verbose=False, light_bounds=light_bounds, frame=frame)
         for site_name, lux in readings.items():
             actuator_idx = joint_to_actuator.get(site_name.replace("light_sensor_", "", 1))
-            if actuator_idx is None or lux <= LIGHT_TRIGGER_LUX_THRESHOLD:
+            if actuator_idx is None:
                 continue
             actuator_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, actuator_idx)
             light_key = (actuator_name or "").replace("ctrl_joint", "light_ctrl_joint", 1)
-            if light_target_angles and light_key in light_target_angles:
-                target_values[actuator_idx] = light_target_angles[light_key]
-            # else: this joint has no evolved light_ctrl_jointN of its own
-            # (e.g. a hand-built model missing that metadata) - leave its
-            # target exactly as the baseline pass already set it, rather
-            # than guessing a made-up trigger angle. No reactive fold
-            # happens for it, on either the interactive or headless path.
+            if not (light_target_angles and light_key in light_target_angles):
+                # this joint has no evolved light_ctrl_jointN of its own
+                # (e.g. a hand-built model missing that metadata) - leave
+                # its target exactly as the baseline pass already set it,
+                # rather than guessing a made-up trigger angle. No
+                # reactive fold happens for it, in either direction, on
+                # either the interactive or headless path.
+                continue
+
+            baseline_deg = target_values[actuator_idx]
+            lit = lux > LIGHT_TRIGGER_LUX_THRESHOLD
+            setpoint_deg = light_target_angles[light_key] if lit else baseline_deg
+            # Default prev_setpoint_deg is baseline_deg (NOT setpoint_deg) -
+            # a joint seen for the first time is treated as having been at
+            # rest at baseline "forever", so if it's ALREADY lit on this
+            # very first observation, that still counts as a setpoint
+            # change and gets its own "reached" line once it settles,
+            # rather than being silently swallowed by looking like no
+            # change had happened at all.
+            theta_prev_deg, prev_time, prev_setpoint_deg, reported = _light_joint_state.get(
+                actuator_idx, (baseline_deg, data.time, baseline_deg, True))
+            eased_deg = light_sensitive_joint_angle_deg(
+                theta_prev_deg, setpoint_deg, data.time - prev_time)
+
+            if not np.isclose(setpoint_deg, prev_setpoint_deg):
+                reported = False  # setpoint just changed - allow one fresh "reached" line
+            if not reported and abs(eased_deg - setpoint_deg) <= LIGHT_JOINT_REACHED_TOLERANCE_DEG:
+                reported = True
+                if lit:
+                    logger.info(
+                        "Joint '%s' light-triggered: reached full angle %.2f deg (lux=%.0f).",
+                        actuator_name, eased_deg, lux,
+                    )
+                else:
+                    logger.info(
+                        "Joint '%s' light released: returned to original angle %.2f deg.",
+                        actuator_name, eased_deg,
+                    )
+
+            _light_joint_state[actuator_idx] = (eased_deg, data.time, setpoint_deg, reported)
+            target_values[actuator_idx] = eased_deg
 
     for i in range(model.nu):
         target_deg = float(target_values[i])
@@ -504,6 +698,148 @@ def assembly_local_bounds(model, data, origin_xy, forward):
     return mins, maxs
 
 
+def pheromone_light_height(model, data):
+    """The world Z height (m) run_light_tests()/run_headless_light_tests()
+    position their floor-level "luminance sheet" light at: LIGHT_TEST_
+    PHEROMONE_MARGIN_M below the LOWEST of the model's own light_sensor_*
+    sites in `data`'s current pose.
+
+    Why the lowest one, not a fixed height: light_sensor_joint_* sites now
+    face -Z (mjcf_generator.py), so get_light_sensor_values() only lights
+    one up when the light sits BELOW it on the same side of the floor
+    plane (a real MuJoCo <geom type="plane">, which occludes a ray that
+    crosses it) - and different joints settle at slightly different
+    heights, some a hair above world Z=0, some a hair below. Placing the
+    light below every sensor at once (rather than some fixed offset from
+    the floor) is the only way to guarantee the closest-to-the-ground
+    sensors - the entire point of mounting them at the backside/bottom of
+    the joint - actually register a same-side, unoccluded reading; a
+    sensor that settles well above this run's lowest one may still miss
+    it, the same way a real photodiode's exact mounting height affects
+    what it can see of a ground-level light.
+
+    Subtracting the margin is clamped to never cross world Z=0 itself when
+    `lowest` is already non-negative: if every sensor sits at or above the
+    floor (lowest - margin would otherwise land below it), blindly
+    subtracting would put the light on the OTHER side of the floor plane
+    from every single sensor - occluding all of them at once, including
+    the lowest one a same-side height would still have lit.
+    """
+    sensor_zs = [
+        float(data.site_xpos[site_id][2])
+        for site_id in range(model.nsite)
+        if (mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_SITE, site_id) or "").startswith("light_sensor_")
+    ]
+    lowest = min(sensor_zs) if sensor_zs else 0.0
+    height = lowest - LIGHT_TEST_PHEROMONE_MARGIN_M
+    if lowest >= 0.0 and height < 0.0:
+        height = lowest / 2.0  # stay on the same (non-negative) side of the floor as `lowest`
+    return height
+
+
+def _place_pheromone_light(model, light_id, center_xy, height):
+    """Points the model's spotlight (light_id) straight down from `height`
+    meters (see pheromone_light_height()) at `center_xy` (world XY) - a
+    floor-level "luminance sheet" light (the UV-excited fluorescent
+    pheromone trace from the wireless-pheromone-robot paper this models),
+    not the old overhead ceiling spotlight. light_dir doesn't affect
+    get_light_sensor_values()'s own lux math for a non-directional light
+    (only light_pos does - see there), so "-1" here is purely cosmetic,
+    matching how a real fixture over the sheet would be aimed.
+
+    ambient/specular are pinned to mjcf_generator.py's own <light
+    ambient="0.1 0.1 0.1" ... specular="0.05 0.05 0.05" .../> - the exact
+    same values run_light_tests()'s "baseline" stage sees (it only sets
+    light_type/light_active, never touches these, so it's just reading the
+    model's own compiled defaults) and a normal run_headless()/
+    run_with_viewer() call sees too. Those values are deliberately low -
+    see LIGHT_AMBIENT/LIGHT_DIFFUSE/LIGHT_SPECULAR in mjcf_generator.py -
+    because this light is DIRECTIONAL during "baseline" (no distance
+    falloff - covers the whole floor at full strength) and the viewer's
+    own camera headlight always adds on top by default; at old, higher
+    cosmetic values the two together blew the floor out to solid white in
+    ANY run, not just a light-test one. diffuse is intentionally NOT
+    matched to baseline the same way - a distinct warm tint here is a
+    deliberate cosmetic identity for the pheromone light specifically, not
+    an oversight. light_type/light_pos staying SPOT and floor-level
+    (rather than baseline's own DIRECTIONAL/overhead) is a difference that
+    can't be removed at all: it's what pheromone_light_height() and
+    get_light_sensor_values() actually need for the reactive fold to sense
+    the sheet in the first place. Purely cosmetic otherwise -
+    get_light_sensor_values() never reads light_ambient/diffuse/specular,
+    only light_intensity, so none of this affects lux/sensing."""
+    model.light_type[light_id] = mujoco.mjtLightType.mjLIGHT_SPOT
+    model.light_pos[light_id] = np.array([center_xy[0], center_xy[1], height])
+    model.light_dir[light_id] = np.array([0.0, 0.0, -1.0])
+    model.light_diffuse[light_id] = np.array([1.0, 0.9, 0.3])
+    model.light_ambient[light_id] = np.array([0.1, 0.1, 0.1])
+    model.light_specular[light_id] = np.array([0.05, 0.05, 0.05])
+
+
+def _scale_local_bounds(bounds, anchor_local_xy, scale):
+    """Scales a (x_lo, x_hi, y_lo, y_hi) travel-aligned-local-frame
+    rectangle by `scale`, growing each edge away from anchor_local_xy
+    instead of the rectangle's own center - e.g. "left" passes (mid_x,
+    mid_y) so the inner edge at mid_x (the boundary against the robot's
+    OTHER half) stays put and only the outer edge moves further left as
+    the scale grows, rather than growing symmetrically and eating into the
+    robot's center/other half; "front" pins its own near edge (closest to
+    the robot) the same way. Passing bounds' own center reproduces plain
+    symmetric growth in both directions.
+
+    Shared by _show_luminance_sheet() (the VISIBLE patch) and every
+    left_bounds/front_bounds passed as light_bounds into get_light_sensor_
+    values()/set_angle_to_joint() (the actual trigger/release check) -
+    using the same helper (and the same LUMINANCE_SHEET_VISUAL_SCALE, same
+    anchor) for both keeps them from ever drifting apart again: what's
+    rendered as the sheet is exactly what's sensed, not a bigger-looking
+    patch sitting on top of a smaller invisible one."""
+    x_lo, x_hi, y_lo, y_hi = bounds
+    ax, ay = anchor_local_xy
+    x_lo, x_hi = ax + scale * (x_lo - ax), ax + scale * (x_hi - ax)
+    y_lo, y_hi = ay + scale * (y_lo - ay), ay + scale * (y_hi - ay)
+    return (x_lo, x_hi, y_lo, y_hi)
+
+
+def _show_luminance_sheet(model, sheet_geom_id, bounds, anchor_local_xy, origin_xy, forward):
+    """Resizes, recolors and re-orients mjcf_generator.py's `luminance_sheet`
+    placeholder geom into a visible yellow patch covering `bounds` (the
+    same travel-aligned-local-frame rectangle passed as this stage's
+    light_bounds), scaled up by LUMINANCE_SHEET_VISUAL_SCALE via
+    _scale_local_bounds() - run_light_tests()'s video-only counterpart to
+    _place_pheromone_light(). Callers scale their own light_bounds by the
+    same factor/anchor (see _scale_local_bounds()) before passing them to
+    get_light_sensor_values()/set_angle_to_joint(), so what's rendered here
+    and what's actually sensed are the same rectangle, not a bigger-looking
+    patch sitting on top of a smaller invisible one.
+
+    Always sits at LUMINANCE_SHEET_VISUAL_HEIGHT_M, a small height ABOVE
+    the floor - deliberately NOT pheromone_light_height()'s own (often
+    negative, "below the lowest sensor") height, which would frequently
+    place it behind the floor's own opaque geom and render as invisible.
+
+    anchor_local_xy: see _scale_local_bounds()."""
+    x_lo, x_hi, y_lo, y_hi = _scale_local_bounds(bounds, anchor_local_xy, LUMINANCE_SHEET_VISUAL_SCALE)
+    center_xy = local_to_world_xy(((x_lo + x_hi) / 2.0, (y_lo + y_hi) / 2.0), origin_xy, forward)
+
+    fwd, right = _travel_frame_axes(forward)
+    rot = np.array([
+        right[0], fwd[0], 0.0,
+        right[1], fwd[1], 0.0,
+        0.0, 0.0, 1.0,
+    ])
+    quat = np.zeros(4)
+    mujoco.mju_mat2Quat(quat, rot)
+    model.geom_quat[sheet_geom_id] = quat
+    model.geom_pos[sheet_geom_id] = np.array([center_xy[0], center_xy[1], LUMINANCE_SHEET_VISUAL_HEIGHT_M])
+    model.geom_size[sheet_geom_id] = np.array([
+        max(abs(x_hi - x_lo), 1e-4) / 2.0,
+        max(abs(y_hi - y_lo), 1e-4) / 2.0,
+        0.0002,
+    ])
+    model.geom_rgba[sheet_geom_id] = LUMINANCE_SHEET_RGBA
+
+
 def get_light_sensor_values(model, data, verbose=True, light_bounds=None, frame=None):
     """Illuminance (lux) at each on-body light sensor (the `light_sensor_*`
     sites from mjcf_generator.py), summed over every <light> in the scene.
@@ -512,10 +848,16 @@ def get_light_sensor_values(model, data, verbose=True, light_bounds=None, frame=
     up-to-date values but only needs to print occasionally).
 
     light_bounds: optional {light_id: (x_lo, x_hi, y_lo, y_hi)} restricting
-    a light to a rectangular footprint -- e.g. a square ceiling panel that
-    only covers one half of the assembly (see run_light_tests). A sensor
-    outside that footprint reads 0 lux from that light regardless of angle
-    or occlusion. Lights not present in the dict are unrestricted.
+    a light to a rectangular footprint -- e.g. the floor-level luminance
+    sheet that only covers part of the assembly (see run_light_tests). A
+    bounded light is treated as a uniform puddle rather than a directional
+    beam: any sensor inside the footprint reads a flat `intensity` lux
+    from it regardless of the sensor's own angle or any occlusion, and a
+    sensor outside reads exactly 0 -- so entering/leaving the footprint is
+    the only thing that ever changes the reading, never a joint's own fold
+    or a neighboring module's geometry. Lights not present in the dict
+    keep the full physically-modeled Lambert's-law + occlusion treatment
+    below.
 
     frame: optional (origin_xy, forward) - when given, each sensor's world
     XY is transformed via world_to_local_xy() before the bounds check
@@ -533,13 +875,30 @@ def get_light_sensor_values(model, data, verbose=True, light_bounds=None, frame=
       lux = intensity * max(0, cos(theta)) / falloff   (0 if occluded)
 
     where theta is the angle between the sensor panel's own outward normal
-    (its owning body's local Z axis -- the site's Z is a cosmetic rotation
-    used only to lay its marker geom flat, see below) and the direction to
-    the light (Lambert's cosine law), and falloff is 1 for a directional
-    light (parallel rays, no distance attenuation) or distance^2 for a
-    positional light (inverse-square law). bodyexclude on the occlusion ray
-    keeps a sensor from immediately re-hitting the surface it's mounted on.
+    (the SITE's own orientation, its local +Z axis rotated into world frame
+    -- mjcf_generator.py orients each light_sensor_joint_N site to face
+    whichever way that joint's sensor is actually mounted, e.g. downward
+    for the backside-of-the-joint placement, not just the owning body's own
+    Z axis) and the direction to the light (Lambert's cosine law), and
+    falloff is 1 for a directional light (parallel rays, no distance
+    attenuation) or distance^2 for a positional light (inverse-square law).
+
+    Occlusion uses a multi-hit raycast (up to _SELF_OCCLUSION_MAX_HITS
+    bounces) that skips past any hit on a body in the sensor's own physical
+    module (_module_self_bodies) before checking real occlusion: a folded
+    module's own bodyBase_N/bodyLink_N are, by construction, touching or
+    overlapping right at the hinge the sensor sits on, so a naive single-hit
+    raycast would treat the sensor's own module as permanently self-blocking
+    (this is why a single bodyexclude -- which only ever covers the site's
+    own body, not its sibling bodies -- isn't enough on its own). A hit on
+    any OTHER body (a neighboring module, the floor, a wall) still counts as
+    real occlusion.
     """
+    self_bodies_map = _module_self_body_cache.get(id(model))
+    if self_bodies_map is None:
+        self_bodies_map = _module_self_bodies(model)
+        _module_self_body_cache[id(model)] = self_bodies_map
+
     geomid = np.zeros(1, dtype=np.int32)
     readings = {}
     for site_id in range(model.nsite):
@@ -548,7 +907,8 @@ def get_light_sensor_values(model, data, verbose=True, light_bounds=None, frame=
             continue
         pnt = data.site_xpos[site_id]
         body_id = model.site_bodyid[site_id]
-        normal = data.xmat[body_id].reshape(3, 3)[:, 2]
+        normal = data.site_xmat[site_id].reshape(3, 3)[:, 2]
+        self_bodies = self_bodies_map.get(body_id, frozenset((body_id,)))
 
         lux = 0.0
         for light_id in range(model.nlight):
@@ -565,6 +925,17 @@ def get_light_sensor_values(model, data, verbose=True, light_bounds=None, frame=
                           else (pnt[0], pnt[1]))
                 if not (x_lo <= px <= x_hi and y_lo <= py <= y_hi):
                     continue
+                # Luminance sheet: a floor-level chemical/pheromone puddle,
+                # not a directional beam - any sensor physically inside its
+                # footprint reads the same fixed lux no matter which way it
+                # faces or what else is folded nearby, and reads exactly 0
+                # the instant it's outside. This keeps entry and exit
+                # symmetric and immune to a joint's own fold changing its
+                # own sensor's angle, or a neighboring module swinging into
+                # the line of sight - only position in/out of the sheet
+                # matters, never angle or occlusion.
+                lux += LUMINANCE_SHEET_LUX
+                continue
 
             if model.light_type[light_id] == mujoco.mjtLightType.mjLIGHT_DIRECTIONAL:
                 to_light = -data.light_xdir[light_id]
@@ -582,8 +953,24 @@ def get_light_sensor_values(model, data, verbose=True, light_bounds=None, frame=
             if cos_theta <= 0:
                 continue  # light is behind the sensor panel
 
-            hit_dist = mujoco.mj_ray(model, data, pnt, to_light, None, True, body_id, geomid)
-            if hit_dist >= 0 and hit_dist < light_dist:
+            ray_origin = pnt
+            remaining_dist = light_dist
+            occluded = False
+            for _ in range(_SELF_OCCLUSION_MAX_HITS):
+                hit_dist = mujoco.mj_ray(model, data, ray_origin, to_light, _OCCLUSION_GEOMGROUP, True, -1, geomid)
+                if hit_dist < 0 or hit_dist >= remaining_dist:
+                    break  # nothing solid before the light - unoccluded
+                if int(model.geom_bodyid[geomid[0]]) in self_bodies:
+                    # Own module's own geometry, touching itself right at
+                    # the fold - not a real occluder. Nudge past it and
+                    # keep looking from there.
+                    step = hit_dist + _SELF_OCCLUSION_RAY_EPS
+                    ray_origin = ray_origin + to_light * step
+                    remaining_dist -= step
+                    continue
+                occluded = True
+                break
+            if occluded:
                 continue  # occluded before reaching the light
 
             lux += intensity * cos_theta / falloff
@@ -811,19 +1198,25 @@ def _offscreen_camera(distance=0.25, lookat=(0, 0, 0)):
 
     # Top view: looking straight down along -Z
     # camera.azimuth = 90
-    # camera.elevation = -90
+    camera.elevation = -90
 
     return camera
 
 
 def run_headless_light_tests(
     model, target_angles, module1_qpos_adr,
-    light_test_duration=LIGHT_TEST_DEFAULT_DURATION, light_distance=LIGHT_TEST_DEFAULT_DISTANCE,
+    light_test_duration=LIGHT_TEST_DEFAULT_DURATION,
     light_target_angles=None,
 ):
     """Headless companion to run_light_tests(): computes
     pheromone_yaw_response_deg and pheromone_speed_response for
     run_headless()'s include_light_tests=True path.
+
+    Both "left" and "front" are lit by the same floor-level "luminance
+    sheet" mechanism as run_light_tests() (pheromone_light_height() +
+    _place_pheromone_light(), via the _pheromone_light() closure below) -
+    light_sensor_joint_* sites face -Z (mjcf_generator.py) specifically so
+    they can register it.
 
     Runs its OWN dedicated no-light baseline stage first (LIGHT_TEST_
     BASELINE_DURATION seconds, light_bounds=None so no reactive fold can
@@ -947,38 +1340,47 @@ def run_headless_light_tests(
     mid_x = (xy_min[0] + xy_max[0]) / 2.0
     mid_y = (xy_min[1] + xy_max[1]) / 2.0
 
-    def spot_ceiling_light(center_local_xy):
-        # Only light_type/pos/dir matter here -- get_light_sensor_values()
-        # never reads light_cutoff/diffuse/specular, and there's no
-        # renderer for them to matter to either. MuJoCo only understands
-        # world coordinates, so the chosen local-frame center is converted
-        # back via local_to_world_xy() just for this light's placement.
+    def _pheromone_light(center_local_xy):
+        # Floor-level "luminance sheet" light (see pheromone_light_height()/
+        # run_light_tests()'s identical mechanism) - light_sensor_joint_*
+        # sites face -Z (mjcf_generator.py) specifically so they can see a
+        # ground-level fixture like this one. MuJoCo only understands world
+        # coordinates, so the chosen local-frame center is converted back
+        # via local_to_world_xy() just for this light's placement.
         center_xy = local_to_world_xy(center_local_xy, origin_xy, forward)
-        model.light_type[light_id] = mujoco.mjtLightType.mjLIGHT_SPOT
-        model.light_pos[light_id] = np.array([center_xy[0], center_xy[1], initial_com[2] + light_distance])
-        model.light_dir[light_id] = np.array([0.0, 0.0, -1.0])
+        _place_pheromone_light(model, light_id, center_xy, pheromone_light_z)
+        # data.light_xpos (what get_light_sensor_values() reads) is derived
+        # kinematics - won't reflect this new model.light_pos until forward
+        # kinematics runs again, so without this, run_stage()'s very first
+        # iteration would read the PREVIOUS stage's light position.
+        mujoco.mj_forward(model, data)
 
     frame = (origin_xy, forward)
+    pheromone_light_z = pheromone_light_height(model, data)
 
     # ---- "left" stage ----
     reset_to_initial_pose()
     left_bounds = (xy_min[0], mid_x, xy_min[1], xy_max[1])
-    spot_ceiling_light(((xy_min[0] + mid_x) / 2.0 - LIGHT_TEST_LEFT_EXTRA_OFFSET, mid_y))
-    left_result = run_stage(light_test_duration, {light_id: left_bounds}, track_angular=True, frame=frame)
+    _pheromone_light(((xy_min[0] + mid_x) / 2.0 - LIGHT_TEST_LEFT_EXTRA_OFFSET, mid_y))
+    # Scaled by the same LUMINANCE_SHEET_VISUAL_SCALE/anchor run_light_tests()
+    # renders its VISIBLE patch with (see _scale_local_bounds()), even though
+    # this headless path never renders anything - keeps the two tools'
+    # actual trigger/release boundary identical rather than this one
+    # silently using the smaller, unscaled rectangle.
+    left_sensed_bounds = _scale_local_bounds(left_bounds, (mid_x, mid_y), LUMINANCE_SHEET_VISUAL_SCALE)
+    left_result = run_stage(light_test_duration, {light_id: left_sensed_bounds}, track_angular=True, frame=frame)
 
-    # ---- "front" stage: lit patch starts LIGHT_TEST_FRONT_EXTRA_OFFSET
-    # beyond the robot's own front edge (not at its own front-half
-    # midpoint), same depth as the robot's front half, so it starts in the
-    # dark and has to walk into the light rather than already being lit.
-    # Hard light_bounds rectangle (same mechanism as "left") - a smooth
-    # inverse-square-only falloff here read as wrong in practice. ----
+    # ---- "front" stage: lit patch covers the WHOLE body footprint
+    # (centered on it), not a patch ahead of it - so both sensors are lit
+    # simultaneously from the start ("both sensors detecting pheromone"),
+    # matching what this stage's own pheromone_speed_response is actually
+    # meant to measure, rather than a "walk toward a light ahead" scenario.
+    # Same floor-level luminance sheet mechanism as "left" above. ----
     reset_to_initial_pose()
-    front_depth = xy_max[1] - mid_y
-    front_y_lo = xy_max[1] + LIGHT_TEST_FRONT_EXTRA_OFFSET
-    front_y_hi = front_y_lo + front_depth
-    front_bounds = (xy_min[0], xy_max[0], front_y_lo, front_y_hi)
-    spot_ceiling_light((mid_x, (front_y_lo + front_y_hi) / 2.0))
-    front_result = run_stage(light_test_duration, {light_id: front_bounds}, track_angular=False, frame=frame)
+    front_bounds = (xy_min[0], xy_max[0], xy_min[1], xy_max[1])
+    _pheromone_light((mid_x, mid_y))
+    front_sensed_bounds = _scale_local_bounds(front_bounds, (mid_x, mid_y), LUMINANCE_SHEET_VISUAL_SCALE)
+    front_result = run_stage(light_test_duration, {light_id: front_sensed_bounds}, track_angular=False, frame=frame)
 
     mujoco.set_mjcb_control(None)
 
@@ -1066,6 +1468,8 @@ def run_headless(
     torque_history.clear()
     b_field_history.clear()
     time_history.clear()
+    _light_joint_state.clear()
+    _module_self_body_cache.clear()
 
     if model is None:
         model = mujoco.MjModel.from_xml_path(model_path)
@@ -1497,6 +1901,8 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
     parent_body_magnet_map.clear()
     parent_body_magnet_map.update(find_all_magnets(model))
     _prepare_magnet_arrays()
+    _light_joint_state.clear()
+    _module_self_body_cache.clear()
 
     # Identify module bodies and assign their text labels
     module_labels = find_module_labels(model)
@@ -1507,8 +1913,9 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
     dt = model.opt.timestep
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        viewer.cam.distance = 1  # zoom
+        viewer.cam.distance = 0.3  # zoom
         viewer.cam.lookat[:] = [0, 0, 0]
+        viewer.cam.elevation = -90
         last_print = -1
         avg_velocity = 0.0
         initial_com = None
@@ -1633,7 +2040,6 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
 
 
 def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TEST_DEFAULT_DURATION,
-                     light_distance=LIGHT_TEST_DEFAULT_DISTANCE,
                      capture_video=False, media_dir="../output", video_fps=30):
     """Light-response test: same live-viewer setup as run_with_viewer (load
     model, register the magnetic-field callback, real-time-paced mj_step
@@ -1642,43 +2048,53 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
 
         load xml -> settle to the folded hinge angle -> record the settled
         pose's COM as `initial_com` -> baseline (no light) -> stage "left"
-        -> stage "right" -> stage "front"
+        -> stage "front"
 
     Baseline: LIGHT_TEST_BASELINE_DURATION seconds of magnetic actuation
     with the scene's normal (directional, non-spot) light on -- not the
-    spotlight fixture used by stages 1-3 -- so there's a no-spotlight
-    reference avg linear velocity to compare the lit stages against.
+    fixture used by stages 1-2 -- so there's a no-light reference avg
+    linear velocity to compare the lit stages against.
 
-    Stages 1-3 all use the same fixture: a real MuJoCo spotlight --
-    positioned `light_distance` m straight above the assembly (so
-    get_light_sensor_values()'s inverse-square falloff over that height is
-    actually exercised) and pointed straight down, never from the side --
-    with its cutoff cone sized to just cover one symmetric half of the
-    assembly's own footprint (assembly_local_bounds()):
+    Stages 1-2 both use the same floor-level "luminance sheet" fixture --
+    the model's <light> repositioned via _place_pheromone_light() to
+    pheromone_light_height() (just below the lowest light_sensor_* site in
+    this run's own settled pose - see there for why a fixed height doesn't
+    work), plus a visible bright-yellow, emissive patch (mjcf_generator.py's
+    `luminance_sheet` geom + its "luminance_glow" material, shown via
+    _show_luminance_sheet()) covering the same rectangle for the video.
+    light_sensor_joint_* sites face -Z (mjcf_generator.py) specifically so
+    they can see this ground-level fixture, matching the paper's UV-excited
+    fluorescent pheromone trace this represents. Only the rectangle each
+    stage covers (assembly_local_bounds()) differs:
 
-      Stage "left":  cone covers the left half in X, full depth in Y
-        (symmetric front-to-back) -- i.e. a panel over just the left half.
+      Stage "left": covers the left half in X, full depth in Y (symmetric
+        front-to-back).
 
-      Stage "right": cone covers the right half in X, full depth in Y --
-        the mirror image of "left".
+      Stage "front": covers the WHOLE body footprint, centered on it - both
+        sensors lit simultaneously from the start ("both sensors detecting
+        pheromone"), matching what pheromone_speed_response actually
+        measures, rather than a patch ahead of the robot it has to walk
+        toward.
 
-      Stage "front": cone covers the front half in Y (+Y is taken as
-        "front"), full width in X (symmetric left-to-right) -- the same
-        fixture, moved to cover the front half instead.
+    model.vis.headlight stays at its normal default (active) here - same as
+    any other run - rather than being disabled the way an earlier version
+    of this function did. mjcf_generator.py's own <light> ambient/diffuse/
+    specular values are deliberately low (see LIGHT_INTENSITY_LUX's own
+    comment there) specifically so headlight + this DIRECTIONAL light (no
+    distance falloff, so it covers the WHOLE floor) don't add up to blow
+    the floor out to solid white during "baseline" - that combination
+    overexposes at the XML's old, higher cosmetic values regardless of
+    run_light_tests() at all (confirmed with a plain run_headless()/
+    run_with_viewer()-equivalent render, no light-test code involved), so
+    the fix had to live in the model's own light values, not here.
+    light_intensity itself (what get_light_sensor_values() actually reads
+    for lux) is untouched either way - see LIGHT_INTENSITY_LUX.
 
-    Two things make this an *actual* lit/unlit difference, visible in the
-    live viewer, rather than the printed lux numbers being the only signal:
-
-      1. model.vis.headlight is disabled for this run. MuJoCo's viewer
-         normally adds an automatic camera-attached headlight regardless of
-         any <light> in the scene, which would otherwise wash out whatever
-         this spotlight does -- with it off, the spotlight is the only
-         thing illuminating the model.
-      2. get_light_sensor_values()'s `light_bounds` still applies the exact
-         rectangular half as a hard cutoff on the *numeric* lux reading (a
-         circular spot cone can't perfectly match a straight-edged half, so
-         the visual cone is sized to just cover that half's farthest corner
-         -- close to, but not pixel-identical to, the measured cutoff).
+    get_light_sensor_values()'s `light_bounds` for each stage is the SAME
+    LUMINANCE_SHEET_VISUAL_SCALE-enlarged rectangle _show_luminance_sheet()
+    renders (via _scale_local_bounds(), same anchor) rather than the
+    smaller unscaled bounds - so the visible yellow patch IS the actual
+    trigger/release cutoff, not an approximation of it.
 
     Every stage (baseline included) resets the assembly back to the settled
     pose (the full qpos, so shape and orientation reset too, not only
@@ -1692,10 +2108,10 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
     Metrics collected per stage (see run_stage()):
       - Every stage: avg linear velocity (net COM displacement / elapsed
         stage time).
-      - "baseline" and "left" only: net yaw rotation of module_1's own
-        freejoint (module_1 is this design's designated sensor/control
-        module -- see its rangefinder/IMU comment further down) -- skipped
-        with a warning if the model has no "free_module_1" joint.
+      - "baseline" and "left": net yaw rotation of module_1's own freejoint
+        (module_1 is this design's designated sensor/control module -- see
+        its rangefinder/IMU comment further down) -- skipped with a warning
+        if the model has no "free_module_1" joint.
     The final summary (printed, not written to stats_output_path) reports
     pheromone_yaw_response_deg/pheromone_speed_response computed the same
     way as objectives_api.py's f6/f7 (see run_headless_light_tests), but
@@ -1727,15 +2143,12 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
     model = mujoco.MjModel.from_xml_path(model_path)
     data = mujoco.MjData(model)
     model.opt.timestep = 0.01
-    # See docstring: without this, the viewer's automatic camera headlight
-    # illuminates everything uniformly and the spotlight below has no
-    # visible effect.
-    model.vis.headlight.active = 0
 
     if model.nlight == 0:
         logger.error("Model has no <light> for run_light_tests() to repoint.")
         return
     light_id = 0
+    sheet_geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "luminance_sheet")
 
     # module_1 is this design's designated sensor/control module (see
     # build_module_element()'s IMU/rangefinder comment in mjcf_generator.py)
@@ -1760,6 +2173,8 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
     parent_body_magnet_map.clear()
     parent_body_magnet_map.update(find_all_magnets(model))
     _prepare_magnet_arrays()
+    _light_joint_state.clear()
+    _module_self_body_cache.clear()
 
     dt = model.opt.timestep
 
@@ -1838,6 +2253,12 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
         initial_com = get_com_position(data)
         initial_qpos = data.qpos.copy()
         logger.info("Initial COM: %s", initial_com)
+
+        # Floor-level "luminance sheet" light height for "left"/"front"
+        # below (see pheromone_light_height()) - computed once from this
+        # settled pose's own light_sensor_* heights, same for every stage.
+        pheromone_light_z = pheromone_light_height(model, data)
+        logger.info("Pheromone light height (world Z): %.4f mm.", pheromone_light_z * 1000)
 
         def reset_to_initial_pose():
             data.qpos[:] = initial_qpos
@@ -1991,7 +2412,7 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
         frame = (origin_xy, forward)
 
         # Purely cosmetic: point the VIEWER CAMERA so the robot appears to
-        # walk toward it during "left"/"front" below - this only moves the
+        # walk toward it during "left" below - this only moves the
         # camera, never the robot's own pose (unlike the old camera-facing
         # reorientation this replaced, which rotated the robot instead and
         # risked tipping a marginal design over). MuJoCo's free-camera
@@ -2008,61 +2429,64 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
         # reference pose it will actually reset to.
         reset_to_initial_pose()
 
-        # Stages 1-3 are the same ceiling-mounted spotlight (real MuJoCo
-        # <light>, d meters overhead, aimed straight down) -- only its
-        # position and cutoff cone (sized to just cover the target half's
-        # farthest corner) move between stages.
+        # Stage bounds all come from the same settled-pose bounding box;
+        # only which half/edge each stage targets differs.
         xy_min, xy_max = assembly_local_bounds(model, data, origin_xy, forward)
         mid_x = (xy_min[0] + xy_max[0]) / 2.0
         mid_y = (xy_min[1] + xy_max[1]) / 2.0
 
-        def _spot_ceiling_light(center_local_xy, bounds):
-            # center_local_xy/bounds are in the travel-aligned local frame;
-            # corner distances are rotation-invariant so max_r needs no
-            # conversion, but MuJoCo only understands world coordinates, so
-            # the light's actual position is converted via local_to_world_xy().
-            x_lo, x_hi, y_lo, y_hi = bounds
-            corners = ((x_lo, y_lo), (x_lo, y_hi), (x_hi, y_lo), (x_hi, y_hi))
-            max_r = max(float(np.hypot(cx - center_local_xy[0], cy - center_local_xy[1])) for cx, cy in corners)
+        def _pheromone_sheet(center_local_xy, bounds, anchor_local_xy):
+            # Floor-level "luminance sheet" (real light repositioned via
+            # _place_pheromone_light() + the visible yellow patch shown via
+            # _show_luminance_sheet()) - used by every stage below, see
+            # pheromone_light_height(). anchor_local_xy: see
+            # _show_luminance_sheet()'s docstring - the point LUMINANCE_
+            # SHEET_VISUAL_SCALE grows the visible patch away from, so it
+            # never bleeds into the robot's other half/its own body.
             center_xy = local_to_world_xy(center_local_xy, origin_xy, forward)
+            _place_pheromone_light(model, light_id, center_xy, pheromone_light_z)
+            _show_luminance_sheet(model, sheet_geom_id, bounds, anchor_local_xy, origin_xy, forward)
+            # data.light_xpos (what get_light_sensor_values() actually
+            # reads) is a *derived* kinematic quantity - it won't reflect
+            # this new model.light_pos until forward kinematics runs again,
+            # so without this, run_stage()'s very first iteration would
+            # read the PREVIOUS stage's light position for one step.
+            mujoco.mj_forward(model, data)
+            return center_xy
 
-            model.light_type[light_id] = mujoco.mjtLightType.mjLIGHT_SPOT
-            model.light_pos[light_id] = np.array([center_xy[0], center_xy[1], initial_com[2] + light_distance])
-            model.light_dir[light_id] = np.array([0.0, 0.0, -1.0])
-            model.light_cutoff[light_id] = float(np.degrees(np.arctan2(max_r, light_distance)))
-            model.light_diffuse[light_id] = np.array([2, 2, 2])
-
-        # ---- Stage 1: spotlight cone covering only the left half of the body, symmetrically ----
+        # ---- Stage 1: luminance sheet covering only the left half of the body, symmetrically ----
         reset_to_initial_pose()
         left_bounds = (xy_min[0], mid_x, xy_min[1], xy_max[1])  # left half in X, full depth in Y
         left_center = ((xy_min[0] + mid_x) / 2.0 - LIGHT_TEST_LEFT_EXTRA_OFFSET, mid_y)
-        _spot_ceiling_light(left_center, left_bounds)
-        left_light_xy = local_to_world_xy(left_center, origin_xy, forward)
-        results["left"] = run_stage("left", light_test_duration, light_bounds={light_id: left_bounds},
+        # Pin the inner edge (mid_x, the boundary against the robot's own
+        # right half) so a bigger LUMINANCE_SHEET_VISUAL_SCALE only grows
+        # the patch further left, never toward/past the robot's center.
+        left_light_xy = _pheromone_sheet(left_center, left_bounds, (mid_x, mid_y))
+        # The actual trigger/release check gets the SAME scaled-up
+        # rectangle _show_luminance_sheet() just rendered (same anchor, same
+        # LUMINANCE_SHEET_VISUAL_SCALE via _scale_local_bounds()) rather
+        # than the smaller unscaled `left_bounds` - otherwise a sensor could
+        # visibly still be inside the yellow patch while the (much smaller)
+        # numeric bounds had already released it.
+        left_sensed_bounds = _scale_local_bounds(left_bounds, (mid_x, mid_y), LUMINANCE_SHEET_VISUAL_SCALE)
+        results["left"] = run_stage("left", light_test_duration, light_bounds={light_id: left_sensed_bounds},
                                      track_angular=True, frame=frame)
 
-        # # ---- Stage 2: same spotlight, mirrored to cover only the right half of the body ----
-        # reset_to_initial_pose()
-        # right_bounds = (mid_x, xy_max[0], xy_min[1], xy_max[1])  # right half in X, full depth in Y
-        # _spot_ceiling_light(((mid_x + xy_max[0]) / 2.0, mid_y), right_bounds)
-        # results["right"] = run_stage("right", light_test_duration, light_bounds={light_id: right_bounds},
-        #                               track_angular=True, frame=frame)
-
-        # ---- Stage 3: same spotlight, moved LIGHT_TEST_FRONT_EXTRA_OFFSET
-        # beyond the robot's own front edge (not its own front-half
-        # midpoint) - same depth as before, so the robot starts entirely in
-        # the dark and has to walk forward into the light. Hard light_bounds
-        # rectangle (same mechanism as "left") - a smooth inverse-square-only
-        # falloff here read as wrong in practice. ----
+        # ---- Stage 2: same luminance sheet, covering the WHOLE body
+        # footprint (centered on it) instead of a patch ahead of it - both
+        # sensors are lit simultaneously from the start ("both sensors
+        # detecting pheromone"), matching what pheromone_speed_response is
+        # actually meant to measure, rather than a "walk toward a light
+        # ahead" scenario. ----
         reset_to_initial_pose()
-        front_depth = xy_max[1] - mid_y
-        front_y_lo = xy_max[1] + LIGHT_TEST_FRONT_EXTRA_OFFSET
-        front_y_hi = front_y_lo + front_depth
-        front_bounds = (xy_min[0], xy_max[0], front_y_lo, front_y_hi)  # full width in X
-        front_center = (mid_x, (front_y_lo + front_y_hi) / 2.0)
-        _spot_ceiling_light(front_center, front_bounds)
-        front_light_xy = local_to_world_xy(front_center, origin_xy, forward)
-        results["front"] = run_stage("front", light_test_duration, light_bounds={light_id: front_bounds},
+        front_bounds = (xy_min[0], xy_max[0], xy_min[1], xy_max[1])  # the whole body footprint
+        front_center = (mid_x, mid_y)
+        # anchor == bounds' own center here (the body's own center) since
+        # there's no "inner edge" to protect anymore - a bigger
+        # LUMINANCE_SHEET_VISUAL_SCALE just grows outward on all sides.
+        front_light_xy = _pheromone_sheet(front_center, front_bounds, (mid_x, mid_y))
+        front_sensed_bounds = _scale_local_bounds(front_bounds, (mid_x, mid_y), LUMINANCE_SHEET_VISUAL_SCALE)
+        results["front"] = run_stage("front", light_test_duration, light_bounds={light_id: front_sensed_bounds},
                                       track_acceleration=True,
                                       v_start_override=results["baseline"]["avg_linear_mps"], frame=frame)
 
@@ -2136,7 +2560,9 @@ if __name__ == "__main__":
 
     parser.add_argument(
         #"--m", type=str, default="../models/assembly.xml",
-        "--m", type=str, default="..\\output\\evolution_run\\generation_9\\ind5_assembly.xml",
+        #"--m", type=str, default="..\\output\\evolution_run\\generation_9\\ind5_assembly.xml",
+        "--m", type=str, default="../models/light_phermone_attracted_assembly.xml",
+        #"--m", type=str, default="D:\\microrobotics\\output\\evolution_run\\generation_59\\ind5_assembly.xml",
         help="MJCF model path to run in the live viewer",
     )
 
@@ -2188,11 +2614,6 @@ if __name__ == "__main__":
              f"(default: {LIGHT_TEST_DEFAULT_DURATION}).",
     )
     parser.add_argument(
-        "--light_distance", type=float, default=LIGHT_TEST_DEFAULT_DISTANCE,
-        help="With --light_tests, standoff distance in meters for the light source "
-             f"in each stage (default: {LIGHT_TEST_DEFAULT_DISTANCE}).",
-    )
-    parser.add_argument(
         "--capture_video", action="store_true",
         help="With --light_tests, also save a high-quality MP4 of every stage "
              "(baseline/left/front), captured via an offscreen renderer independent "
@@ -2232,7 +2653,6 @@ if __name__ == "__main__":
     if args.light_tests:
         run_light_tests(
             args.m, args.o, light_test_duration=args.light_test_duration,
-            light_distance=args.light_distance,
             capture_video=args.capture_video, video_fps=args.video_fps,
             media_dir=os.path.dirname(args.o) or ".",
         )

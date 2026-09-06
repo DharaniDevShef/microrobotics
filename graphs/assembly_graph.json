@@ -11,6 +11,8 @@
         "3": "module_3"
       },
       "hinge_angle": 45,
+      "light_sensitive": false,
+      "light_hinge_angle": 0.0,
       "_pos": [
         65.08180909440055,
         37.57499999999999
@@ -35,6 +37,8 @@
         "3": null
       },
       "hinge_angle": 45,
+      "light_sensitive": true,
+      "light_hinge_angle": 15.0,
       "_pos": [
         4.263256414560601e-14,
         75.15000000000006
@@ -59,6 +63,8 @@
         "3": null
       },
       "hinge_angle": 45,
+      "light_sensitive": true,
+      "light_hinge_angle": 15.0,
       "_pos": [
         130.16361818880108,
         75.15000000000006
@@ -83,6 +89,8 @@
         "3": null
       },
       "hinge_angle": 45,
+      "light_sensitive": true,
+      "light_hinge_angle": 15.0,
       "_pos": [
         65.08180909440055,
         -37.575

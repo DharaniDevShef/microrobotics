@@ -135,6 +135,21 @@ MAGNET_INERTIA = np.diag([
 # for the cosine/occlusion falloff applied on top of this.
 LIGHT_INTENSITY_LUX = 500
 
+# <light>'s own ambient/diffuse/specular below (rendering only -- lux
+# comes from LIGHT_INTENSITY_LUX above, get_light_sensor_values() never
+# reads these) are deliberately lower than MuJoCo's typical example values.
+# This light is DIRECTIONAL (no distance falloff -- it covers the whole
+# floor at full strength) and the viewer/renderer always adds its own
+# camera-attached headlight on top by default; at the old 0.3/0.8/0.2
+# values the two stacked and blew the floor out to solid white in ANY
+# run (not just roblet_simulator.run_light_tests() -- confirmed with a
+# render using nothing but these compiled defaults, no run_light_tests()
+# code involved at all). These lower values keep the floor/robot visibly
+# lit without overexposing once headlight adds in.
+LIGHT_AMBIENT = "0.1 0.1 0.1"
+LIGHT_DIFFUSE = "0.2 0.2 0.2"
+LIGHT_SPECULAR = "0.05 0.05 0.05"
+
 # bodyLink's own z-extent (m, local/body frame -- see BodyFoldedSide2.stl's
 # bounding box) at the two points its hinge crease can physically sit: right
 # at the top face for a valley fold, right at the bottom face for a mountain
@@ -537,11 +552,19 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         <mesh name="connectorC" file="SGX.stl" scale="0.001 0.001 0.001"/>
         <material name="silver" specular="1" shininess="0.8" rgba="0.85 0.85 0.9 1"/>
         <mesh name="Magnet" file="Magnet.stl" scale="1 1 1" inertia="shell"/>
-        <material name="glass" rgba="0.6 0.8 0.9 0.4" shininess="0.9" specular="1"/>
+        <texture name="grid" type="2d" builtin="checker" rgb1="1 1 1" rgb2="0.85 0.85 0.85" width="300" height="300"/>
+        <material name="grid" texture="grid" texrepeat="40 40" texuniform="true" specular="0" shininess="0"/>
+        <!-- emission="1" (MuJoCo's max - self-illuminated on every face
+             regardless of light direction, confirmed empirically; higher
+             values render identically) so the luminance_sheet geom below
+             reads as an actually glowing/luminous patch (a UV-excited
+             fluorescent pheromone trace) rather than a flat-colored one -
+             see roblet_simulator.py's _show_luminance_sheet(). -->
+        <material name="luminance_glow" emission="1" specular="0.3" shininess="0.2" rgba="1 0.85 0 1"/>
     </asset>
     <worldbody>
-        <light directional="true" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2" pos="0 0 1" dir="0 0 -1" intensity="{LIGHT_INTENSITY_LUX}"/>
-        <geom name="glass_floor" type="plane" size="1 1 0.1" material="glass"
+        <light directional="true" ambient="{LIGHT_AMBIENT}" diffuse="{LIGHT_DIFFUSE}" specular="{LIGHT_SPECULAR}" pos="0 0 1" dir="0 0 -1" intensity="{LIGHT_INTENSITY_LUX}"/>
+        <geom name="floor" type="plane" size="1 1 0.1" material="grid"
             friction="0.4 0.005 0.0001" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1" condim="3"/>
         <!-- Floor Boundaries / Perimeter Walls -->
         <!-- group="1": lets the wall-rangefinder raycast (mj_ray with
@@ -551,6 +574,20 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         <geom name="wall_south" type="box" pos="0 -1.0 0.1" size="1.05 0.02 0.1" group="1"/>
         <geom name="wall_east"  type="box" pos="1.0 0 0.1" size="0.02 1.05 0.1" group="1"/>
         <geom name="wall_west"  type="box" pos="-1.0 0 0.1" size="0.02 1.05 0.1" group="1"/>
+        <!-- Placeholder for a floor-level "luminance sheet" (UV-excited
+             fluorescent pheromone trace, per the wireless-pheromone-robot
+             paper) - roblet_simulator.py's run_light_tests()/
+             run_headless_light_tests() reposition, resize and recolor this
+             at runtime (pos/size/quat/rgba are all just plugged in as
+             initial placeholders here) to sit over whichever region a
+             "left"/"front" stage is testing, since MuJoCo's geom count is
+             fixed at compile time - see roblet_simulator._show_luminance_
+             sheet(). contype/conaffinity "0": visual only, never a
+             physical obstacle. rgba alpha 0: invisible until a stage
+             actually shows it. material="luminance_glow": emissive, so
+             the shown patch reads as actually glowing, not flat-colored. -->
+        <geom name="luminance_sheet" type="box" pos="0 0 -1" size="0.001 0.001 0.0002"
+            material="luminance_glow" rgba="1 0.85 0 0" contype="0" conaffinity="0" group="2"/>
     </worldbody>
 </mujoco>
 """
@@ -593,9 +630,39 @@ def build_assembly(graph_json_path, out_xml_path, meshdir="../meshes",
         # get_light_sensor_values()/set_angle_to_joint() simply never see
         # (and can never react to) light at that joint.
         is_light_sensitive = (not is_rigid) and G.nodes[node_id].get("light_sensitive", False)
+        # The sensor site sits on the backside of the joint rather than
+        # coinciding with it (fold_body_tpl's <joint pos="0 0.001
+        # {joint_z}" .../>), on both axes:
+        #  - z is unconditionally JOINT_Z_MOUNTAIN_BOTTOM, the lower of
+        #    bodyLink's two faces, regardless of this module's own fold
+        #    type. A mountain-fold joint's crease already sits at that
+        #    same face (joint_z == JOINT_Z_MOUNTAIN_BOTTOM above), so its
+        #    sensor was already on the hidden underside; a valley-fold
+        #    joint's crease sits at the visually-exposed top face instead
+        #    (joint_z == JOINT_Z_VALLEY_TOP), so its sensor needs pulling
+        #    down to this same bottom face to end up equally hidden -
+        #    using JOINT_Z_VALLEY_TOP here instead would do the opposite
+        #    and expose the mountain-fold sensors that were already fine.
+        #  - y is +0.0015 (not the joint's own +0.001, and NOT the -0.001
+        #    "connector 2/3 side" this used to sit at) - +0.001 to +0.00233
+        #    is where BodyFoldedSide2.stl has a real cutout/window (visible
+        #    once a mountain joint folds open enough to expose that face -
+        #    connector1's own mounting socket lives right there, per
+        #    CONN_POSITIONS/CONNECTOR_MOUNT_OFFSET_Z above), and a sensor
+        #    site placed inside it visibly floats in open air rather than
+        #    sitting on solid material - confirmed empirically (multi-hit
+        #    mj_ray sweeps + renders) at -0.001, -0.002, 0 and +0.0015; only
+        #    +0.0015 lands outside that cutout at every fold angle tested.
+        # quat="0 1 0 0" is a 180deg rotation about local X, flipping the
+        # site's own +Z (its sensing normal - roblet_simulator.py's
+        # get_light_sensor_values() reads the SITE's orientation, not the
+        # owning body's) to point at the site's -Z, i.e. downward toward
+        # the floor - a ground-facing sensor for a floor-level luminance
+        # sheet/pheromone trail, matching where it's actually mounted,
+        # rather than the body's own (upward) Z axis.
         light_sensor_site = (
             f'<site name="light_sensor_joint_{num_id}" type="box" size="0.0008 0.0008 0.0001" '
-            f'pos="0 0.001 {joint_z}" rgba="0 1 0 1"/>'
+            f'pos="0 0.0015 {JOINT_Z_MOUNTAIN_BOTTOM}" quat="0 1 0 0" rgba="0 1 0 1"/>'
         ) if is_light_sensitive else ""
 
         tpl = rigid_body_tpl if is_rigid else fold_body_tpl

@@ -97,8 +97,8 @@ WALL_STOP_DISTANCE = 200  # 200 mm
 # context memory each of sim_executor.py's parallel subprocesses holds -
 # a plausible source of the occasional renderer failure some individuals
 # were hitting.
-RENDER_WIDTH = 480
-RENDER_HEIGHT = 370
+RENDER_WIDTH = 1920
+RENDER_HEIGHT = 1080
 
 # run_light_tests()'s capture_video renderer is a separate, single-run
 # diagnostic path (not part of sim_executor.py's parallel evolution pool
@@ -582,20 +582,20 @@ def set_angle_to_joint(model, data, target_angle_deg, light_bounds=None, light_t
             eased_deg = light_sensitive_joint_angle_deg(
                 theta_prev_deg, setpoint_deg, data.time - prev_time)
 
-            if not np.isclose(setpoint_deg, prev_setpoint_deg):
-                reported = False  # setpoint just changed - allow one fresh "reached" line
-            if not reported and abs(eased_deg - setpoint_deg) <= LIGHT_JOINT_REACHED_TOLERANCE_DEG:
-                reported = True
-                if lit:
-                    logger.info(
-                        "Joint '%s' light-triggered: reached full angle %.2f deg (lux=%.0f).",
-                        actuator_name, eased_deg, lux,
-                    )
-                else:
-                    logger.info(
-                        "Joint '%s' light released: returned to original angle %.2f deg.",
-                        actuator_name, eased_deg,
-                    )
+            # if not np.isclose(setpoint_deg, prev_setpoint_deg):
+            #     reported = False  # setpoint just changed - allow one fresh "reached" line
+            # if not reported and abs(eased_deg - setpoint_deg) <= LIGHT_JOINT_REACHED_TOLERANCE_DEG:
+            #     reported = True
+            #     if lit:
+            #         logger.info(
+            #             "Joint '%s' light-triggered: reached full angle %.2f deg (lux=%.0f).",
+            #             actuator_name, eased_deg, lux,
+            #         )
+            #     else:
+            #         logger.info(
+            #             "Joint '%s' light released: returned to original angle %.2f deg.",
+            #             actuator_name, eased_deg,
+            #         )
 
             _light_joint_state[actuator_idx] = (eased_deg, data.time, setpoint_deg, reported)
             target_values[actuator_idx] = eased_deg

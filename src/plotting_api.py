@@ -38,8 +38,8 @@ DPI = 600
 # and subplot TITLE sizes are left as each plot's own literal, since they
 # were not asked to move together with these).
 FONT_FAMILY = "Arial"
-FONT_SIZE_AXIS_LABEL = 11   # axes.labelsize + tick labels
-FONT_SIZE_LEGEND = 9        # legend text + small marker/count annotations
+FONT_SIZE_AXIS_LABEL = 14   # axes.labelsize + tick labels
+FONT_SIZE_LEGEND = 11        # legend text + small marker/count annotations
 
 
 def _save_fig(fig, path, dpi=DPI, **savefig_kwargs):

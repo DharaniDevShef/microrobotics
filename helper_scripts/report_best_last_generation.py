@@ -9,6 +9,11 @@ Usage from the repository root::
     python helper_scripts/report_best_last_generation.py rank=2
     python helper_scripts/report_best_last_generation.py --rank 2
     python helper_scripts/report_best_last_generation.py output/evolution_run output/evolution_run_repulsive
+    python helper_scripts/report_best_last_generation.py output/evolution_run_repulsive/generation_100/ind17_assembly.xml
+
+Passing a path to a specific ``ind{id}_assembly.xml`` file reports that single
+candidate (looked up by generation/ind_id in the run's population_history.json)
+instead of the best candidate of the last generation.
 
 The scalar fitness uses the same equal-weight min-max normalization as
 ``objectives_api.scalarize``, reconstructed from the saved population history.
@@ -18,6 +23,7 @@ already stores the full, post-mirror morphology.
 
 import argparse
 import json
+import re
 from pathlib import Path
 import sys
 
@@ -177,6 +183,62 @@ def _best_candidate(run_dir, rank=1):
     return last_generation["generation"], candidates[rank - 1]
 
 
+_XML_NAME_RE = re.compile(r"^ind(\d+)_assembly\.xml$")
+_GENERATION_DIR_RE = re.compile(r"^generation_(\d+)$")
+
+
+def _candidate_from_xml(xml_path):
+    """Resolve a directly-given ind{id}_assembly.xml path (run_dir/generation_N/
+    ind{id}_assembly.xml) into the same (generation, (fitness, candidate_id,
+    objectives, xml_path, graph_path)) shape that _best_candidate returns, plus
+    that candidate's rank within its own generation."""
+    xml_path = xml_path.resolve()
+    xml_match = _XML_NAME_RE.match(xml_path.name)
+    if not xml_match:
+        raise ValueError(f"{xml_path} is not an ind{{id}}_assembly.xml file")
+    candidate_id = int(xml_match.group(1))
+
+    generation_dir = xml_path.parent
+    generation_match = _GENERATION_DIR_RE.match(generation_dir.name)
+    if not generation_match:
+        raise ValueError(f"{xml_path} is not inside a generation_<N> directory")
+    generation_number = int(generation_match.group(1))
+
+    run_dir = generation_dir.parent
+    graph_path = generation_dir / f"ind{candidate_id}_graph.json"
+    if not graph_path.exists():
+        raise ValueError(f"{graph_path} not found")
+
+    history = _load_history(run_dir)
+    generation_entry = next(
+        (entry for entry in history if entry["generation"] == generation_number), None
+    )
+    if generation_entry is None:
+        raise ValueError(f"generation {generation_number} not found in {run_dir / 'population_history.json'}")
+
+    ranges = _normalization_ranges(history)
+    is_repulsive = "repulsive" in run_dir.name.lower()
+
+    scored = []
+    target_index = None
+    for candidate in generation_entry.get("population", []):
+        if candidate.get("ind_id") is None:
+            continue
+        objectives = objectives_api.migrate_legacy_objectives(candidate["objectives"])
+        scored.append((_fitness(objectives, ranges, is_repulsive), candidate["ind_id"], objectives))
+        if candidate["ind_id"] == candidate_id:
+            target_index = len(scored) - 1
+
+    if target_index is None:
+        raise ValueError(f"ind_id {candidate_id} not found in generation {generation_number} of {run_dir}")
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    rank = next(index for index, item in enumerate(scored, start=1) if item[1] == candidate_id)
+    fitness, _, objectives = next(item for item in scored if item[1] == candidate_id)
+
+    return run_dir, generation_number, rank, (fitness, candidate_id, objectives, xml_path, graph_path)
+
+
 _OBJECTIVE_LABELS = {
     "f1_folded_gait_velocity": ("f1 folded-gait velocity", "m/s"),
     "f2_entropy": ("f2 entropy gain (H3D - H2D)", ""),
@@ -185,12 +247,12 @@ _OBJECTIVE_LABELS = {
 }
 
 
-def _report(run_dir, rank):
-    generation, (fitness, candidate_id, objectives, xml_path, graph_path) = _best_candidate(run_dir, rank)
+def _print_report(run_dir, generation, rank, generation_label, candidate):
+    fitness, candidate_id, objectives, xml_path, graph_path = candidate
     design_variables = _design_variables(graph_path)
 
     print(f"{run_dir}")
-    print(f"  last generation: {generation}")
+    print(f"  {generation_label}: {generation}")
     print(f"  rank: {rank}")
     print(f"  candidate: ind{candidate_id}")
     print(f"  fitness: {fitness:.6f}")
@@ -219,6 +281,16 @@ def _report(run_dir, rank):
     print(f"  graph: {graph_path}")
 
 
+def _report(run_dir, rank):
+    generation, candidate = _best_candidate(run_dir, rank)
+    _print_report(run_dir, generation, rank, "last generation", candidate)
+
+
+def _report_xml(xml_path):
+    run_dir, generation, rank, candidate = _candidate_from_xml(xml_path)
+    _print_report(run_dir, generation, rank, "generation", candidate)
+
+
 def main():
     argv = sys.argv[1:]
     rank_equals = [argument for argument in argv if argument.startswith("rank=")]
@@ -236,26 +308,33 @@ def main():
         help="1-based fitness rank in the last generation (1=best; default: 1).",
     )
     parser.add_argument(
-        "run_dirs",
+        "targets",
         nargs="*",
         type=Path,
         default=[
             ROOT_DIR / "output" / "evolution_run",
             ROOT_DIR / "output" / "evolution_run_repulsive",
         ],
-        help="Evolution run directories (default: attractive and repulsive output runs).",
+        help=(
+            "Evolution run directories (default: attractive and repulsive output "
+            "runs), and/or specific ind{id}_assembly.xml file paths to report a "
+            "single candidate."
+        ),
     )
     args = parser.parse_args(argv)
     if args.rank < 1:
         parser.error("--rank must be at least 1")
 
     failed = False
-    for run_dir in args.run_dirs:
+    for target in args.targets:
         try:
-            _report(run_dir, args.rank)
+            if target.is_file():
+                _report_xml(target)
+            else:
+                _report(target, args.rank)
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
             failed = True
-            print(f"{run_dir}: {error}", file=sys.stderr)
+            print(f"{target}: {error}", file=sys.stderr)
     return 1 if failed else 0
 
 

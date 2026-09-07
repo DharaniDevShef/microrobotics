@@ -71,7 +71,8 @@ The available simulation runs used a population of 30 individuals, 200 generatio
 \newpage \section*{INDIVIDUAL CONTRIBUTION}
 The physical Roblet platform, its magnetic self-assembly mechanism and the original CAD mass-property data were developed by the Miyashita laboratory and are treated as prior resources in this project \citep{han2023roblets}. The work reported here consisted of implementing and extending the computational design and evaluation framework. This included the graph genotype and grammar-legal operators, the MuJoCo digital-twin assembly and its MJCF generation, the folded-gait and light-response objective calculations, and the NSGA-III evolutionary loop.
 
-An additional contribution was the adaptation of light-based reaction primitives into attractive and repulsive evolutionary configurations. The PPO actor-critic was implemented to select structural mutation and crossover actions, and a random-action arm was added as a controlled comparison. Hypervolume, convergence, action-distribution and PPO diagnostic plots were also produced. MuJoCo was used for physics simulation, pymoo for multi-objective selection, PyTorch and torch\_geometric for the graph policy, and NetworkX for graph manipulation. \missinginfo{Add the names of lab members who supplied CAD data}
+An additional contribution was the adaptation of light-based reaction primitives into attractive and repulsive evolutionary configurations. The PPO actor-critic was implemented to select structural mutation and crossover actions, and a random-action arm was added as a controlled comparison. Hypervolume, convergence, action-distribution and PPO diagnostic plots were also produced. MuJoCo was used for physics simulation, pymoo for multi-objective selection, PyTorch and torch\_geometric for the graph policy, and NetworkX for graph manipulation. Xiao Chen  from Sheffield Microrobotics lab contributed in fabricating and taking pictures of 3D "beetle with horn" with and without magnetic actuation..Jakub W Schmidt from Sheffield Microrobotics lab, designed cab models of the roblets.
+
 
 \newpage \section*{ACKNOWLEDGEMENTS}
 I would like to sincerely thank my supervisor, Dr Shuhei Miyashita, for suggesting this research topic based on my interests and for his valuable advice, encouragement, and feedback throughout the project. I would also like to express my gratitude to the PhD candidates of the Sheffield Microrobotics Lab for their valuable insights, assistance, and discussions during the development of this work.
@@ -441,17 +442,18 @@ The mirror is applied at build time rather than treated as a separate learned ac
 \begin{figure}[h]
     \centering
     \begin{subfigure}[b]{0.47\linewidth}
-        \includegraphics[width=\linewidth]{mirror_graph.png}
+        \includegraphics[width=\linewidth]{mirror_graph_before.png}
         \caption{Graph representation of the half-genotype}
         \label{fig:mirror-graph}
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.47\linewidth}
-        \includegraphics[width=\linewidth]{mirror_body.png}
-        \caption{3D folded phenotype after mirroring}
-        \label{fig:mirror-3d}
+        \includegraphics[width=\linewidth]{mirror_graph_after.png}
+        \caption{Graph representation of the full genotype after mirroring}
+        \label{fig:mirror-graph-after}
     \end{subfigure}
-    \caption{Example of the half-genotype and its mirrored full morphology: (a) shows the directed graph of the evolved half, while (b) shows the resulting 3D folded configuration after applying the deterministic mirror operation. The mirror anchors are the root module and its spine child, ensuring bilateral symmetry in the final design.}
+    \end{subfigure}
+    \caption{Illustration of the mirror construction process: (a) shows the evolved half-genotype as a directed graph, while (b) shows the full genotype after deterministic mirroring about the root's spine. The mirror is applied at build time, so all evolutionary operators act on the same half-graph representation.}
     \label{fig:mirror-example}
 \end{figure}
 
@@ -459,6 +461,14 @@ The mirror is applied at build time rather than treated as a separate learned ac
 The operator set contains eight mutations and two crossovers: add node, delete node, prune subtree, change fold type, change hinge angle, reconnect a port, toggle a light sensor, change the light hinge angle, graft a subtree and swap subtrees. Each action is masked according to the current graph. Addition requires a free port and the module limit, deletion protects the root and targets a removable leaf, and reconnection must leave valid port assignments.
 
 Invalid action masking was applied to constrain the policy distribution to legal actions at each decision step, as masking has theoretical justification in policy-gradient methods and becomes increasingly important as the fraction of invalid actions grows \citep{huang2020closer}. Grammar masking was therefore selected instead of generating an illegal graph and rejecting it afterwards. Reject-and-retry wastes simulation and policy samples, while a soft penalty asks the policy to learn rules that can be enforced directly. Masking guarantees that sampled structural edits are legal and leaves simulation failure to represent physical or numerical problems rather than simple grammar errors.
+
+Some of the graph actions are illustrated int the Figure~\ref{fig:mutations}. 
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.85\linewidth]{mutations.png}
+    \caption{Illustration of graph actions for mutations vertically stacked: (a) Delete node (b) Prune Subtree (c) Add node}
+    \label{fig:mutations}
+\end{figure}
 
 \subsection{Multi-Objective Fitness Formulation}
 \label{sec:objectives}
@@ -644,7 +654,7 @@ The entropy--velocity plot addresses AO-2 by comparing a measure of change durin
 \begin{figure}[h]
     \centering
     \begin{subfigure}[b]{0.47\linewidth}
-        \includegraphics[width=\linewidth]{phermone_attracting_evolved_morph.png}
+        \includegraphics[width=\linewidth]{Evolved_morphology_phermone_attractive.png}
         \caption{Attractive configuration}
         \label{fig:morph-attractive}
     \end{subfigure}
@@ -661,7 +671,7 @@ The entropy--velocity plot addresses AO-2 by comparing a measure of change durin
 \begin{figure}[h]
     \centering
     \begin{subfigure}[b]{0.47\linewidth}
-        \includegraphics[width=\linewidth]{phermone_repelling_evolved_morph.png}
+        \includegraphics[width=\linewidth]{Evolved_morphology_phermone_repulsive.png}
         \caption{Repulsive configuration}
         \label{fig:morph-repulsive}
     \end{subfigure}
@@ -829,7 +839,7 @@ Beyond the RL redesign, the best evolved designs should be checked on real Roble
 
 
 %%% List of references starts here.
-\renewcommand{\bibname}{REFERENCES}
+\renewcommand{\bibname}{References}
 \addcontentsline{toc}{chapter}{REFERENCES}
 \bibliographystyle{unsrt}
 \bibliography{Bibliography_uRL}

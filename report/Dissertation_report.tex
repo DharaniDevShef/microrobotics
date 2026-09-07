@@ -338,9 +338,49 @@ The light-response mechanism is represented as a change at selected foldable joi
     \label{fig:sim-setup}
 \end{figure}
 
-The digital twin was implemented as a set of independent module bodies with mass, centre-of-mass and inertia values taken from the available CAD exports. A cylindrical N42SH magnet model with magnetic moment $m=6.5\times10^{-3}\,\mathrm{A\,m^2}$ was placed at each connector. Connected bodies were joined with weld equality constraints. This choice allows the bodies to remain separate physical objects while their assembled relationship is enforced during settling; it is closer to the assembly process than a purely scripted kinematic tree.
+The digital twin was implemented as a set of independent module bodies with mass, centre-of-mass and inertia values taken from Fusion 360 CAD mass-property exports for each of the six moulded part types (fold-hinge base, fold-hinge link, rigid body, and three connector variants). A cylindrical N42SH magnet model with magnetic moment $m=6.5\times10^{-3}\,\mathrm{A\,m^2}$ was placed at each connector. Connected bodies were joined with weld equality constraints. This choice allows the bodies to remain separate physical objects while their assembled relationship is enforced during settling; it is closer to the assembly process than a purely scripted kinematic tree.
 
-The external field applies the torque $\boldsymbol{\tau}=\mathbf{m}\times\mathbf{B}$ to each magnet. For locomotion, candidate field strengths of $0.001$, $0.008$ and $0.05$ T were tested. The field was swept for each morphology because a small or heavy structure may stall at a field that drives another structure into excessive rolling or tumbling. The candidate with the highest stable velocity was retained. \missinginfo{Confirm the source of the CAD mass properties and add the exact settling and rollout durations if they differ from the current code settings.}
+The external field applies the torque $\boldsymbol{\tau}=\mathbf{m}\times\mathbf{B}$ to each magnet. For locomotion, candidate field strengths of $0.001$, $0.008$ and $0.025$ T were tested. The field was swept for each morphology because a small or heavy structure may stall at a field that drives another structure into excessive rolling or tumbling. The candidate with the highest stable velocity was retained.
+
+\subsection{Simulation Parameters and Reproducibility}
+\label{sec:sim-params}
+The physical fidelity of the digital twin, and hence the reproducibility of any result in Chapters~\ref{ch:results}--\ref{ch:discussion}, depends on a set of environmental and material parameters that are fixed across every evolutionary run. Table~\ref{tab:sim-params} summarises the values needed to reproduce the physics simulation environment described above. The full per-part mass, inertia and geometry data, the exact software versions, and step-by-step setup instructions are given in Appendix~\ref{app:reproduce}.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Key MuJoCo simulation parameters used to produce the results reported in this thesis. All values are taken directly from the simulator source and MJCF generator; MuJoCo's own compiled defaults are stated explicitly where a parameter was not overridden, since an unstated default is just as necessary for reproduction as an explicit one. The full parameter reference and setup instructions are given in Appendix~\ref{app:reproduce}.}
+\label{tab:sim-params}
+\begin{tabular}{@{}p{6.6cm}p{8.4cm}@{}}
+\toprule
+\multicolumn{2}{@{}l}{\textit{Physics environment}} \\
+\addlinespace[2pt]
+Timestep / integrator & $0.01\,\mathrm{s}$, \texttt{implicitfast} \\
+Gravity & MuJoCo default, $(0,0,-9.81)\,\mathrm{m/s^2}$ (not overridden) \\
+Ground-plane friction (sliding, torsional, rolling) & $0.4$, $0.005$, $0.0001$ \\
+Ground-plane contact solver (\texttt{solref}, \texttt{solimp}) & $(0.02,\,1)$, $(0.9,\,0.95,\,0.001,\,0.5,\,2)$ \\
+Module-body contact friction & MuJoCo compiled default, $(1,\,0.005,\,0.0001)$ (not overridden per geom) \\
+Inter-module weld-constraint solver (\texttt{solref}, \texttt{solimp}) & $(0.01,\,1)$, $(0.99,\,0.999,\,0.0001)$ \\
+\addlinespace[4pt]
+\multicolumn{2}{@{}l}{\textit{Module and magnet physical properties}} \\
+\addlinespace[2pt]
+Material & Clear photopolymer resin, $1.17\,\mathrm{g/cm^3}$ \\
+Module mass (bare / with 3 embedded magnets) & $450\,\mathrm{mg}$ / $566\,\mathrm{mg}$ \\
+Module footprint (bounding box, per part) & $\approx 6$--$12\,\mathrm{mm}$ per side (Appendix~\ref{app:reproduce}) \\
+Magnet & Cylindrical N42SH neodymium, $2\times2\,\mathrm{mm}$, $47.1\,\mathrm{mg}$ \\
+Magnetic moment $m$ & $6.5\times10^{-3}\,\mathrm{A\,m^2}$ \\
+\addlinespace[4pt]
+\multicolumn{2}{@{}l}{\textit{Actuation and fold joints}} \\
+\addlinespace[2pt]
+Magnetic field sweep $B$ & $0.001$, $0.008$, $0.025\,\mathrm{T}$ (square-wave oscillation) \\
+Oscillation frequency & $6.25\,\mathrm{Hz}$ \\
+Torque ramp duration & $1\,\mathrm{s}$ (smoothstep) \\
+Fold-hinge mechanical range & $0^\circ$--$90^\circ$, \texttt{armature}$=10^{-4}$, \texttt{damping}$=0$ \\
+Evolved/actuated fold-hinge target range & $0^\circ$--$45^\circ$ (Section~\ref{sec:evo-learning} design variables) \\
+Locomotion rollout / settling & $7\,\mathrm{s}$ per individual; settled after $\le 300$ steps or once max joint speed $<10^{-3}\,\mathrm{rad\,or\,m/s}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Evolutionary Optimisation and Learning Process}
 \label{sec:evo-learning}
@@ -348,7 +388,27 @@ The external field applies the torque $\boldsymbol{\tau}=\mathbf{m}\times\mathbf
 \subsection{Genotype Representation and Design Variables}
 Each candidate is represented as a rooted directed graph. Nodes represent modules and edges represent port-to-port connections. A node can be rigid, mountain-fold or valley-fold. Port 1 is used for the parent connection, while ports 2 and 3 provide possible child connections. The full morphology contains between 2 and 40 modules after mirroring.
 
-The design variables include module type, port adjacency, module count, ordinary hinge angle, light-sensitive joint selection and light-detection hinge angle. The hinge angle controls the folded geometry, while the light angle controls the response produced when a selected joint receives light. Keeping these variables in one genotype allows the search to evaluate their interaction rather than optimising shape and response separately.
+The design variables include module type, port adjacency, module count, ordinary hinge angle, light-sensitive joint selection and light-detection hinge angle. The hinge angle controls the folded geometry, while the light angle controls the response produced when a selected joint receives light. Keeping these variables in one genotype allows the search to evaluate their interaction rather than optimising shape and response separately. Table~\ref{tab:design-variables} summarises the domain of each variable.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{The six design variables encoded by the Roblet genotype (Section~\ref{sec:evo-learning}). Module count, hinge angle and light-detection hinge angle are shared, evolvable parameters of the half-genotype (Section~\ref{sec:symmetry}); module type, port adjacency and light-sensitive joint selection are chosen per node.}
+\label{tab:design-variables}
+\begin{tabular}{@{}p{4.4cm}p{4.6cm}p{6cm}@{}}
+\toprule
+\textbf{Design variable} & \textbf{Domain} & \textbf{Role} \\
+\midrule
+Module type & \{rigid, mountain-fold, valley-fold\} (per node) & Determines whether a node folds, and in which direction, during 2D-to-3D assembly \\
+Port adjacency & Ports $\{1,2,3\}$ per node; port 1 = parent link, ports 2/3 = child connections & Defines the graph's connectivity structure \\
+Module count & $2$--$20$ nodes per evolved half-genotype ($2$--$40$ after mirroring) & Sets the size of the assembled robot \\
+Hinge angle $\theta$ & $0^{\circ}$--$45^{\circ}$, one shared value applied to every foldable node & Target fold angle reached during self-folding \\
+Light-sensitive joint selection & Boolean, per foldable node & Marks a node as carrying the light-reactive sensor used for the pheromone-response objectives \\
+Light-detection hinge angle $\theta_{light}$ & $0^{\circ}$--$45^{\circ}$, one shared value applied to every light-sensitive node & Target fold angle triggered on light detection; its value relative to $\theta$ sets the attractive-versus-repulsive response direction \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.75\linewidth]{genotype.png}
@@ -490,9 +550,9 @@ The implementation evaluates individuals in parallel operating-system processes.
 An evaluation cache hashes deterministic graph evaluations and avoids simulating unchanged individuals again, including carried-over survivors. The project summary reports approximately 1.2 minutes per generation with parallel evaluation. \missinginfo{Replace this approximate runtime with the measured runtime of the final run, and report the cache hit count or measured speed-up if available.}
 
 \subsection{Simulation and Training Configuration}
-The reported simulation runs used a population of 30 and five generations. Each locomotion rollout was configured for seven seconds. The magnetic-field sweep used 0.001, 0.008 and 0.05 T, and the fresh-run random seed was 42. The comparison figures therefore describe a short preliminary study rather than a full convergence study. Only one seed is documented in the available run configuration, so variation between independent runs has not yet been measured.
+The reported simulation runs used a population of 30 and five generations. Each locomotion rollout was configured for seven seconds. The magnetic-field sweep used 0.001, 0.008 and 0.025 T, and the fresh-run random seed was 42. The comparison figures therefore describe a short preliminary study rather than a full convergence study. Only one seed is documented in the available run configuration, so variation between independent runs has not yet been measured.
 
-The same simulation and objective definitions were used for attractive and repulsive response runs. A candidate had to pass the graph and collision checks before being evaluated; simulation instability was still recorded as a failed evaluation. \missinginfo{Confirm the exact number of completed generations for each reported output directory and add the final training hyperparameters if they differ from the current source configuration.}
+The same simulation and objective definitions were used for attractive and repulsive response runs. A candidate had to pass the graph and collision checks before being evaluated; simulation instability was still recorded as a failed evaluation. The number of generations completed differs between the reported output directories, since \texttt{N\_GENERATIONS} is a module-level configuration constant that was changed between runs rather than a fixed setting; Appendix~\ref{app:reproduce} lists every such configuration constant and where it is set.
 
 \subsection{Baseline Comparison Arm}
 The random baseline uses the same genotype, grammar masks, collision gate, simulation, objective calculation and NSGA-III survival procedure as the RL-assisted arm. Its only change is that action types and parameters are selected uniformly rather than by the trained PPO policy. This makes the comparison useful because any difference is more directly associated with learned variation choices, rather than with a different simulator or selection rule.
@@ -614,6 +674,37 @@ The entropy--velocity plot addresses AO-2 by comparing a measure of change durin
     \caption{Evolved morphology for phermone repulsive confirguration(a) with its yaw response(b) to a left-stimulus light}
     \label{fig:evolved-morphologies-repulsive}
 \end{figure}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Design-variable selections and objective values of the best evolved individual (final generation, rank 1 by scalarised fitness) in each pheromone-response configuration -- the run shown in Figs.~\ref{fig:evolved-morphologies-attractive} and \ref{fig:evolved-morphologies-repulsive} (\texttt{output/evolution\_run}, \texttt{output/evolution\_run\_repulsive}; generation 5; individuals \texttt{ind3} and \texttt{ind25} respectively). Values were extracted with \texttt{helper\_scripts/report\_best\_last\_generation.py}.}
+\label{tab:evolved-morphology-values}
+\begin{tabular}{@{}lp{3.6cm}p{3.6cm}@{}}
+\toprule
+& \textbf{Attractive} & \textbf{Repulsive} \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Design variables}} \\
+\addlinespace[2pt]
+Module count (post-mirror) & 12 & 18 \\
+Fold-type distribution (rigid / mountain / valley) & 1 / 9 / 2 & 5 / 6 / 7 \\
+Hinge angle $\theta$ & $19.7\textdegree$ & $11.5\textdegree$ \\
+Light-sensitive nodes & 6 & 4 \\
+Light-detection hinge angle $\theta_{light}$ & $35.2\textdegree$ & $21.8\textdegree$ \\
+\addlinespace[4pt]
+\multicolumn{3}{@{}l}{\textit{Objective values}} \\
+\addlinespace[2pt]
+$f_1$ -- Folded-gait velocity & $0.0253$ m/s & $0.0147$ m/s \\
+$f_2$ -- Entropy gain $\Delta H = \tilde H_{3D}-\tilde H_{2D}$ & $-0.0071$ & $0.0137$ \\
+$f_3$ -- Pheromone yaw response & $-18.4\textdegree$ & $-28.3\textdegree$ \\
+$f_4$ -- Pheromone speed response & $43.21^{\dagger}$ & $0.540$ \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.3em}
+{\footnotesize $^{\dagger}$This value is taken directly from the saved run data, but its magnitude is an artefact rather than a large genuine speed gain: $f_4$ is a relative change, $(v_F-v_b)/v_b$, and this individual's baseline velocity $v_b$ was close to zero, so a small absolute speed change under the light stimulus is amplified into a large ratio. It should not be read as a typical or representative $f_4$ value for the attractive configuration.}
+\end{table}
+
 The morphology figures provide end-to-end evidence for O-1 to O-3: graph designs were generated, converted into assemblies, folded and evaluated in the physics simulator. They also show how AO-1 was changed from surrogate fitness prediction to light-response objectives. \imageinference{The images appear to show bilateral structures with light-sensitive joints marked in green; the module counts, joint counts and any consistent attractive-versus-repulsive difference should be confirmed directly from the rendered individuals.} The two response modes should therefore be read as separate design problems, not as proof that one morphology can optimise both behaviours at once.
 
 \section{RL-Assisted NSGA-III versus Standard NSGA-III Comparison}
@@ -770,8 +861,211 @@ AI tools were used for text rephrasing and code generation. They were not used f
 \chapter{Extended Results Figures}
 The extended figures and diagnostic files are retained in the project output directories. \missinginfo{Insert the names or paths of any additional figures included in the submitted appendix.}
 
-\chapter{Repository and Code Structure}
-The repository is organised into three main areas. The \texttt{src/} directory contains the simulation, genotype grammar, objective functions, reinforcement-learning policy, multi-objective loop and plotting code. The \texttt{helper\_scripts/} directory contains MJCF generation and result-visualisation utilities. The \texttt{paper/} directory contains the paper draft, hyperparameter material and figure-generation resources. Input graph descriptions are stored in \texttt{graphs/}, generated models in \texttt{models/}, and run outputs in the \texttt{output/} and \texttt{old\_output/} directories. \missinginfo{Add the approved repository link or access instructions if the code will be made available to the examiner.}
+\chapter{Repository Structure and Reproduction Instructions}
+\label{app:reproduce}
+This appendix is written for a future student or examiner who wants to re-run the simulation and evolutionary optimisation environment described in Chapter~\ref{ch:methodology}, rather than only read about it. Section~\ref{app:layout} maps the repository; Section~\ref{app:install} lists the exact software versions used; Section~\ref{app:running} explains how to launch a run, resume one, and reproduce a single evolved individual in isolation; Section~\ref{app:algo} tabulates the PPO and NSGA-III algorithm configuration in full, as the aspects of the pipeline that are this project's own contribution; and Section~\ref{app:params} gives the complete physical parameter reference that Table~\ref{tab:sim-params} in Chapter~\ref{ch:methodology} summarises.
+
+\section{Repository Layout}
+\label{app:layout}
+The repository is organised into three main areas. The \texttt{src/} directory contains the simulation (\texttt{roblet\_simulator.py}), genotype grammar (\texttt{roblet\_grammar.py}), objective functions (\texttt{objectives\_api.py}, \texttt{entropy\_api.py}), reinforcement-learning policy (\texttt{rl\_api.py}), multi-objective loop (\texttt{moo\_api.py}) and plotting code (\texttt{plotting\_api.py}), together with the evolutionary-run entry point (\texttt{main.py}). The \texttt{helper\_scripts/} directory contains the MJCF/XML generator (\texttt{mjcf\_generator.py}) and result-visualisation utilities. The \texttt{paper/} directory contains the paper draft, hyperparameter material and figure-generation resources. Input graph descriptions are stored in \texttt{graphs/}, generated MJCF models in \texttt{models/}, and run outputs (checkpoints, logs, per-generation JSON and plots) in the \texttt{output/} and \texttt{old\_output/} directories. \missinginfo{Add the approved repository link or access instructions if the code will be made available to the examiner.}
+
+\section{Software Environment and Installation}
+\label{app:install}
+Dependency management is via \texttt{pyproject.toml} and its resolved lock file \texttt{uv.lock} (there is no separate \texttt{requirements.txt} or \texttt{environment.yml}); installation is therefore a single \texttt{uv sync} command run from the repository root, which creates a virtual environment matching Table~\ref{tab:software-versions} exactly. \texttt{gymnasium} and \texttt{stable-baselines3} are declared dependencies but are not used by the evolutionary loop itself; the PPO actor-critic is a hand-written Graph Transformer implementation in \texttt{src/rl\_api.py}, not an \texttt{stable\_baselines3} policy, and a future reader should not assume otherwise from the dependency list alone.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Exact software versions resolved by \texttt{uv.lock} at the time the reported results were produced.}
+\label{tab:software-versions}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Package} & \textbf{Version} \\
+\midrule
+Python & 3.14.3 \\
+mujoco & 3.10.0 \\
+numpy & 2.5.0 \\
+scipy & 1.18.0 \\
+networkx & 3.6.1 \\
+pymoo & 0.6.2 \\
+torch & 2.13.0 \\
+torch-geometric & 2.8.0.post1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Running the Evolutionary Pipeline}
+\label{app:running}
+The evolutionary loop is launched with \texttt{python src/main.py}; it takes no command-line arguments, and every run parameter is instead a module-level constant near the top of that file (Table~\ref{tab:run-config}). A student wishing to reproduce or extend a specific reported result must set these constants to match the configuration stated in Section~\ref{sec:evo-learning} (or in the specific output directory's own saved logs, since \texttt{N\_GENERATIONS} in particular has been changed between runs and the current source value is not necessarily the one used for every reported figure).
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Key run-configuration constants, all set at the top of \texttt{src/main.py}.}
+\label{tab:run-config}
+\begin{tabular}{@{}p{4.6cm}p{9cm}@{}}
+\toprule
+\textbf{Constant} & \textbf{Meaning} \\
+\midrule
+\texttt{POP\_SIZE} & Population size (30 for every reported run). \\
+\texttt{N\_GENERATIONS} & Number of generations; varies between reported runs -- check the target output directory's own logs rather than the current source default. \\
+\texttt{SIM\_SECONDS} & Locomotion rollout duration in seconds (7 for every reported run). \\
+\texttt{SEED} & Random seed for Sobol-sampling the initial population on a fresh run (42 for every reported run); a resumed run instead continues the RNG state stored in its checkpoint. \\
+\texttt{RL\_ASSISTED\_GENETIC\_OPERATIONS} & \texttt{True} for the PPO-guided arm, \texttt{False} for the uniform-random baseline arm (Section~\ref{sec:evo-learning}). \\
+\texttt{PHEROMONE\_RESPONSE\_TYPE} & \texttt{"attractive"} or \texttt{"repulsive"} (Section~\ref{sec:evo-learning}). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each generation proceeds as: population pool $\rightarrow$ \texttt{mjcf\_generator.build\_assembly} (per-individual MJCF/XML) $\rightarrow$ parallel headless MuJoCo evaluation in separate operating-system processes $\rightarrow$ \texttt{objectives\_api} (reads each individual's \texttt{stats.json}) $\rightarrow$ RL-assisted or random-baseline breeding $\rightarrow$ NSGA-III survival (\texttt{moo\_api}) $\rightarrow$ \texttt{plotting\_api} (plots and summary JSON) $\rightarrow$ checkpoint save. If a run is interrupted, re-issuing the same \texttt{python src/main.py} command resumes automatically from \texttt{output/.../checkpoint.pt} with no additional flag; the output directory name itself encodes the run configuration, e.g. \texttt{output/evolution\_run} (RL-assisted, attractive), \texttt{output/evolution\_run\_norl} (random baseline), with a \texttt{\_repulsive} suffix appended for the repulsive configuration.
+
+A single evolved individual can also be re-simulated in isolation, without running the full evolutionary loop, via the standalone command-line interface in \texttt{src/roblet\_simulator.py} (e.g. \texttt{-m} to point at a specific MJCF model, \texttt{-o} to set the output/stats path, \texttt{-{}-b\_values} to repeat the field sweep, \texttt{-{}-light\_tests} to run the pheromone reaction-primitive protocol, and \texttt{-{}-capture\_video}/\texttt{-{}-capture\_img}/\texttt{-{}-capture\_gif} to render the result). This is the most direct route for a future student who wants to inspect or validate one specific evolved morphology from a reported run.
+
+\section{Algorithm Hyperparameters}
+\label{app:algo}
+The PPO-guided actor-critic (Section~\ref{sec:rl-actor-critic}) and the NSGA-III environmental selection (Section~\ref{sec:evo-learning}) are the two algorithmic components original to this project; their exact configuration is tabulated here in full, since this level of detail would interrupt the narrative in Chapter~\ref{ch:methodology} but is needed to reproduce a run exactly.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{PPO actor-critic hyperparameters. The Graph Transformer encoder architecture is shared between the actor and critic (separate weights, no parameter sharing); the optimisation hyperparameters are \texttt{PPOTrainer}'s constructor defaults as used, unmodified, by every reported run.}
+\label{tab:rl-hyperparams-appendix}
+\begin{tabular}{@{}p{6.4cm}p{7.4cm}@{}}
+\toprule
+\multicolumn{2}{@{}l}{\textit{Graph Transformer encoder (actor \& critic, separate weights)}} \\
+\addlinespace[2pt]
+Node feature dimension & 9 \\
+Hidden dimension & 32 \\
+Transformer blocks & 2 \\
+Attention heads per block & 4 \\
+Attention type & TransformerConv \citep{shi2020masked}, gated residual \\
+Attention dropout & 0.1 \\
+Feed-forward expansion & $2\times$ hidden, GELU \\
+Cross-attention heads (actor, parent$_a$/parent$_b$ fusion) & 4 \\
+Graph readout & Global mean pooling \\
+\addlinespace[4pt]
+\multicolumn{2}{@{}l}{\textit{PPO optimisation}} \\
+\addlinespace[2pt]
+Optimizer & Adam (separate actor/critic instances) \\
+Learning rate & $3\times10^{-4}$ \\
+Clip ratio $\epsilon$ & 0.2 \\
+Entropy coefficient & Decays from $0.05$ to $0.02$, rate $0.995$ per update (Section~\ref{sec:rl-actor-critic}) \\
+Value loss coefficient & 0.5 \\
+PPO epochs per update & 4 \\
+Gradient clipping & None \\
+Advantage & $A = r - V(s)$, standardised per update \\
+Discount / GAE & Not applicable (single-step contextual bandit) \\
+\addlinespace[4pt]
+\multicolumn{2}{@{}l}{\textit{Rollout and reward}} \\
+\addlinespace[2pt]
+Update frequency & Once per generation \\
+Transitions per update & $n_{\text{offspring}}$ (= population size) \\
+Action space & 10 grammar-legal actions (Table~\ref{tab:action-space-appendix}) \\
+Reward & $r$ (Eq.~\ref{eq:reward-appendix}) \\
+Collision/instability penalty & $-10.0$ (Eq.~\ref{eq:reward-appendix}) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Per-node state representation. The state for one breeding decision is the ordered pair of parent half-genotypes $(G_a, G_b)$; each is a variable-size directed graph (2--20 nodes pre-mirror) encoded per node as a 9-dimensional feature vector before being passed through the Graph Transformer encoder.}
+\label{tab:state-space-appendix}
+\begin{tabular}{@{}cp{4cm}p{7cm}@{}}
+\toprule
+\textbf{Idx} & \textbf{Feature} & \textbf{Definition} \\
+\midrule
+1--3 & Module type (one-hot) & \{rigid, mountain-fold, valley-fold\} \\
+4 & Hinge angle & $\theta_v / 45^{\circ}$ \\
+5 & Depth & $\min(\text{depth}_v, 10) / 10$ \\
+6 & Free-port fraction & $|\text{free ports of } v| / 3$ \\
+7 & Is root & 1 if $v = m_1$, else 0 \\
+8 & Light-sensitive & 1 if $v$ carries the sensor, else 0 \\
+9 & Light hinge angle & $\theta_{light,v} / 45^{\circ}$ (0 if not light-sensitive) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Action space: 10 grammar-legal actions, hierarchically sampled from one actor forward pass (action type $\rightarrow$ target node(s) $\rightarrow$ any parameters), each stage masked to legal choices only (Section~\ref{sec:evo-learning}'s grammar). The first eight are single-graph mutations acting on $G_a$ only; the last two are two-graph crossover operators.}
+\label{tab:action-space-appendix}
+\begin{tabular}{@{}p{3.6cm}p{4.6cm}p{5.6cm}@{}}
+\toprule
+\textbf{Action} & \textbf{Target(s)} & \textbf{Parameters} \\
+\midrule
+Add Node & Growable port on a node in $G_a$ & Port, fold type, hinge angle (if foldable) \\
+Delete Node & Leaf node in $G_a$ & --- \\
+Prune Subtree & Non-root node in $G_a$ & --- \\
+Mutate Fold Type & Non-root node in $G_a$ & New fold type (categorical, 3-way) \\
+Mutate Hinge Angle & Foldable node in $G_a$ & New $\theta_i$ (Gaussian, broadcast to all foldable modules) \\
+Reconnect Port & Node in $G_a$ & Old port, new port (categorical, 3-way each) \\
+Toggle Light Sensor & Foldable node in $G_a$ & --- \\
+Mutate Light Hinge Angle & Light-sensitive node in $G_a$ & New $\theta_{light}$ (Gaussian, broadcast to all light-sensitive modules) \\
+Graft Subtree & Host node in $G_a$ + donor root in $G_b$ & --- \\
+Swap Subtrees & One node in $G_a$ + one node in $G_b$ & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The reward for one breeding decision is the mean per-child improvement in scalarised fitness over its own parent, plus a fixed penalty for any child whose simulated rollout is unstable or fails outright; if the collision gate cannot find a single geometrically valid child after $N_{\text{attempts}}$ retries, the decision is rewarded with the penalty alone and no child is simulated:
+\begin{align}
+r &= \frac{1}{|C|}\sum_{i \in C}\big(\Delta_i + \lambda \cdot \mathbf{1}[\text{success}_{c_i}=0]\big) \label{eq:reward-appendix} \\
+\Delta_i &= \mathrm{scalarize}(f_{c_i}) - \mathrm{scalarize}(f_{p_i}) \\
+\mathrm{scalarize}(f) &= \frac{1}{|\mathcal{A}|}\sum_{n \in \mathcal{A}} \hat f_n \\
+\hat f_n &=
+\begin{cases}
+(f_n - f_n^{-}) / (f_n^{+} - f_n^{-}) & n \text{ maximised} \\
+1 - (f_n - f_n^{-}) / (f_n^{+} - f_n^{-}) & n \text{ minimised}
+\end{cases} \notag
+\end{align}
+where $C$ is the set of children of this decision (one child for a mutation or Graft Subtree; two, each scored against its own parent $p_i$, for Swap Subtrees); $\lambda=-10.0$; $\mathrm{success}_{c_i}=0$ flags a rollout MuJoCo itself flagged unstable; $f_n^{-}, f_n^{+}$ are the running observed minimum/maximum of objective $n$ over every individual scored so far in the run (online min-max normalisation); and $\mathcal{A} \subseteq \{f_1,\ldots,f_4\}$ restricts the average to objectives that have shown nonzero variation so far.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{NSGA-III environmental selection configuration (Section~\ref{sec:evo-learning}).}
+\label{tab:nsga3-appendix}
+\begin{tabular}{@{}p{5.2cm}p{8.8cm}@{}}
+\toprule
+\textbf{Setting} & \textbf{Value} \\
+\midrule
+Objectives & 4 ($f_1$--$f_4$, Eq.~\ref{eq:objectives}); all converted to minimisation form for pymoo \\
+Reference directions & Das--Dennis, partition count auto-derived from population size (not fixed), so niching resolution scales with population \\
+Feasibility handling & Structural validity enforced by construction (grammar masking, mirroring, collision gate); simulation success/failure recorded as a separate infeasibility flag \\
+Elitism & Best individuals found so far retained explicitly across generations \\
+Initial population & Sobol quasi-random sequence, scrambled, seeded from \texttt{SEED} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Full Physical Simulation Parameter Reference}
+\label{app:params}
+Table~\ref{tab:parts-appendix} gives the mass and bounding-box dimensions of each of the six moulded part types, as exported from the Fusion 360 CAD assembly; these are the source values converted into the per-part masses used by the MuJoCo digital twin (Section~\ref{sec:digital-twin}). Only mass and inertia are read from this CAD export at simulation-build time -- the body-local centre-of-mass offset used to position each part in the MJCF is a separately fitted value consistent with the CAD assembly, not a value read directly out of the export file, and a future reader extending this pipeline to a new part should not assume otherwise.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Mass and bounding-box dimensions of each moulded part type, from the Fusion 360 CAD mass-property export. ``Fold-hinge base/link'' are the two halves of a foldable module's hinge; ``Rigid body'' is the non-foldable module shell; the three connector variants correspond to the three port types.}
+\label{tab:parts-appendix}
+\begin{tabular}{@{}lp{2cm}p{5.4cm}@{}}
+\toprule
+\textbf{Part (source mesh)} & \textbf{Mass} & \textbf{Bounding box (L $\times$ W $\times$ H)} \\
+\midrule
+Fold-hinge base (\texttt{BodyFoldedSide1.stl}) & 105 mg & $10.58 \times 10.33 \times 10.94$ mm \\
+Fold-hinge link (\texttt{BodyFoldedSide2.stl}) & 91 mg & $9.28 \times 8.93 \times 10.73$ mm \\
+Rigid body (\texttt{Body.stl}) & 196 mg & $11.62 \times 11.39 \times 10.94$ mm \\
+Connector A (\texttt{SGA.stl}) & 41 mg & $6.99 \times 5.24 \times 6.50$ mm \\
+Connector B (\texttt{SGB.stl}) & 43 mg & $6.31 \times 6.65 \times 6.26$ mm \\
+Connector C (\texttt{SGX.stl}) & 67 mg & $6.70 \times 6.65 \times 6.56$ mm \\
+Magnet (\texttt{Magnet.stl}) & 47.1 mg & $2\,\mathrm{mm}$ diameter $\times\ 2\,\mathrm{mm}$ height (cylinder) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The remaining geometric constants needed to reassemble these parts into the MJCF model are: inter-module spacing along the parent-child axis, $8.5\,\mathrm{mm}$; fold-hinge $z$-offsets of $0.5\,\mathrm{mm}$ (valley) and $-5.5\,\mathrm{mm}$ (mountain) from the module origin; and connector-mount $z$-offsets of $1.03\,\mathrm{mm}$ (port 1), $1.10\,\mathrm{mm}$ (ports 2/3, foldable module) and $1.47\,\mathrm{mm}$ (ports 2/3, rigid module). The genotype's own design-variable bounds (Section~\ref{sec:evo-learning}) are: module count 2--20 per evolved half-genotype (2--40 after mirroring), and hinge/light-hinge angle 0\textdegree--45\textdegree, both enforced by clipping during mutation and by the sampling range used to construct the initial population.
 
 \end{document}
 % ----------------------------------------------------------------

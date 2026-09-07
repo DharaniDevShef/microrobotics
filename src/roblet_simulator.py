@@ -413,6 +413,26 @@ def find_module_labels(model):
     return module_labels
 
 
+def _recolor_light_sensitive_module(model, rgba):
+    """Recolors the bodyBase/bodyLink geoms of whichever module carries the
+    light-sensitive joint (the one wearing a light_sensor_joint_* site -
+    see mjcf_generator.py's is_light_sensitive) to `rgba`, so it stands out
+    from the rest of the (uniformly blue) assembly in the viewer/
+    screenshots/video. A no-op if this model has no such module (e.g. a
+    genotype whose light-sensitive design variable didn't select any
+    foldable module)."""
+    module_ids = set()
+    for site_id in range(model.nsite):
+        site_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_SITE, site_id)
+        if site_name and site_name.startswith("light_sensor_joint_"):
+            module_ids.add(site_name[len("light_sensor_joint_"):])
+    for module_id in module_ids:
+        for geom_name in (f"geom_bodyBase_{module_id}", f"geom_bodyLink_{module_id}"):
+            geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
+            if geom_id >= 0:
+                model.geom_rgba[geom_id] = rgba
+
+
 def _module_positions(data, module_labels):
     """{module_name: world position (m)} for every top-level module body,
     read from `data.xpos` as of whatever pose `data` currently holds (the
@@ -1409,6 +1429,7 @@ def run_headless(
     capture_img=False, capture_gif=False, media_dir="../output", gif_fps=15,
     model=None, target_angles=None, light_target_angles=None,
     include_light_tests=False, compute_shape_entropy_3d=False,
+    light_module_rgba=None,
 ):
     """Runs one closed-loop simulation to completion with no viewer and no
     real-time pacing, so it steps as fast as the CPU allows.
@@ -1463,6 +1484,15 @@ def run_headless(
     except for their avg_velocity, so they shouldn't pay for a settle pass
     whose entropy result would never be read - only its final re-run of
     the winning B passes this as True.
+
+    light_module_rgba (default None = leave the normal body-blue color
+    alone) recolors whichever module carries the light-sensitive joint -
+    see _recolor_light_sensitive_module() - purely cosmetic, for spotting
+    that module in a screenshot/GIF; has no effect on the physics. Applied
+    here regardless of whether `model` was just loaded or passed in by the
+    caller - run_headless_b_sweep() instead recolors its own shared
+    `model` once, up front, rather than passing this into every
+    per-candidate run_headless() call.
     """
     parent_body_magnet_map.clear()
     torque_history.clear()
@@ -1473,6 +1503,8 @@ def run_headless(
 
     if model is None:
         model = mujoco.MjModel.from_xml_path(model_path)
+    if light_module_rgba is not None:
+        _recolor_light_sensitive_module(model, light_module_rgba)
     data = mujoco.MjData(model)
     model.opt.timestep = 0.01
 
@@ -1738,7 +1770,7 @@ def run_headless(
 def run_headless_b_sweep(
     model_path, stats_output_path, b_values=B_SWEEP_VALUES, max_sim_time=None,
     capture_img=False, capture_gif=False, media_dir="../output", gif_fps=15,
-    include_light_tests=True,
+    include_light_tests=True, light_module_rgba=None,
 ):
     """Runs one fast (no media) run_headless() rollout per candidate B in
     b_values, picks the one with the highest average velocity among those
@@ -1771,6 +1803,13 @@ def run_headless_b_sweep(
     re-run happens, B_INTENSITY is already set to winner_b, so
     run_headless_light_tests() runs at the actual winning field strength,
     not the module-level default.
+
+    light_module_rgba (default None = leave the normal body-blue color
+    alone): see run_headless()'s docstring. Applied ONCE here, right after
+    this function's own model load, since every candidate B AND the final
+    winner re-run below all share this same compiled `model` object -
+    geom_rgba is a static model property, unaffected by B_INTENSITY/
+    stepping, so one recolor covers the whole sweep.
     """
     global B_INTENSITY
     original_b = B_INTENSITY
@@ -1781,6 +1820,8 @@ def run_headless_b_sweep(
     # once here and hand this same `model`/`target_angles` into every
     # run_headless call instead of re-parsing the MJCF 4 times over.
     model = mujoco.MjModel.from_xml_path(model_path)
+    if light_module_rgba is not None:
+        _recolor_light_sensitive_module(model, light_module_rgba)
     target_angles = read_joint_target_angles_from_xml(model_path)
     light_target_angles = read_light_target_angles_from_xml(model_path)
 
@@ -1864,13 +1905,16 @@ def run_headless_b_sweep(
     return final_result
 
 
-def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
+def run_with_viewer(model_path, stats_output_path, max_sim_time=None, light_module_rgba=None):
     """Same closed-loop simulation as run_headless, but with the live passive
     viewer and real-time pacing so you can watch it run.
 
     max_sim_time is in seconds of simulated time (data.time), same as
     run_headless - once reached, magnet actuation stops (same as reaching a
     wall) but the viewer stays open so you can still inspect the final pose.
+
+    light_module_rgba (default None = leave the normal body-blue color
+    alone): see run_headless()'s docstring.
     """
     if not os.path.exists(model_path):
         logger.error("Could not find '%s'", model_path)
@@ -1878,6 +1922,8 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
     logger.info("Loading model: %s...", model_path)
 
     model = mujoco.MjModel.from_xml_path(model_path)
+    if light_module_rgba is not None:
+        _recolor_light_sensitive_module(model, light_module_rgba)
     data = mujoco.MjData(model)
 
     target_angles = read_joint_target_angles_from_xml(model_path)
@@ -2040,7 +2086,7 @@ def run_with_viewer(model_path, stats_output_path, max_sim_time=None):
 
 
 def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TEST_DEFAULT_DURATION,
-                     capture_video=False, media_dir="../output", video_fps=30):
+                     capture_video=False, media_dir="../output", video_fps=30, light_module_rgba=None):
     """Light-response test: same live-viewer setup as run_with_viewer (load
     model, register the magnetic-field callback, real-time-paced mj_step
     loop, per-second logging), but instead of one continuous free-roam gait
@@ -2134,6 +2180,12 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
     (e.g. no GPU/EGL context available) only costs the video, exactly like
     run_headless()'s screenshot/GIF guard -- the physics and printed summary
     below are unaffected.
+
+    light_module_rgba (default None = leave the normal body-blue color
+    alone): see run_headless()'s docstring - handy here specifically,
+    since this is the test that's actually exercising the light-sensitive
+    joint, so knowing which module that is at a glance in the viewer/video
+    is often the point of watching this run.
     """
     if not os.path.exists(model_path):
         logger.error("Could not find '%s'", model_path)
@@ -2141,6 +2193,8 @@ def run_light_tests(model_path, stats_output_path, light_test_duration=LIGHT_TES
     logger.info("Loading model: %s...", model_path)
 
     model = mujoco.MjModel.from_xml_path(model_path)
+    if light_module_rgba is not None:
+        _recolor_light_sensitive_module(model, light_module_rgba)
     data = mujoco.MjData(model)
     model.opt.timestep = 0.01
 
@@ -2624,6 +2678,13 @@ if __name__ == "__main__":
         help="With --light_tests --capture_video, output frames per second (default: 30).",
     )
     parser.add_argument(
+        "--light_module_color", type=str, default=None,
+        help="Comma-separated RGBA (e.g. '0,1,0,1') to recolor whichever module "
+             "carries the light-sensitive joint, so it's easy to spot against the "
+             "rest of the (uniformly blue) assembly in the viewer/screenshots/video. "
+             "Default: leave its normal body color alone.",
+    )
+    parser.add_argument(
         "--log-file", type=str, default=None,
         help="Optional log file path to write simulator logs to.",
     )
@@ -2650,11 +2711,17 @@ if __name__ == "__main__":
         handlers=handlers,
     )
 
+    light_module_rgba = (
+        tuple(float(v) for v in args.light_module_color.split(","))
+        if args.light_module_color else None
+    )
+
     if args.light_tests:
         run_light_tests(
             args.m, args.o, light_test_duration=args.light_test_duration,
             capture_video=args.capture_video, video_fps=args.video_fps,
             media_dir=os.path.dirname(args.o) or ".",
+            light_module_rgba=light_module_rgba,
         )
     elif args.headless:
         if args.sweep_b:
@@ -2666,12 +2733,14 @@ if __name__ == "__main__":
                 args.m, args.o, b_values=b_values, max_sim_time=args.max_sim_time,
                 capture_img=args.capture_img, capture_gif=args.capture_gif,
                 media_dir=os.path.dirname(args.o) or ".",
+                light_module_rgba=light_module_rgba,
             )
         else:
             run_headless(
                 args.m, args.o, max_sim_time=args.max_sim_time,
                 capture_img=args.capture_img, capture_gif=args.capture_gif,
                 media_dir=os.path.dirname(args.o) or ".",
+                light_module_rgba=light_module_rgba,
             )
     else:
-        run_with_viewer(args.m, args.o, max_sim_time=args.max_sim_time)
+        run_with_viewer(args.m, args.o, max_sim_time=args.max_sim_time, light_module_rgba=light_module_rgba)

@@ -31,9 +31,15 @@ import sys
 
 import numpy as np
 from PIL import Image
+from scipy import ndimage
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+# Same typography as plotting_api.py's _apply_bright_style (Arial,
+# FONT_SIZE_LEGEND=11 for the "Gen N" column labels) so this figure matches
+# the rest of the run's plots instead of falling back to matplotlib defaults.
+plt.rcParams.update({"font.family": "Arial"})
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SRC_DIR = os.path.join(ROOT_DIR, "src")
@@ -47,7 +53,7 @@ _ROBLET_SIMULATOR = os.path.join(_SRC_DIR, "roblet_simulator.py")
 THUMB_SIZE = 320  # px, square canvas each screenshot is letterboxed into
 DPI = 600
 
-N_GENERATIONS = 2  # generation checkpoints per mode (first/mid/.../last)
+N_GENERATIONS = 3  # generation checkpoints per mode (first/mid/.../last)
 N_CANDIDATES_PER_GEN = 4  # individuals shown per generation column, equally
                           # spaced by scalarized fitness rank (best to worst)
                           # rather than just the top N - see _select_panel.
@@ -174,18 +180,55 @@ def _generate_screenshots(jobs, max_workers=SCREENSHOT_GEN_WORKERS, timeout=SCRE
                     pass
 
 
-def _subject_mask(arr, diff_threshold=18):
+def _floor_tone_range(arr, margin_frac=0.05):
+    """This image's own floor brightness range, sampled from its four
+    corners - always background, since roblet_simulator's screenshot
+    camera is a fixed top-down view centered on the origin (see
+    _offscreen_camera), so a picked individual is always framed near the
+    middle, never at a corner. Read straight from each image rather than
+    a hardcoded constant so a lighting change (e.g. the luminous-sheet
+    light setup) can't silently break this."""
+    h, w = arr.shape[:2]
+    my, mx = max(1, int(h * margin_frac)), max(1, int(w * margin_frac))
+    corners = np.concatenate([
+        arr[:my, :mx].reshape(-1, 3), arr[:my, -mx:].reshape(-1, 3),
+        arr[-my:, :mx].reshape(-1, 3), arr[-my:, -mx:].reshape(-1, 3),
+    ])
+    gray = corners.mean(axis=1)
+    return float(gray.min()), float(gray.max())
+
+
+def _subject_mask(arr, chroma_threshold=6, floor_pad=15):
     """Boolean mask (same h,w as `arr`) marking pixels that belong to the
-    robot rather than the background. A pixel counts as "subject" if it
-    differs from its own row's median color by more than `diff_threshold`
-    (the background is a smooth vertical gradient, so a per-row median
-    tracks it at every height)."""
-    row_median = np.median(arr, axis=1, keepdims=True)
-    diff = np.linalg.norm(arr - row_median, axis=2)
-    return diff > diff_threshold
+    robot rather than the background. roblet_simulator's floor is MuJoCo's
+    "grid" checker material - two neutral (R==G==B) grays confined to a
+    narrow, fixed brightness band (see _floor_tone_range) - while the
+    robot is either clearly chromatic (the blue body) or an achromatic
+    connector/magnet/outline color that's still distinctly BRIGHTER
+    (white connector caps) or DARKER (black connectors, seams) than that
+    band. A pixel counts as "subject" if either test fires: chroma
+    (max-min channel spread) catches the blue body directly, while the
+    brightness test catches the achromatic connector colors chroma alone
+    misses - a plain chroma-only test was leaving those connector parts
+    transparent (showing through to the page's white background,
+    i.e. looking "whited out") whenever they weren't fully enclosed by
+    blue pixels. binary_fill_holes/closing then absorb small remaining
+    gaps WITHOUT a final binary_dilation - that used to grow the mask
+    outward by a couple of px into genuine floor pixels, leaving a pale
+    halo/rim around every silhouette."""
+    channel_max = arr.max(axis=2)
+    channel_min = arr.min(axis=2)
+    chromatic = (channel_max - channel_min) > chroma_threshold
+    floor_lo, floor_hi = _floor_tone_range(arr)
+    brightness = arr.mean(axis=2)
+    off_floor_tone = (brightness < floor_lo - floor_pad) | (brightness > floor_hi + floor_pad)
+    candidate = chromatic | off_floor_tone
+    filled = ndimage.binary_fill_holes(candidate)
+    closed = ndimage.binary_closing(filled, structure=np.ones((5, 5)))
+    return ndimage.binary_fill_holes(closed)
 
 
-def _content_half_extent(path, diff_threshold=18):
+def _content_half_extent(path, chroma_threshold=6):
     """How far (in px, from the image center) the robot's silhouette
     reaches on its widest/tallest side - a MEASUREMENT only, used to size
     one shared crop window, never to crop this image individually (that
@@ -193,7 +236,7 @@ def _content_half_extent(path, diff_threshold=18):
     (0, 0) if nothing clears the `_subject_mask` bar."""
     arr = np.asarray(Image.open(path).convert("RGB"), dtype=np.float32)
     h, w = arr.shape[:2]
-    mask = _subject_mask(arr, diff_threshold)
+    mask = _subject_mask(arr, chroma_threshold)
     ys, xs = np.where(mask)
     if len(ys) == 0:
         return 0.0, 0.0
@@ -203,7 +246,7 @@ def _content_half_extent(path, diff_threshold=18):
     return half_w, half_h
 
 
-def _shared_crop_side(paths, pad_frac=0.15):
+def _shared_crop_side(paths, pad_frac=0.08):
     """One crop-window side length, shared by every thumbnail in the
     figure: big enough to fit the LARGEST robot silhouette among `paths`
     (plus padding), clamped to the source screenshots' own size. Using
@@ -220,18 +263,18 @@ def _shared_crop_side(paths, pad_frac=0.15):
     return max(1, min(side, img_w, img_h))
 
 
-def _to_square_thumb(path, crop_side, size=THUMB_SIZE, diff_threshold=18):
+def _to_square_thumb(path, crop_side, size=THUMB_SIZE, chroma_threshold=6):
     """Crops a `crop_side`x`crop_side` window centered on the image, then
     resizes to `size`x`size`. `crop_side` is the SAME value for every
     thumbnail in the figure (see _shared_crop_side) - a fixed crop window
     plus a fixed scale factor, so a physically bigger robot still looks
     bigger in the grid instead of every thumbnail being zoomed to fill
-    its own frame. The simulator's gradient background is made
-    transparent (via `_subject_mask`) so each thumbnail shows only the
-    robot on the figure's plain white background."""
+    its own frame. The simulator's checkerboard floor is made transparent
+    (via `_subject_mask`) so each thumbnail shows only the robot on the
+    figure's plain white background."""
     img = Image.open(path).convert("RGB")
     arr = np.asarray(img, dtype=np.float32)
-    mask = _subject_mask(arr, diff_threshold)
+    mask = _subject_mask(arr, chroma_threshold)
     w, h = img.size
     side = min(crop_side, w, h)
     left = (w - side) // 2
@@ -260,8 +303,18 @@ def _draw_mode_panel(fig, gs_slice, selection, gen_checkpoints, mode_label, n_ro
                 ax.imshow(thumb)
             else:
                 ax.set_facecolor("#f2f2f2")
-        axes[-1, col].set_xlabel(f"Gen {gen_idx}", fontsize=11, labelpad=6)
-    axes[0, n_cols // 2].set_title(mode_label, fontsize=16, fontweight="bold", pad=14)
+        axes[-1, col].set_xlabel(f"Gen {gen_idx}", fontsize=20, labelpad=6)
+
+    # Centered over the WHOLE panel (gs_slice's own bbox), not just above
+    # whichever column happens to sit at n_cols // 2 - axes[0, n_cols // 2]
+    # is only the true center for an odd n_cols; for n_cols=2 (this
+    # module's default) it sat above the right-hand column instead of
+    # between the two, which is what made "Attractive"/"Repelling" look
+    # off-center.
+    panel_pos = gs_slice.get_position(fig)
+    x_center = (panel_pos.x0 + panel_pos.x1) / 2
+    fig.text(x_center, panel_pos.y1 + 0.015, mode_label, ha="center", va="bottom",
+              fontsize=20, fontweight="bold")
 
 
 def build_morphology_grid(output_dir, attractive_dir="evolution_run",
@@ -317,8 +370,8 @@ def build_morphology_grid(output_dir, attractive_dir="evolution_run",
         # figure's dashed center line.
         fig.add_artist(plt.Line2D([0.5, 0.5], [0.03, 0.94], transform=fig.transFigure,
                                    color="#333333", linestyle="--", linewidth=1.2))
-    fig.suptitle("Evolved Morphology Across Generations by Pheromone Response Mode",
-                 fontsize=15, fontweight="bold", y=0.99)
+    fig.suptitle("Evolved Morphology Across Generations",
+                 fontsize=24, fontweight="bold", y=0.99)
 
     out_path = out_path or os.path.join(output_dir, "morphology_grid.png")
     fig.savefig(out_path, dpi=DPI, bbox_inches="tight")

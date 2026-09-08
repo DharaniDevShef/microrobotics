@@ -94,7 +94,10 @@ def ensure_node_positions(G):
     return G
 
 
-def draw_graph_to_figure(graph_or_data, figure=None, title="Roblet Morphology Graph (Directed)", aspect_equal=True):
+def draw_graph_to_figure(graph_or_data, figure=None, ax=None, title="Roblet Morphology Graph (Directed)", aspect_equal=True):
+    """`ax`, if given, is drawn into directly instead of adding a fresh
+    full-figure subplot -- lets a caller lay several graphs out as panels
+    of one shared multi-axes figure (e.g. a parent/child mutation grid)."""
     if isinstance(graph_or_data, str):
         G = load_graph_json(graph_or_data)
     elif isinstance(graph_or_data, dict):
@@ -107,10 +110,12 @@ def draw_graph_to_figure(graph_or_data, figure=None, title="Roblet Morphology Gr
     relabel_map = {node: str(node).split("_")[-1] for node in G.nodes()}
     G = nx.relabel_nodes(G, relabel_map)
 
-    if figure is None:
+    if figure is None and ax is None:
         figure = plt.figure(figsize=(9, 9))
-
-    ax = figure.subplots()
+    if ax is None:
+        ax = figure.subplots()
+    elif figure is None:
+        figure = ax.figure
     pos = {
         node_id: attrs.get("pos", attrs.get("_pos", (0.0, 0.0)))
         for node_id, attrs in G.nodes(data=True)

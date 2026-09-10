@@ -5,5 +5,8 @@
 *.log
 /old_output
 /*output*
-/paper
+/paper/*.tex
 /block*
+Dissertation_report.*
+!Dissertation_report.pdf
+!Dissertation_report.tex

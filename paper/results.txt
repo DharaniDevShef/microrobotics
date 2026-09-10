@@ -1,0 +1,37 @@
+C:\Users\elp25ds\workspace\microrobotics\output\evolution_run
+  last generation: 299
+  rank: 25
+  candidate: ind10
+  fitness: 0.303079
+  design variables:
+    module count (post-mirror): 13
+    fold-type distribution (rigid/mountain/valley): 1/12/0
+    hinge angle: 7.66
+    light-sensitive nodes: 8
+    light-detection hinge angle: 43.51
+  objective values:
+    f1 folded-gait velocity: 0.031101 m/s
+    f2 entropy gain (H3D - H2D): -0.002909
+    f3 pheromone yaw response: 179.331800 deg
+    f4 pheromone speed response: 21.649037
+  xml: C:\Users\elp25ds\workspace\microrobotics\output\evolution_run\generation_299\ind10_assembly.xml
+  graph: C:\Users\elp25ds\workspace\microrobotics\output\evolution_run\generation_299\ind10_graph.json
+
+  C:\Users\elp25ds\workspace\microrobotics\output\evolution_run_repulsive
+  generation: 100
+  rank: 12
+  candidate: ind17
+  fitness: 0.514673
+  design variables:
+    module count (post-mirror): 38
+    fold-type distribution (rigid/mountain/valley): 5/23/10
+    hinge angle: 31.09
+    light-sensitive nodes: 19
+    light-detection hinge angle: 20.85
+  objective values:
+    f1 folded-gait velocity: 0.029161 m/s
+    f2 entropy gain (H3D - H2D): 0.230664
+    f3 pheromone yaw response: -105.138000 deg
+    f4 pheromone speed response: 0.440129
+  xml: C:\Users\elp25ds\workspace\microrobotics\output\evolution_run_repulsive\generation_100\ind17_assembly.xml
+  graph: C:\Users\elp25ds\workspace\microrobotics\output\evolution_run_repulsive\generation_100\ind17_graph.json

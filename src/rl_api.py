@@ -1,50 +1,16 @@
 """
-RL API - Graph Transformer (multi-head self-attention over graph
-neighborhoods, via torch_geometric's TransformerConv) Actor-Critic policy
-that selects and parameterizes ALL roblet_grammar actions - both mutation
-(roblet_grammar.MUTATION_ACTIONS, single-graph) AND crossover
-(roblet_grammar.CROSSOVER_ACTIONS, two-graph) - from one unified,
-grammar-masked action head. Trained with single-step (contextual-bandit)
-PPO: state = (parent_a, parent_b), action = one grammar op (+ its
-parameters), reward = scalarized objective improvement of the resulting
-MuJoCo-evaluated child/children vs. their parent(s) (computed in
-moo_api.py after evaluate_population()/objectives_api run). Since each action is
-evaluated and scored independently in one shot, the episode length is
-always 1 - GAE/discounting reduce to advantage = reward - V(s), which is
-what PPOTrainer.update() below computes.
+RL API - Graph Transformer Actor-Critic policy that selects and
+parameterizes all roblet_grammar actions, both mutation (single-graph) and
+crossover (two-graph), from one unified grammar-masked action head.
+Trained with single-step (contextual-bandit) PPO: state = (parent_a,
+parent_b), action = one grammar op (+ its parameters), reward = scalarized
+objective improvement of the resulting child(ren) vs. their parent(s).
 
-How crossover is handled: mutation only ever needs to look at one graph
-(parent_a), but crossover needs to compare TWO graphs to pick a node in
-each. So the actor encodes parent_a AND parent_b with its own Graph
-Transformer (same weights, run twice), fuses the two pooled embeddings
-via cross-attention for the top-level "which action" decision, and adds
-one extra head (`partner_node_head`) that scores parent_b's nodes when
-the sampled action is GRAFT_SUBTREE (donor root) or SWAP_SUBTREES
-(swap partner). moo_api.py no longer picks crossover itself - it just
-calls PPOTrainer.select_action(parent_a, parent_b) and applies whatever
-the policy decided, exactly like it does for mutation.
-
-Also note: PPO here is a small hand-written actor-critic trained directly
-with torch + torch_geometric, not stable_baselines3/sb3-contrib. SB3's
-Discrete/MultiDiscrete action spaces assume a fixed-size, gym.Env-shaped
-problem; our action space is a variable-size, per-node, grammar-masked
-hierarchical choice over a PAIR of graphs of changing size, which is
-naturally expressed as a direct policy-gradient loop (this is also the
-standard formulation in graph/NAS-controller RL literature) rather than
-forced into a padded Box/Discrete gym.Env just to reuse SB3's PPO class.
-
-Actor and critic SHARE one Graph Transformer encoder (own separate
-heads) and are trained through one combined loss/optimizer - see
-_GraphTransformerEncoder's and PPOTrainer's docstrings. entropy_coef also
-decays every update() call (PPOTrainer._current_entropy_coef) instead of
-staying fixed, both changes aimed at the same sample-starved regime: at
-only pop_size transitions per PPO update, a shared trunk lets the encoder
-learn from both losses at once, and a higher-then-decaying entropy bonus
-keeps exploration alive long enough that a low-sample-count run of bad
-luck on one action type (crossover collapsing within ~10 generations, in
-both pheromone-response arms, was the concrete failure this was written
-against) doesn't permanently zero out its sampling probability before
-enough evidence accumulates to reassess it.
+Actor and critic share one Graph Transformer encoder and are trained
+through one combined loss/optimizer. For crossover, the actor encodes
+both parents and fuses their pooled embeddings via cross-attention, with
+an extra `partner_node_head` scoring parent_b's nodes (donor/swap
+partner).
 """
 
 import random
@@ -68,12 +34,10 @@ NEG_INF = -1e9
 # ---------------------------------------------------------------------
 
 def graph_to_pyg_data(G):
-    """nx.DiGraph -> torch_geometric.data.Data, with node feature layout:
-    [one-hot module_type (3), hinge_angle/45, depth/10 (clipped), free-port
-    fraction, is_root, light_sensitive (Design Variable 5), light_hinge_angle
-    /45 (Design Variable 6 - hinge_angle_on_light_detection, 0.0 when not
-    light_sensitive)]. Edges are added in both directions so message
-    passing isn't limited to the parent->child tree orientation."""
+    """nx.DiGraph -> torch_geometric.data.Data. Node features: [one-hot
+    module_type (3), hinge_angle/45, depth/10 (clipped), free-port fraction,
+    is_root, light_sensitive, light_hinge_angle/45]. Edges added in both
+    directions so message passing isn't limited to parent->child."""
     node_ids = list(G.nodes)
     index_of = {n: i for i, n in enumerate(node_ids)}
 
@@ -103,8 +67,8 @@ def graph_to_pyg_data(G):
 
 
 def _mutation_masks(G):
-    """(n_nodes, n_mutation_actions) bool tensor - which of
-    roblet_grammar.MUTATION_ACTIONS is legal on each node of G."""
+    """(n_nodes, n_mutation_actions) bool tensor of which MUTATION_ACTIONS
+    is legal on each node of G."""
     node_ids = list(G.nodes)
     mask = torch.zeros((len(node_ids), len(rg.MUTATION_ACTIONS)), dtype=torch.bool)
     for i, n in enumerate(node_ids):
@@ -123,9 +87,8 @@ def _swap_eligible_mask(G):
 
 
 def _action_type_mask(mutation_masks, graft_host_mask, swap_a_mask, swap_b_mask, distinct_parents):
-    """(len(roblet_grammar.ALL_ACTIONS),) bool tensor for the top-level
-    action-type choice. Crossover entries are only ever True when
-    parent_a and parent_b are actually two different graphs."""
+    """Bool tensor for the top-level action-type choice; crossover entries
+    are only True when parent_a and parent_b are distinct graphs."""
     mask = torch.zeros(len(rg.ALL_ACTIONS), dtype=torch.bool)
     mask[: len(rg.MUTATION_ACTIONS)] = mutation_masks.any(dim=0)
     graft_idx = rg.ALL_ACTIONS.index(rg.Action.GRAFT_SUBTREE)
@@ -136,10 +99,8 @@ def _action_type_mask(mutation_masks, graft_host_mask, swap_a_mask, swap_b_mask,
 
 
 def _port_mask(G, node_id):
-    """Which ports are legal as an ADD_NODE/RECONNECT_PORT target - i.e.
-    growable_ports(), not free_ports(): the root's port 3 is always
-    structurally free but reserved for the auto-mirrored symmetric half
-    (see roblet_grammar.growable_ports / symmetry.py)."""
+    """Legal ports for an ADD_NODE/RECONNECT_PORT target (growable_ports(),
+    not free_ports() - excludes the root's mirror-reserved port 3)."""
     mask = torch.zeros(3, dtype=torch.bool)
     for p in rg.growable_ports(G, node_id):
         mask[p - 1] = True
@@ -160,9 +121,8 @@ def _hinge_angle_dist(mu_raw, log_std_raw):
 
 
 def has_any_legal_action(G_a, G_b):
-    """Whether act() has anything at all it could legally do for this pair
-    - moo_api.py checks this before calling select_action() so it can fall
-    back to a no-op copy in the (very rare) case nothing is legal."""
+    """Whether act() has anything legal it could do for this pair; callers
+    should check this before calling select_action()."""
     distinct = G_a is not G_b
     if any(rg.any_node_allows(G_a, a) for a in rg.MUTATION_ACTIONS):
         return True
@@ -180,11 +140,8 @@ def has_any_legal_action(G_a, G_b):
 
 class GraphTransformerBlock(nn.Module):
     """One Graph Transformer block: multi-head self-attention over graph
-    neighborhoods (Shi et al. 2021's `TransformerConv` - dot-product
-    Q/K/V attention plus a learned gated residual, the standard "Graph
-    Transformer" conv) followed by a position-wise feed-forward
-    sublayer, each wrapped in a residual connection + LayerNorm - the
-    graph analogue of a plain Transformer encoder block."""
+    neighborhoods (TransformerConv) followed by a feed-forward sublayer,
+    each wrapped in a residual connection + LayerNorm."""
 
     def __init__(self, dim, heads=4, dropout=0.1):
         super().__init__()
@@ -202,18 +159,10 @@ class GraphTransformerBlock(nn.Module):
 
 
 class _GraphTransformerEncoder(nn.Module):
-    """Shared building block for both ActorNet and CriticNet - projects
-    node features to `hidden` dims, then runs them through a stack of
-    GraphTransformerBlocks. ONE instance is constructed by PPOTrainer and
-    passed into BOTH ActorNet and CriticNet (see their constructors) -
-    genuinely shared weights, not two independently-trained copies. With
-    only pop_size transitions per PPO update, letting the encoder learn
-    from both the policy AND value losses each update - rather than each
-    net having to learn its own graph representation from scratch off the
-    same tiny sample count - is meaningfully more sample-efficient. See
-    PPOTrainer.__init__ for how the combined optimizer avoids either
-    double-applying or dropping either loss's gradient contribution to
-    these shared weights."""
+    """Shared building block for ActorNet and CriticNet - projects node
+    features to `hidden` dims, then runs them through a stack of
+    GraphTransformerBlocks. One instance is constructed by PPOTrainer and
+    passed into both nets, so the weights are genuinely shared."""
 
     def __init__(self, in_dim, hidden, n_blocks, heads):
         super().__init__()
@@ -230,15 +179,12 @@ class _GraphTransformerEncoder(nn.Module):
 
 
 class ActorNet(nn.Module):
-    """Graph Transformer POLICY network. Encodes parent_a AND parent_b via
-    `encoder` (SHARED with CriticNet - see _GraphTransformerEncoder's
-    docstring, not owned/constructed here), fuses their pooled embeddings
-    via cross-attention for the top-level action-type choice, and
-    produces every action's parameters: node_head scores parent_a's nodes
-    (mutation target / GRAFT host / SWAP's parent_a side), while
-    partner_node_head scores parent_b's nodes (GRAFT donor root / SWAP's
-    parent_b side) - this is what lets one policy drive mutation AND
-    crossover, per the design doc's "RL for crossover and mutation"."""
+    """Graph Transformer policy network. Encodes parent_a and parent_b via
+    the shared `encoder`, fuses their pooled embeddings via cross-attention
+    for the action-type choice, and produces every action's parameters:
+    node_head scores parent_a's nodes (mutation target / GRAFT host / SWAP's
+    parent_a side), partner_node_head scores parent_b's nodes (GRAFT donor
+    root / SWAP's parent_b side)."""
 
     def __init__(self, encoder, hidden=HIDDEN_DIM, heads=4):
         super().__init__()
@@ -257,9 +203,7 @@ class ActorNet(nn.Module):
         h_b, pooled_b = self.encoder(data_b)
         # parent_a's pooled summary attends over parent_b's per-node
         # embeddings, so the action-type decision can react to what's
-        # actually available in the potential donor/partner graph
-        # (e.g. "don't bother proposing a crossover parent_b has nothing
-        # useful to offer").
+        # actually available in the potential donor/partner graph.
         cross_out, _ = self.cross_attn(
             pooled_a.unsqueeze(1), h_b.unsqueeze(0), h_b.unsqueeze(0)
         )
@@ -268,11 +212,9 @@ class ActorNet(nn.Module):
 
 
 class CriticNet(nn.Module):
-    """Graph Transformer VALUE network. Encodes parent_a and parent_b via
-    `encoder` (SHARED with ActorNet - see _GraphTransformerEncoder's
-    docstring), pools each separately and concatenates them into a single
-    state-value estimate, since the reward for a crossover decision
-    depends on both parents."""
+    """Graph Transformer value network. Encodes parent_a and parent_b via
+    the shared `encoder`, pools each separately and concatenates them into
+    a single state-value estimate."""
 
     def __init__(self, encoder, hidden=HIDDEN_DIM):
         super().__init__()
@@ -311,11 +253,9 @@ class Decision:
 
 
 def act(actor, critic, G_a, G_b, rng=None):
-    """Samples one Decision for the (parent_a=G_a, parent_b=G_b) pair:
-    `actor` picks the action (mutation on G_a, or a crossover between G_a
-    and G_b) and its parameters; `critic` independently estimates the
-    state value used later as the PPO baseline. Caller should check
-    has_any_legal_action(G_a, G_b) first."""
+    """Samples one Decision for (parent_a=G_a, parent_b=G_b): `actor` picks
+    the action and its parameters, `critic` estimates the state value used
+    as the PPO baseline. Caller should check has_any_legal_action first."""
     rng = rng or random
     data_a = graph_to_pyg_data(G_a)
     data_b = graph_to_pyg_data(G_b)
@@ -392,16 +332,12 @@ def act(actor, critic, G_a, G_b, rng=None):
                 hinge_raw_sample = hinge_raw_sample.item()
 
             elif action == rg.Action.TOGGLE_LIGHT_SENSOR:
-                # No extra params - just flips node_id's own light_sensitive
-                # flag (Design Variable 5); node_a_idx alone already fully
-                # determines the effect.
+                # No extra params - node_a_idx alone determines the effect.
                 params = {}
 
             elif action == rg.Action.MUTATE_LIGHT_HINGE_ANGLE:
-                # Reuses hinge_angle_head: Design Variable 6 (hinge_angle_on_
-                # light_detection) is the SAME continuous [0, MAX_HINGE_ANGLE]
-                # parameterization as MUTATE_HINGE_ANGLE's theta_i above, just
-                # applied to roblet_grammar.mutate_light_hinge_angle instead.
+                # Reuses hinge_angle_head for the same [0, MAX_HINGE_ANGLE]
+                # continuous parameterization as MUTATE_HINGE_ANGLE.
                 mu_raw, log_std_raw = actor.hinge_angle_head(h_v).squeeze(0)
                 hdist = _hinge_angle_dist(mu_raw, log_std_raw)
                 hinge_raw_sample = hdist.sample()
@@ -415,10 +351,7 @@ def act(actor, critic, G_a, G_b, rng=None):
                 port_dist = _masked_categorical(actor.port_head(h_v).squeeze(0), port_mask)
                 port_idx = port_dist.sample()
                 logprob = logprob + port_dist.log_prob(port_idx)
-                # old_port is an unlearned uniform pick among reconnectable
-                # ports (usually only 1-2 candidates, and never the node's
-                # own link to its parent - see reconnectable_ports())
-                # - documented simplification, not part of the PPO logprob.
+                # old_port is an unlearned uniform pick, not part of the PPO logprob.
                 old_port = rng.choice(rg.reconnectable_ports(G_a, node_id_a))
                 params = dict(old_port=old_port, new_port=port_idx.item() + 1)
                 port_idx = port_idx.item()
@@ -479,9 +412,8 @@ def act(actor, critic, G_a, G_b, rng=None):
 
 def apply_decision(G_a, G_b, decision):
     """Executes `decision` (from act()) against (G_a, G_b) via
-    roblet_grammar, returning a LIST of resulting child graphs - length 1
-    for mutation/GRAFT_SUBTREE, length 2 for SWAP_SUBTREES (it produces
-    one recombined offspring for each parent)."""
+    roblet_grammar, returning a list of child graphs - length 1 for
+    mutation/GRAFT_SUBTREE, length 2 for SWAP_SUBTREES."""
     a, p = decision.action, decision.params
     n_a, n_b = decision.node_id_a, decision.node_id_b
 
@@ -510,9 +442,9 @@ def apply_decision(G_a, G_b, decision):
 
 
 def _recompute_actor(actor, decision):
-    """Fresh forward pass through the (possibly-updated) actor, returning
-    (new_logprob, entropy) for the exact sample recorded in `decision` -
-    used by PPOTrainer.update() to form the clipped policy ratio."""
+    """Fresh forward pass through the actor, returning (new_logprob,
+    entropy) for the exact sample in `decision` - used by
+    PPOTrainer.update() to form the clipped policy ratio."""
     h_a, h_b, joint = actor.encode_pair(decision.data_a, decision.data_b)
 
     at_dist = _masked_categorical(actor.action_type_head(joint).squeeze(0), decision.action_type_mask)
@@ -597,9 +529,8 @@ def _recompute_actor(actor, decision):
 
 
 def _recompute_critic(critic, decision):
-    """Fresh forward pass through the (possibly-updated) critic, returning
-    the new value estimate V(s) for the (parent_a, parent_b) state stored
-    in `decision`."""
+    """Fresh forward pass through the critic, returning the new value
+    estimate V(s) for the state stored in `decision`."""
     return critic(decision.data_a, decision.data_b)
 
 
@@ -608,38 +539,12 @@ def _recompute_critic(critic, decision):
 # ---------------------------------------------------------------------
 
 class PPOTrainer:
-    """Owns `self.actor` (policy, over BOTH mutation and crossover) and
-    `self.critic` (state-value baseline). They share ONE Graph Transformer
-    encoder (`self.encoder` - see _GraphTransformerEncoder's docstring for
-    why) plus their own separate heads, trained through ONE combined loss
-    (actor: clipped PPO surrogate + entropy bonus; critic: MSE against the
-    observed reward; standard A2C/PPO-style `policy_loss + value_coef *
-    value_loss - entropy_coef * entropy`) and ONE optimizer - NOT two
-    separate optimizers each independently stepping the same shared
-    encoder parameters, which would either double-apply an update (if
-    both param groups included the encoder) or silently starve it of one
-    loss's gradient entirely (if only one did).
-
-    entropy_coef decays every update() call from entropy_coef_start
-    toward entropy_coef_end (see _current_entropy_coef) rather than
-    staying fixed - a fixed low value let a genuine failure mode
-    (SWAP/GRAFT_SUBTREE's action-type probability collapsing to near-zero
-    within the first ~10 generations, in both pheromone-response arms -
-    see plot_rl_diagnostics) go uncorrected once it happened, since there
-    was no exploration pressure left to ever revisit it.
-
-    entropy_decay=0.995/entropy_coef_end=0.02 (not the previous 0.97/0.01):
-    with one update() call per generation, 0.97 decays entropy_coef to
-    within ~1% of entropy_coef_end by generation ~150 - for a 250+
-    generation run (main.py's N_GENERATIONS), that leaves the back half of
-    training with almost no exploration pressure left, which is exactly
-    what let TOGGLE_LIGHT_SENSOR's action-type probability collapse to
-    ~100% by generation ~30 with nothing to pull it back (see
-    plot_action_distribution / the collision-penalty asymmetry discussed
-    in moo_api.COLLISION_PENALTY's docstring). 0.995 keeps entropy_coef
-    above ~0.02 for the whole run instead of bottoming out a third of the
-    way through it.
-    """
+    """Owns `self.actor` (policy, over both mutation and crossover) and
+    `self.critic` (state-value baseline). They share one Graph Transformer
+    encoder plus their own separate heads, trained through one combined
+    loss and one optimizer. entropy_coef decays every update() call from
+    entropy_coef_start toward entropy_coef_end, keeping exploration
+    pressure from vanishing too early in long runs."""
 
     def __init__(self, lr=3e-4, clip_eps=0.2, entropy_coef_start=0.05, entropy_coef_end=0.02,
                  entropy_decay=0.995, value_coef=0.5, epochs=4, seed=None):
@@ -647,11 +552,9 @@ class PPOTrainer:
         self.actor = ActorNet(self.encoder)
         self.critic = CriticNet(self.encoder)
 
-        # De-duplicated by parameter identity: self.actor.parameters() and
-        # self.critic.parameters() both include the shared encoder's
-        # tensors (it's a submodule of both) - naively concatenating both
-        # lists would register those tensors TWICE in one optimizer,
-        # applying their update twice per step.
+        # De-duplicated by identity: actor/critic params both include the
+        # shared encoder's tensors, so naive concatenation would register
+        # them twice and double-apply their update.
         encoder_params = list(self.encoder.parameters())
         encoder_param_ids = {id(p) for p in encoder_params}
         actor_only_params = [p for p in self.actor.parameters() if id(p) not in encoder_param_ids]
@@ -667,24 +570,16 @@ class PPOTrainer:
         self.rng = random.Random(seed)
         self.buffer = []  # list[(Decision, reward)]
         self._update_count = 0
-        # reward_action pairs 1:1 with reward (decision.action.name at the
-        # time it was recorded) - the direct diagnostic for "is one action
-        # type getting systematically worse rewards than others" (see
-        # plotting_api.plot_reward_and_loss_by_action), rather than having
-        # to hand-correlate breeding_events.json against this list
-        # yourself. loss_by_action is one {action_name: {policy_loss,
-        # value_loss, count}} snapshot per update() call (see update()),
-        # not per-transition - loss is only ever computed batched, per PPO
-        # epoch, never per individual sample outside that batch.
+        # reward_action pairs 1:1 with reward (the action that earned it);
+        # loss_by_action is one {action_name: {...}} snapshot per update() call.
         self.history = {
             "policy_loss": [], "value_loss": [], "entropy": [], "reward": [], "entropy_coef": [],
             "reward_action": [], "loss_by_action": [],
         }
 
     def select_action(self, G_a, G_b):
-        """Picks one grammar action - mutation on G_a, or a crossover
-        between G_a and G_b - via the shared actor/critic. Caller should
-        check has_any_legal_action(G_a, G_b) first."""
+        """Picks one grammar action (mutation or crossover) via the shared
+        actor/critic. Caller should check has_any_legal_action first."""
         return act(self.actor, self.critic, G_a, G_b, rng=self.rng)
 
     def record(self, decision, reward):
@@ -693,14 +588,9 @@ class PPOTrainer:
         self.history["reward_action"].append(decision.action.name)
 
     def _current_entropy_coef(self):
-        """Exponential decay from entropy_coef_start toward
-        entropy_coef_end, per update() call (not per generation-count
-        planned in advance - main.py's N_GENERATIONS has changed run to
-        run, so this needs to work regardless of how long the run turns
-        out to be, not front-load its whole decay against one assumed
-        total). self._update_count is checkpointed (see state_dict), so
-        this stays continuous across a resume instead of restarting the
-        schedule from entropy_coef_start."""
+        """Exponential decay from entropy_coef_start toward entropy_coef_end,
+        per update() call. self._update_count is checkpointed so this stays
+        continuous across a resume."""
         decayed = self.entropy_coef_end + (self.entropy_coef_start - self.entropy_coef_end) * (
             self.entropy_decay ** self._update_count
         )
@@ -709,9 +599,8 @@ class PPOTrainer:
     def update(self):
         """Runs `self.epochs` clipped-surrogate PPO passes over everything
         recorded since the last update, then clears the buffer. Transitions
-        are looped one-by-one (not batched via torch_geometric.Batch)
-        since population sizes here are small (tens per generation) -
-        batching would be the natural speed-up for larger populations."""
+        are looped one-by-one, not batched, since population sizes here
+        are small."""
         if not self.buffer:
             return
 
@@ -720,20 +609,10 @@ class PPOTrainer:
         old_logprobs = torch.stack([d.old_logprob for d, _ in self.buffer])
 
         advantages = rewards - old_values
-        # Standardized per action TYPE, not once globally over the whole
-        # buffer: once one action type dominates the buffer (see
-        # moo_api.COLLISION_PENALTY's docstring / plot_action_distribution),
-        # a single global mean/std is essentially that dominant action's own
-        # reward distribution, so a rare sample from an under-sampled action
-        # - including a COLLISION_PENALTY hit - gets divided by a std that
-        # has nothing to do with its own action's spread and comes out
-        # artificially amplified, which further suppresses whichever action
-        # is already rare. Grouping first keeps every action type's
-        # advantage scaled against its OWN reward distribution instead, so
-        # rarity alone can't inflate a sample's apparent importance.
-        # Singleton groups (only one sample this update) keep their raw
-        # reward-minus-baseline advantage - there's no within-group spread
-        # to standardize against yet.
+        # Standardized per action type, not globally: keeps a rare action's
+        # advantage scaled against its own reward distribution instead of
+        # being skewed by whichever action type dominates the buffer.
+        # Singleton groups keep their raw advantage (no spread to normalize).
         action_names = [d.action.name for d, _ in self.buffer]
         advantages = advantages.clone()
         for name in set(action_names):
@@ -783,10 +662,7 @@ class PPOTrainer:
             self.history["entropy"].append(entropy_bonus.item())
             self.history["entropy_coef"].append(entropy_coef)
 
-        # Snapshot from the LAST epoch's pass only (not averaged across
-        # epochs - the model has already moved by then, so later epochs'
-        # losses are the more representative "where did this update leave
-        # each action type" reading), one entry per update() call.
+        # Snapshot from the last epoch's pass only, one entry per update() call.
         self.history["loss_by_action"].append({
             action: dict(
                 policy_loss=sum(pl for pl, _ in vals) / len(vals),
@@ -802,24 +678,10 @@ class PPOTrainer:
 
     def state_dict(self):
         """Everything needed to resume training exactly where it left off:
-        both networks' weights (actor's and critic's state dicts each
-        already include the shared encoder's weights under it - see
-        _GraphTransformerEncoder - so it's saved/loaded redundantly-but-
-        harmlessly twice rather than needing special-casing here), the
-        combined optimizer's internal state (Adam's running moment
-        estimates - resuming without these would silently restart Adam's
-        warmup), _update_count (so the entropy_coef decay schedule - see
-        _current_entropy_coef - continues from where it left off instead
-        of restarting at entropy_coef_start on every resume), the
-        training-diagnostics history (so plotting_api's RL diagnostics
-        plot stays continuous across a resume instead of resetting to
-        empty), and this trainer's own rng (used for RECONNECT_PORT's
-        old_port tie-break - separate from the rng moo_api.py passes into
-        select_action's caller). The buffer is NOT included: update()
-        always clears it before returning, so it's empty at every point a
-        checkpoint could be taken (end of a generation) anyway. See
-        checkpoint.py for how this gets saved/loaded alongside the
-        population and RNG state."""
+        both networks' weights, the optimizer's internal state,
+        _update_count (for the entropy_coef decay schedule), training
+        history, and this trainer's own rng. The buffer is not included -
+        update() always clears it before returning."""
         return dict(
             actor=self.actor.state_dict(),
             critic=self.critic.state_dict(),

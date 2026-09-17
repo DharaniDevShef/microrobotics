@@ -1,12 +1,7 @@
 """
 Sim Executor - runs many roblet_simulator.py evaluations in parallel OS
-processes.
-
-Generalizes parallel_executor.py's subprocess.Popen pattern (launch N
-`roblet_simulator.py --headless` processes, one per model, then wait for
-all of them) from its fixed list of 4 hardcoded models to an arbitrary
-batch of jobs, capped at `max_workers` concurrent processes at a time so
-a generation bigger than the CPU's core count doesn't oversubscribe it.
+processes, capped at `max_workers` concurrent processes at a time so a
+generation bigger than the CPU's core count doesn't oversubscribe it.
 """
 
 import logging
@@ -22,25 +17,13 @@ logger = logging.getLogger(__name__)
 _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROBLET_SIMULATOR = os.path.join(_SRC_DIR, "roblet_simulator.py")
 
-# --sweep_b (always passed below) makes each subprocess run
-# len(B_SWEEP_VALUES) candidate passes PLUS one final "winner" re-run -
-# up to max_sim_time simulated seconds each - not just one run's worth.
-# The subprocess timeout has to cover that whole multiplier or individuals
-# get killed mid-sweep before ever finishing (which is exactly what a
-# flat "+20s" buffer was doing: sized for 1 run, actually needed for up
-# to 5). Read from roblet_simulator.py itself so this stays in sync if
-# B_SWEEP_VALUES ever changes.
+# --sweep_b makes each subprocess run len(B_SWEEP_VALUES) candidate passes
+# plus one final winner re-run, so the timeout must cover that whole multiplier.
 _SWEEP_RUNS_PER_JOB = len(rs.B_SWEEP_VALUES) + 1
-# Per-run overhead beyond raw sim-time: process startup, model
-# load/compile, the pre-gait settle phase, screenshot/JSON I/O.
-_PER_RUN_OVERHEAD_S = 8.0
+_PER_RUN_OVERHEAD_S = 8.0  # process startup, model load, settle phase, I/O
 
-# Each simulation is a single-threaded physics loop, but NumPy/MuJoCo's
-# BLAS backend still defaults to spawning one thread per CPU core. With
-# max_workers processes launched at once, that's max_workers x core_count
-# threads fighting over core_count cores, which was inflating wall-clock
-# time well past the sim-time budget. Pinning each subprocess to a single
-# BLAS thread lets them run genuinely in parallel instead of thrashing.
+# Pin each subprocess to a single BLAS thread so max_workers processes don't
+# oversubscribe the CPU (NumPy/MuJoCo's BLAS backend defaults to one thread/core).
 _SUBPROCESS_ENV = {
     **os.environ,
     "OMP_NUM_THREADS": "1",
@@ -51,14 +34,9 @@ _SUBPROCESS_ENV = {
 
 
 def run_batch(jobs, max_workers=None, max_sim_time=7.0):
-    """jobs: list of (xml_path, stats_path) pairs.
-
-    Runs one `roblet_simulator.py --headless` OS process per job - its
-    module-level globals (parent_body_magnet_map, torque_history, ...)
-    are cleared at the top of run_headless(), so the same script is safe
-    to launch repeatedly - in batches of at most `max_workers` concurrent
-    processes.
-    """
+    """jobs: list of (xml_path, stats_path) pairs. Runs one
+    `roblet_simulator.py --headless` OS process per job, in batches of at
+    most `max_workers` concurrent processes."""
     if not jobs:
         logger.info("No simulation jobs to run.")
         return

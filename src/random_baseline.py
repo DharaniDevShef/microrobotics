@@ -1,20 +1,9 @@
 """
 Random Baseline - the non-RL genetic-operator arm, used when
-main.py's RL_ASSISTED_GENETIC_OPERATIONS = False.
-
-Mirrors rl_api.act()'s hierarchical decision (action type -> target
-node -> action-specific params) over the EXACT SAME grammar-legal action
-space and masks (roblet_grammar.py), but every choice is drawn uniformly
-at random instead of by a trained policy - the classic-GA "blind
-variation + NSGA-III selection" baseline. This is what pymoo's own
-built-in operators would be doing here, if pymoo had operators for a
-variable-size graph genotype at all (it doesn't - SBX/polynomial
-mutation/etc. are for fixed-length real/binary chromosomes, not trees).
-
-Used to isolate what the learned policy actually contributes: this path
-shares the identical grammar, masks, collision-gating, and NSGA-III
-survival as the RL path (see moo_api.make_children_collision_free) - the
-ONLY difference is who picks the action's parameters.
+main.py's RL_ASSISTED_GENETIC_OPERATIONS = False. Mirrors rl_api.act()'s
+decision process (action type -> target node -> params) over the same
+grammar-legal action space, but every choice is drawn uniformly at random
+instead of by a trained policy - the classic-GA comparison baseline.
 """
 
 from dataclasses import dataclass
@@ -24,11 +13,8 @@ import roblet_grammar as rg
 
 @dataclass
 class Decision:
-    """Minimal stand-in for rl_api.Decision - rl_api.apply_decision() only
-    ever reads .action/.params/.node_id_a/.node_id_b (duck-typed), so this
-    doesn't need any of rl_api.Decision's PPO-bookkeeping fields (no
-    logprobs, no encoded graph tensors, nothing to recompute a gradient
-    from - there's no policy here to train)."""
+    """Minimal stand-in for rl_api.Decision (duck-typed by apply_decision());
+    no PPO-bookkeeping fields since there's no policy to train here."""
     action: "rg.Action"
     params: dict
     node_id_a: str
@@ -36,11 +22,9 @@ class Decision:
 
 
 def act(G_a, G_b, rng):
-    """Uniformly-random counterpart to rl_api.act(): picks a legal action
-    type, then a legal target node (and any action-specific parameters),
-    all by uniform random draw over whatever roblet_grammar's masks say
-    is legal. Caller should check rl_api.has_any_legal_action(G_a, G_b)
-    first, same as the RL path."""
+    """Uniformly-random counterpart to rl_api.act(): picks a legal action type, target
+    node, and params by uniform draw. Caller should check
+    rl_api.has_any_legal_action(G_a, G_b) first, same as the RL path."""
     distinct_parents = G_a is not G_b
 
     legal_actions = [a for a in rg.MUTATION_ACTIONS if rg.any_node_allows(G_a, a)]

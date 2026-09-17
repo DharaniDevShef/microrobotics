@@ -1,24 +1,17 @@
 """
-Roblet Grammar - Shared genotype schema and grammar-legal graph edit
-primitives for the RL-guided NSGA-III evolutionary framework.
+Roblet Grammar - shared genotype schema and grammar-legal graph edit
+primitives for the RL-guided NSGA-III evolutionary framework. The genotype
+is a NetworkX DiGraph; this module is the single place that reads/writes it.
 
-The genotype is a NetworkX DiGraph (see graphs/*.json for the on-disk
-schema, and helper_scripts/mjcf_generator.py for how it becomes an MJCF
-assembly). This module is the single place that knows how to read/write
-that schema, so moo_api.py, rl_api.py, and mjcf_generator.py all agree on it.
-
-Design variables (per the design doc):
+Design variables:
     1. Module Type (Vi)      - categorical {non-foldable, Mountain fold, valley fold}
     2. Graph Adjacency (Aij) - port-to-port connectivity, ports in {1, 2, 3}
     3. Module Count (N)      - N in [2, 40]
     4. Hinge Angle (theta_i) - continuous, [0, 45] degrees
     5. Light-Sensitive Joint Selection - which foldable modules carry a
-       light-sensitive on their own hinge (bool per foldable
-       module - see TOGGLE_LIGHT_SENSOR/toggle_light_sensor below)
+       light-sensitive strip (bool per foldable module)
     6. Hinge Angle on Light Detection (theta_light) - continuous, [0, 45]
-       degrees, the angle a light-sensitive joint moves to once ITS OWN
-       sensor is triggered (see MUTATE_LIGHT_HINGE_ANGLE/
-       mutate_light_hinge_angle below)
+       degrees, angle a light-sensitive joint moves to when triggered
 """
 
 import copy
@@ -31,58 +24,30 @@ MODULE_TYPES = ["non-foldable", "Mountain fold", "valley fold"]
 MODULE_TYPE_IDS = {name: idx for idx, name in enumerate(MODULE_TYPES)}
 PORTS = (1, 2, 3)
 MIN_MODULES = 2
-# Every genotype evolved here is only HALF the final shape - each mirror
-# anchor's (is_mirror_anchor() below - the root, and its port-1 "spine"
-# child if grown) port 3 is reserved for an auto-mirrored clone of
-# whatever grows on its port 2 (see growable_ports() and symmetry.py's
-# build_symmetric_graph), built only at MJCF-generation time. So this
-# bounds the HALF, not the final module count: a half of MAX_MODULES
-# yields a final shape of up to roughly 2*MAX_MODULES modules (the two
-# anchors shared, everything else mirrored in pairs) - kept at 20 here so
-# that stays within the design doc's original N in [2, 40] for the
-# physical robot.
+# Genotypes here are only HALF the final shape - each mirror anchor's port 3
+# is reserved for an auto-mirrored clone built at MJCF-generation time, so
+# this bounds the half (final shape is up to ~2*MAX_MODULES).
 MAX_MODULES = 20
 MIN_HINGE_ANGLE = 0.0
 MAX_HINGE_ANGLE = 45.0
 
-# Hinge Angle mode for Design Variable 4 (theta_i, see module docstring
-# above). "uniform" (default): every foldable module in an assembly is
-# locked to the SAME hinge angle - mutating one, or adding a new foldable
-# module, moves/sets them all together, so the RL policy / Sobol seeding
-# effectively controls one shared design variable instead of one per
-# foldable module. Flip to "per_module" to restore full per-module
-# independence for future use - the per-node hinge_angle field and all the
-# machinery around it never goes away, this flag just decides whether
-# add_node/mutate_hinge_angle/mutate_fold_type/graft_subtree fan a single
-# value out to every foldable node or touch just the one node involved.
+# Design Variable 4 (theta_i): "uniform" locks every foldable module to the
+# same hinge angle; "per_module" restores full per-module independence.
 HINGE_ANGLE_MODE = "uniform"  # "uniform" | "per_module"
 
-# Design Variable 5 (light-sensitive joint selection, per the pheromone-
-# response design): each foldable module's joint physically doubles as its
-# own light-sensitive PVC strip or not - `light_sensitive` (bool). This is
-# a per-node SELECTION variable (which foldable joints get the light-
-# sensitive hinge), never broadcast the way hinge_angle is - the whole
-# point is that it can vary joint-to-joint. Only ever True on a foldable
-# module (module_type != "non-foldable") - a rigid module has no hinge to
-# mount the strip on. symmetry.py's build_symmetric_graph mirrors this
-# field 1:1 alongside module_type/hinge_angle, so a mirrored joint pair is
-# always either both sensitive or both not - the "symmetry API" that keeps
-# any selection here even and bilaterally symmetric for free.
+# Design Variable 5 (light-sensitive joint selection): per-node bool, only
+# ever True on a foldable module. Mirrored 1:1 by symmetry.py so a mirrored
+# joint pair stays either both sensitive or both not.
 #
-# Design Variable 6 (hinge_angle_on_light_detection, theta_light) - the
-# angle a light-sensitive joint moves to once ITS OWN sensor is triggered
-# (continuous, same [0, 45] range as theta_i). LIGHT_HINGE_ANGLE_MODE below
-# mirrors HINGE_ANGLE_MODE's uniform/per_module split, but scoped to just
-# the light_sensitive nodes: under "uniform", every light-sensitive joint
-# in an assembly shares the one evolved trigger angle. Whether that shared
-# angle sits above or below the joint's own (also shared, under
-# HINGE_ANGLE_MODE) baseline hinge_angle is what determines attracted vs.
-# repulsive turning/speed response - see objectives_api.configure_pheromone_response.
+# Design Variable 6 (hinge_angle_on_light_detection, theta_light): angle a
+# light-sensitive joint moves to once triggered. LIGHT_HINGE_ANGLE_MODE
+# mirrors HINGE_ANGLE_MODE's uniform/per_module split, scoped to
+# light_sensitive nodes.
 LIGHT_HINGE_ANGLE_MODE = "uniform"  # "uniform" | "per_module"
 
 
 class Action(Enum):
-    """Grammar actions. rl_api.py's policy selects among ALL of these
+    """Grammar actions; rl_api.py's policy selects among all of these
     (mutation AND crossover) from one unified, masked action head."""
     ADD_NODE = auto()
     DELETE_NODE = auto()
@@ -107,9 +72,7 @@ MUTATION_ACTIONS = [
     Action.MUTATE_LIGHT_HINGE_ANGLE,
 ]
 
-# Crossover needs a second parent graph (donor/partner), unlike the
-# single-graph MUTATION_ACTIONS above - see rl_api.py for how the policy
-# handles that (a second Graph Transformer encoder pass + cross-attention).
+# Crossover needs a second parent graph (donor/partner), unlike mutation.
 CROSSOVER_ACTIONS = [Action.GRAFT_SUBTREE, Action.SWAP_SUBTREES]
 ALL_ACTIONS = MUTATION_ACTIONS + CROSSOVER_ACTIONS
 
@@ -134,12 +97,7 @@ def occupied_ports(G, node_id):
 
 
 def own_parent_port(G, node_id):
-    """The port on `node_id` itself used for its own edge to its parent,
-    or None for the root. Reads the real edge rather than assuming port 1
-    - every node SHOULD use port 1 for this by convention (add_node
-    always does), but this is also what reconnectable_ports() uses to
-    make sure that stays true, so it can't just assume its own
-    conclusion."""
+    """Port on `node_id` used for its own edge to its parent, or None for the root."""
     parent = G.nodes[node_id]["parent"]
     if parent is None:
         return None
@@ -150,31 +108,15 @@ def own_parent_port(G, node_id):
 
 def reconnectable_ports(G, node_id):
     """Occupied ports RECONNECT_PORT may legally move (its `old_port`):
-    every occupied port except `node_id`'s own link to its parent.
-
-    That link has to stay wherever it is. Port 1 is, by convention
-    relied on throughout this module (add_node) and by symmetry.py's
-    mirror math (only port 1's geometry is symmetric under reflection -
-    ports 2/3 are mirror images of EACH OTHER, never individually "on
-    axis"), always the parent-facing port - move a node's own parent
-    link off port 1 and any subtree hanging under it can no longer be
-    validly mirrored later, plus it desyncs is_mirror_anchor() (which
-    reads the ROOT's port 1 specifically to find its spine child) the
-    moment it happens to the root's spine child itself."""
+    every occupied port except `node_id`'s own link to its parent, which
+    must stay on port 1 for symmetry.py's mirror math to stay valid."""
     parent_port = own_parent_port(G, node_id)
     return [p for p in occupied_ports(G, node_id) if p != parent_port]
 
 
 def is_mirror_anchor(G, node_id):
-    """True for every node that sits exactly ON the bilateral mirror plane:
-    the root, and the root's port-1 child if one has been grown (the
-    "spine" - see the module docstring in symmetry.py). Port 1 is only
-    ever free on the root itself (every other node's port 1 is already
-    spoken for, linking back to its own parent), so the spine can never
-    extend past that one child - anything grown from THAT child's port 2
-    or 3 has already rotated off the mirror plane and is an ordinary
-    (non-anchor) node whose whole subtree gets reflected as a block by
-    build_symmetric_graph, same as the root's port-2 subtree is."""
+    """True for nodes on the bilateral mirror plane: the root, and the
+    root's port-1 "spine" child if one has been grown."""
     if is_root(G, node_id):
         return True
     root = root_node(G)
@@ -182,16 +124,9 @@ def is_mirror_anchor(G, node_id):
 
 
 def growable_ports(G, node_id):
-    """Ports on `node_id` available for NEW growth (ADD_NODE, or the
-    new_port side of RECONNECT_PORT) - same as free_ports(), except a
-    mirror-anchor node (is_mirror_anchor() - the root, and its port-1
-    child if any) additionally never offers port 3, which is reserved
-    exclusively for its auto-mirrored symmetric half (see symmetry.py's
-    build_symmetric_graph - it's the only thing that ever populates
-    an anchor's port 3). Structural queries about what's ACTUALLY attached
-    (occupied_ports, or reading .connectors directly) are untouched by
-    this - port 3 genuinely IS unoccupied in the genotype until build
-    time, this just stops evolution from growing onto it itself."""
+    """Ports on `node_id` available for NEW growth (ADD_NODE, or the new_port
+    side of RECONNECT_PORT) - like free_ports(), but a mirror-anchor node
+    never offers port 3, which is reserved for its auto-mirrored half."""
     ports = free_ports(G, node_id)
     if is_mirror_anchor(G, node_id) and 3 in ports:
         ports.remove(3)
@@ -239,51 +174,24 @@ def compute_node_action_mask(G, node_id):
     module_type = G.nodes[node_id]["module_type"]
 
     mask = {
-        # Port Availability Mask: needs a growable port to attach to (see
-        # growable_ports() - excludes the root's reserved port 3).
+        # Needs a growable port to attach to; excludes root's reserved port 3.
         Action.ADD_NODE: has_growable_port and not at_module_limit,
-        # Leaf Node Protection Mask + Root Protection Mask.
         Action.DELETE_NODE: is_leaf(G, node_id) and not is_root(G, node_id),
-        # Root Protection Mask.
         Action.PRUNE_SUBTREE: not is_root(G, node_id),
-        # Root Protection Mask (extended): module_1 (the graph root) always
-        # carries the IMU + rangefinder sensor sites, which
-        # helper_scripts/mjcf_generator.py mounts on a `bodyRigid_1` element -
-        # i.e. it hard-requires the root module to stay "non-foldable".
+        # Root always carries the IMU + rangefinder sensor sites, which
+        # require it to stay "non-foldable".
         Action.MUTATE_FOLD_TYPE: not is_root(G, node_id),
-        # Fold Consistency Mask: only foldable modules have a hinge.
         Action.MUTATE_HINGE_ANGLE: module_type != "non-foldable",
-        # Fold Consistency Mask: the light-sensitive PVC strip is mounted
-        # on the joint itself, so only a foldable module can carry one.
         Action.TOGGLE_LIGHT_SENSOR: module_type != "non-foldable",
-        # Only mutate the shared light-triggered angle on a node that
-        # currently carries the sensor (TOGGLE_LIGHT_SENSOR is what turns
-        # this on in the first place).
         Action.MUTATE_LIGHT_HINGE_ANGLE: bool(G.nodes[node_id].get("light_sensitive", False)),
-        # RECONNECT_PORT needs a growable port to move the connection to,
-        # and at least one RECONNECTABLE port to move it from - occupied,
-        # but not the node's own link to its parent (reconnectable_ports -
-        # that port has to stay put, see its docstring). Root Protection
-        # Mask (extended): the root has no parent link to protect that
-        # way, but its two occupied ports (port 1 "spine", port 2
-        # "evolvable") carry the same kind of fixed, load-bearing meaning
-        # for is_mirror_anchor()/symmetry.py - relabeling which is which
-        # would silently swap which subtree does and doesn't get
-        # auto-mirrored, so the root is excluded outright rather than
-        # trying to say "keep whichever of 1/2 you already have".
+        # Root excluded outright: its ports 1/2 have fixed, load-bearing
+        # meaning for symmetry.py's mirroring, so neither may be moved.
         Action.RECONNECT_PORT: (
             has_growable_port and not is_root(G, node_id)
             and len(reconnectable_ports(G, node_id)) > 0
         ),
     }
     return mask
-    # NOTE: the "2D Planar Overlap Mask" from the design doc (new module
-    # placement must not overlap an existing one) is NOT evaluated here.
-    # pattern_gen.py's layout math is specific to the fixed 6-around-1 hex
-    # grid the manual editor uses, not to arbitrary RL-grown trees, so a
-    # general polygon-overlap check is out of scope for this pass. ADD_NODE
-    # / GRAFT_SUBTREE / RECONNECT_PORT are therefore only masked by port
-    # availability and the module-count limit for now.
 
 
 def any_node_allows(G, action):
@@ -291,15 +199,12 @@ def any_node_allows(G, action):
 
 
 def graft_host_eligible(G, node_id):
-    """True if `node_id` can host a GRAFT_SUBTREE (same Port Availability /
-    Module Count Limit masks as ADD_NODE - attaching a donor subtree is
-    grammar-equivalent to attaching a single new node)."""
+    """True if `node_id` can host a GRAFT_SUBTREE (same masks as ADD_NODE)."""
     return compute_node_action_mask(G, node_id)[Action.ADD_NODE]
 
 
 def swap_eligible(G, node_id):
-    """True if `node_id` can take part in a SWAP_SUBTREES (Root Protection
-    Mask: never swap out a graph's root module)."""
+    """True if `node_id` can take part in a SWAP_SUBTREES (never the root)."""
     return not is_root(G, node_id)
 
 
@@ -311,8 +216,7 @@ def swap_eligible(G, node_id):
 
 def _shared_hinge_angle(G, exclude=None):
     """The single hinge angle every foldable module shares under
-    HINGE_ANGLE_MODE == "uniform" - whichever foldable module (other than
-    `exclude`, if given) comes first, or None if there isn't one yet."""
+    HINGE_ANGLE_MODE == "uniform", or None if there isn't one yet."""
     for n in G.nodes:
         if n == exclude:
             continue
@@ -330,9 +234,7 @@ def _broadcast_hinge_angle(G, angle):
 
 def _shared_light_hinge_angle(G, exclude=None):
     """The single light-triggered hinge angle every light_sensitive module
-    shares under LIGHT_HINGE_ANGLE_MODE == "uniform" - whichever
-    light_sensitive module (other than `exclude`, if given) comes first, or
-    None if there isn't one yet."""
+    shares under LIGHT_HINGE_ANGLE_MODE == "uniform", or None if none yet."""
     for n in G.nodes:
         if n == exclude:
             continue
@@ -342,9 +244,7 @@ def _shared_light_hinge_angle(G, exclude=None):
 
 
 def _broadcast_light_hinge_angle(G, angle):
-    """In place: locks every CURRENTLY light_sensitive module in G to
-    `angle`. Non-sensitive modules are left alone (their light_hinge_angle
-    is meaningless until TOGGLE_LIGHT_SENSOR turns them on)."""
+    """In place: locks every currently light_sensitive module in G to `angle`."""
     for n in G.nodes:
         if G.nodes[n].get("light_sensitive", False):
             G.nodes[n]["light_hinge_angle"] = angle
@@ -369,20 +269,15 @@ def add_node(G, target_node, port, module_type, hinge_angle=0.0, rng=None):
     if port not in growable_ports(G, target_node):
         raise ValueError(f"Port {port} on {target_node} is occupied or reserved")
 
-    # deepcopy, not G.copy(): networkx's shallow copy shares each node's
-    # `connectors` dict OBJECT with the original graph, so mutating G2's
-    # connectors below would silently corrupt every parent still holding
-    # a reference to `G` (e.g. the population list in moo_api.py).
+    # deepcopy, not G.copy(): shallow copy would share the `connectors`
+    # dicts with the original graph and corrupt it on mutation.
     G2 = copy.deepcopy(G)
     if HINGE_ANGLE_MODE == "uniform" and module_type != "non-foldable":
         shared = _shared_hinge_angle(G2)
         if shared is not None:
             hinge_angle = shared
-    # A new node never starts light_sensitive (TOGGLE_LIGHT_SENSOR is the
-    # only thing that turns it on - see that function's docstring), but if
-    # it's foldable and the assembly already has a shared light-triggered
-    # angle, pre-sync it so toggling this node on later doesn't need a
-    # separate resync.
+    # A new node never starts light_sensitive, but pre-sync its angle to
+    # any existing shared trigger angle so a later toggle-on needs no resync.
     light_hinge_angle = 0.0
     if LIGHT_HINGE_ANGLE_MODE == "uniform" and module_type != "non-foldable":
         shared_light = _shared_light_hinge_angle(G2)
@@ -393,9 +288,7 @@ def add_node(G, target_node, port, module_type, hinge_angle=0.0, rng=None):
     G2.add_node(new_id, id=new_id,
                 **_new_node_attrs(module_type, hinge_angle, target_node, depth,
                                    light_hinge_angle=light_hinge_angle))
-    # New node's connectors[1] mates back to the parent's chosen port; this
-    # mirrors the "connector1 is always the incoming/parent connector"
-    # convention used throughout graphs/*.json.
+    # connectors[1] is always the incoming/parent connector, by convention.
     G2.nodes[new_id]["connectors"][1] = target_node
     G2.nodes[target_node]["connectors"][port] = new_id
     G2.add_edge(target_node, new_id, connector1=port, connector2=1)
@@ -438,10 +331,7 @@ def mutate_fold_type(G, target_node, new_fold_type):
     G2.nodes[target_node]["type_id"] = MODULE_TYPE_IDS[new_fold_type]
     if new_fold_type == "non-foldable":
         G2.nodes[target_node]["hinge_angle"] = 0.0
-        # A rigid module has no hinge to mount the light-sensitive PVC
-        # strip on (see TOGGLE_LIGHT_SENSOR's Fold Consistency Mask) - drop
-        # it here too so a MUTATE_FOLD_TYPE away from foldable can't leave
-        # a "light_sensitive" module with no joint behind it.
+        # A rigid module has no hinge to mount the light-sensitive strip on.
         G2.nodes[target_node]["light_sensitive"] = False
         G2.nodes[target_node]["light_hinge_angle"] = 0.0
     elif HINGE_ANGLE_MODE == "uniform":
@@ -464,14 +354,9 @@ def mutate_hinge_angle(G, target_node, new_angle):
 
 
 def toggle_light_sensor(G, target_node):
-    """Flips whether `target_node` carries the light-sensitive PVC strip
-    (Design Variable 5 - see the module docstring). Since the sensor and
-    the joint it actuates are the same physical hinge (per the hardware
-    model), this is the ONLY way a module gains or loses a light sensor -
-    ADD_NODE never creates one directly. Turning one on syncs it to the
-    assembly's existing shared light_hinge_angle (LIGHT_HINGE_ANGLE_MODE
-    == "uniform"), if one is already established, so the new sensor
-    reacts consistently with every other one instead of at a stale 0.0."""
+    """Flips whether `target_node` carries the light-sensitive strip
+    (Design Variable 5). Turning one on syncs it to the assembly's
+    existing shared light_hinge_angle, if one is already established."""
     if not compute_node_action_mask(G, target_node)[Action.TOGGLE_LIGHT_SENSOR]:
         raise ValueError(f"TOGGLE_LIGHT_SENSOR not allowed on {target_node}")
     G2 = copy.deepcopy(G)
@@ -485,13 +370,9 @@ def toggle_light_sensor(G, target_node):
 
 
 def mutate_light_hinge_angle(G, target_node, new_angle):
-    """Mutates Design Variable 6 (hinge_angle_on_light_detection). Whether
-    the result lands above or below the module's own (shared) baseline
-    hinge_angle is what governs attracted-vs-repulsive behavior - see
-    objectives_api.configure_pheromone_response - so this is intentionally
-    left free to land on either side; picking a run's optimization
-    direction (main.py's PHEROMONE_RESPONSE_TYPE) is what steers evolution
-    to one side or the other, not a constraint enforced here."""
+    """Mutates Design Variable 6 (hinge_angle_on_light_detection). Free to
+    land above or below the module's baseline hinge_angle - that's what
+    governs attracted-vs-repulsive response, not enforced here."""
     if not compute_node_action_mask(G, target_node)[Action.MUTATE_LIGHT_HINGE_ANGLE]:
         raise ValueError(f"MUTATE_LIGHT_HINGE_ANGLE not allowed on {target_node}")
     G2 = copy.deepcopy(G)
@@ -505,22 +386,8 @@ def mutate_light_hinge_angle(G, target_node, new_angle):
 
 def ensure_min_light_sensitive(G, rng):
     """In place: guarantees at least one foldable module in G carries the
-    light-sensitive PVC strip (Design Variable 5), whenever G has any
-    foldable module at all. A no-op if one already exists, or if G has no
-    foldable module to mount one on.
-    rng - random number generator
-
-    Both Sobol seeding's per-module coin flip and mutation
-    (TOGGLE_LIGHT_SENSOR turning off the last sensitive module,
-    DELETE_NODE/PRUNE_SUBTREE removing its only carrier, GRAFT_SUBTREE/
-    SWAP_SUBTREES recombining away every sensitive node) can otherwise
-    legally produce a half-genotype with zero light-sensitive joints. Such
-    an individual can never trigger a reactive fold, so its
-    pheromone_yaw_response_deg/pheromone_speed_response would just be gait
-    chaos rather than a real pheromone response - a phantom reading, not a
-    zero. Called right before mirroring (symmetry.build_symmetric_graph)
-    so this holds for every genotype that ever reaches evaluation,
-    regardless of how it was produced."""
+    light-sensitive strip, whenever G has any foldable module at all.
+    No-op if one already exists or G has none foldable."""
     if any(G.nodes[n].get("light_sensitive", False) for n in G.nodes):
         return G
     foldable = [n for n in G.nodes if G.nodes[n]["module_type"] != "non-foldable"]
@@ -568,36 +435,15 @@ def reconnect_port(G, target_node, old_port, new_port):
 class GraftPortConflict(ValueError):
     """Raised when donor_root's own port 1 is already used by one of its
     real (copied) children, so graft_subtree can't also point it at the
-    new host - see graft_subtree's docstring. Callers should treat this
-    like any other invalid-genotype rejection (mjcf_generator.
-    ModuleCollisionError, symmetry.MirrorAnchorViolation): reject the
-    graft and let the caller retry with a different action, not crash."""
+    new host. Callers should reject the graft and retry with a different
+    action, not crash."""
 
 
 def graft_subtree(host_G, host_node, host_port, donor_G, donor_root, rng=None):
-    """Copy donor_G's subtree rooted at donor_root onto host_G at host_node/host_port.
-
-    donor_root itself is free to be donor_G's own root (or any other
-    node) - rl_api.py's crossover donor pick has no restriction against
-    it. That case needs care: every node's port 1 is, by strong
-    convention relied on throughout this module (see add_node) and by
-    symmetry.py's mirror math (only port 1's geometry is self-symmetric
-    under reflection - ports 2/3 are only mirror images of EACH OTHER,
-    never individually "on axis"), always the link back to its parent.
-    An ordinary donor_root has port 1 free in the copy (its real parent
-    lives outside the copied subtree, so the edge-copying loop below
-    never touches port 1), so pointing it at the new host preserves that
-    convention for free. But donor_G's OWN root has no parent edge to
-    exclude that way - its port 1 may already be a real internal child
-    (e.g. its own "spine"), which the edge-copying loop faithfully
-    carries over. Forcing port 1 to the new host in that case would
-    require either clobbering that already-set connectors-dict entry
-    (silently splitting the port between two different neighbors
-    depending whether you trust connectors or the graph edges - exactly
-    the corruption this used to produce) or attaching via a different
-    port (which breaks the "port 1 = parent" convention this graph
-    leans on elsewhere). Neither is safe, so this specific graft is
-    rejected instead - see GraftPortConflict."""
+    """Copy donor_G's subtree rooted at donor_root onto host_G at
+    host_node/host_port. Raises GraftPortConflict if donor_root is
+    donor_G's own root and its port 1 is already used by a copied child
+    (port 1 must stay the parent-link, per convention)."""
     rng = rng or random
     if not compute_node_action_mask(host_G, host_node)[Action.ADD_NODE]:
         raise ValueError(f"GRAFT_SUBTREE not allowed on {host_node} (port/limit mask)")
@@ -651,19 +497,13 @@ def graft_subtree(host_G, host_node, host_port, donor_G, donor_root, rng=None):
 
     _recompute_depths(G2, root_node(G2))
     if HINGE_ANGLE_MODE == "uniform":
-        # Reconcile: the donor subtree may have carried its own
-        # (independently-uniform) angle that differs from the host's -
-        # prefer the host's pre-existing shared angle so grafting doesn't
-        # silently change the rest of the host; only fall back to
-        # whatever the donor contributed if the host had no foldable
-        # module of its own yet.
+        # Prefer the host's pre-existing shared angle over the donor's, so
+        # grafting doesn't silently change the rest of the host.
         target = host_shared_angle if host_shared_angle is not None else _shared_hinge_angle(G2)
         if target is not None:
             _broadcast_hinge_angle(G2, target)
     if LIGHT_HINGE_ANGLE_MODE == "uniform":
-        # Same reconciliation as hinge_angle just above, scoped to whatever
-        # light_sensitive nodes ended up in the merged graph (host's own,
-        # the donor's copied-over ones, or both).
+        # Same reconciliation as hinge_angle, scoped to light_sensitive nodes.
         light_target = host_shared_light_angle if host_shared_light_angle is not None else _shared_light_hinge_angle(G2)
         if light_target is not None:
             _broadcast_light_hinge_angle(G2, light_target)
@@ -672,11 +512,7 @@ def graft_subtree(host_G, host_node, host_port, donor_G, donor_root, rng=None):
 
 def swap_subtrees(G_a, node_a, G_b, node_b):
     """Exchange the subtrees rooted at node_a (in G_a) and node_b (in G_b).
-
-    Neither node_a nor node_b may be a root (Root Protection Mask covers
-    PRUNE_SUBTREE, which this operator is built from).
-    Returns (new_G_a, new_G_b).
-    """
+    Neither may be a root. Returns (new_G_a, new_G_b)."""
     if is_root(G_a, node_a) or is_root(G_b, node_b):
         raise ValueError("SWAP_SUBTREES cannot target a root module")
 
@@ -726,20 +562,11 @@ def random_seed_graph(rng, n_modules, module_type_choices=None, hinge_angle_fn=N
                        light_sensitive_fn=None, light_hinge_angle_fn=None):
     """Builds a random grammar-legal tree with `n_modules` nodes.
 
-    `module_type_choices`: optional list of MODULE_TYPES values, one per
-    node in build order (root first); sampled uniformly if not given.
-    `hinge_angle_fn`: optional callable() -> float in [0, 90]; defaults to
-    a uniform draw.
-    `light_sensitive_fn`: optional callable() -> bool, rolled once per
-    foldable module to decide Design Variable 5 (which foldable joints get
-    a light-sensitive PVC strip); defaults to a fair coin flip, so a Sobol-
-    seeded initial population still gets a genuine spread over this
-    variable instead of starting with zero sensors everywhere.
-    `light_hinge_angle_fn`: optional callable() -> float in [0, 45] for
-    Design Variable 6 (hinge_angle_on_light_detection), drawn once and
-    shared by every module light_sensitive_fn() selected (see
-    LIGHT_HINGE_ANGLE_MODE's docstring); defaults to a uniform draw.
-    """
+    `module_type_choices`: optional list of MODULE_TYPES, one per node in
+    build order; sampled uniformly if not given. `hinge_angle_fn`,
+    `light_sensitive_fn`, `light_hinge_angle_fn`: optional callables to
+    override the default uniform-draw / fair-coin-flip sampling for
+    hinge angle, light sensitivity, and light-trigger angle."""
     n_modules = max(MIN_MODULES, min(MAX_MODULES, int(n_modules)))
     hinge_angle_fn = hinge_angle_fn or (lambda: rng.uniform(MIN_HINGE_ANGLE, MAX_HINGE_ANGLE))
     light_sensitive_fn = light_sensitive_fn or (lambda: rng.random() < 0.5)
@@ -750,10 +577,8 @@ def random_seed_graph(rng, n_modules, module_type_choices=None, hinge_angle_fn=N
             return module_type_choices[i]
         return rng.choice(MODULE_TYPES)
 
-    # module_1 (root) must stay "non-foldable": mjcf_generator.py mounts the
-    # IMU + rangefinder sensor sites on a `bodyRigid_1` element, which only
-    # exists for a non-foldable module (see compute_node_action_mask's
-    # MUTATE_FOLD_TYPE rule for the same constraint during mutation).
+    # module_1 (root) must stay "non-foldable": it carries the IMU +
+    # rangefinder sensor sites.
     root_type = "non-foldable"
     root_angle = 0.0
     G = nx.DiGraph()
@@ -769,17 +594,13 @@ def random_seed_graph(rng, n_modules, module_type_choices=None, hinge_angle_fn=N
         angle = 0.0 if m_type == "non-foldable" else hinge_angle_fn()
         G = add_node(G, parent, port, m_type, hinge_angle=angle, rng=rng)
 
-    # Design Variables 5/6: roll light-sensitivity per foldable module,
-    # then (if LIGHT_HINGE_ANGLE_MODE == "uniform") pick ONE shared
-    # trigger angle for every module that came up sensitive - same
-    # uniform-broadcast pattern as hinge_angle itself.
+    # Design Variables 5/6: roll light-sensitivity per foldable module, then
+    # (if uniform mode) pick one shared trigger angle for the selected ones.
     foldable = [n for n in G.nodes if G.nodes[n]["module_type"] != "non-foldable"]
     selected = [n for n in foldable if light_sensitive_fn()]
     if foldable and not selected:
-        # Every per-module coin flip landing False is a legal outcome of
-        # light_sensitive_fn(), but a seed with a foldable module and zero
-        # light-sensitive joints is not a valid genotype - see
-        # ensure_min_light_sensitive's docstring for why.
+        # A seed with a foldable module and zero light-sensitive joints is
+        # not a valid genotype (see ensure_min_light_sensitive).
         selected = [rng.choice(foldable)]
     if selected:
         if LIGHT_HINGE_ANGLE_MODE == "uniform":

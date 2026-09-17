@@ -1,34 +1,14 @@
 """
-MOO API - Multi-Objective Optimization Engine (RL-guided NSGA-III).
+MOO API - Multi-Objective Optimization Engine (RL-guided NSGA-III). Owns the
+population loop: Sobol-seeded initial genotypes, breeding (mutation and
+crossover picked/parameterized by rl_api.py's actor/critic), batched
+parallel MuJoCo evaluation (sim_executor.py), and NSGA-III environmental
+selection via pymoo's ReferenceDirectionSurvival (driven "by hand" since
+genotypes are variable-size graphs, not pymoo's usual fixed-length vector).
 
-Owns the population loop: Sobol-seeded initial genotypes, breeding (BOTH
-mutation and crossover are picked and parameterized by rl_api.py's
-actor/critic - this module no longer chooses the operator itself, just
-supplies two parents and lets the policy decide), MuJoCo evaluation, and
-NSGA-III environmental selection (via pymoo's reference-direction
-survival).
-
-Evaluation is batched and parallel: every generation writes an MJCF
-assembly for every individual (helper_scripts/mjcf_generator.py) up
-front, then runs them all through roblet_simulator.py --headless as
-separate OS processes (sim_executor.py, generalizing
-parallel_executor.py's subprocess.Popen pattern), and only then reads
-back each individual's stats.json - see evaluate_population().
-
-Every genotype here is only HALF the final shape - symmetry.py mirrors
-it into the full bilaterally-symmetric morphology right before an
-assembly is built (see _prepare_assembly), so evolution itself (mutation,
-crossover, the RL policy, NSGA-III) only ever sees/touches the half.
-
-pymoo's `Problem`/`Algorithm` classes assume a fixed-length real/int
-decision vector, which doesn't fit a variable-size graph genotype - so
-this module drives NSGA-III "by hand": genotypes are plain nx.DiGraph
-objects carried as `Individual.X`, and only the resulting 5-objective
-matrix F is handed to pymoo's `ReferenceDirectionSurvival`, which only
-needs F (and optional constraints) to do non-dominated sorting + niching.
-That's the one piece of NSGA-III that's genuinely genotype-agnostic, and
-it's exactly the piece the design doc wants (avoids hand-engineering a
-scalar fitness formula).
+Every genotype here is only HALF the final shape - symmetry.py mirrors it
+into the full bilaterally-symmetric morphology right before an assembly is
+built (see _prepare_assembly).
 """
 
 import hashlib
@@ -68,69 +48,33 @@ from mjcf_generator import build_assembly, ModuleCollisionError  # noqa: E402
 
 _MESHDIR = os.path.abspath(os.path.join(_SRC_DIR, "..", "meshes")).replace("\\", "/")
 
-# Added to the RL reward when a child collides/fails - see run_generation's
-# reward loop and make_children_collision_free's exhausted-attempts path.
-# Proportioned to objectives_api.scalarize()'s own [0, 1] range: a real
-# reward delta (scalarize(child) - scalarize(parent)) is mathematically
-# bounded to [-1, 1], so this used to be -10.0 - 10x any possible
-# legitimate outcome. At tiny per-generation sample counts (pop_size
-# transitions/update), a handful of early collisions at that magnitude
-# could dominate the running advantage estimate and bias PPO away from
-# whichever action type triggers them most (crossover, empirically - see
-# plot_rl_diagnostics' reward panel). -2.0 is still a clearly worse
-# outcome than any legitimate one (max legitimate delta is -1.0), without
-# being an order of magnitude larger than the signal it's mixed with.
+# Historical RL-reward penalty for a colliding child (no longer applied - see
+# run_generation's docstring on why collision outcomes are now excluded
+# from the reward stream entirely - kept as a documented reference value).
 COLLISION_PENALTY = -2.0
 
-# What roblet_simulator.py's save_simulation_stats(physics_ok=False) writes -
-# used verbatim for a graph that couldn't even be built into a valid MJCF
-# (ModuleCollisionError), so it never wastes a simulation slot but still
-# scores as a failed/infeasible individual like any other collision.
+# A stand-in stats dict for a graph that couldn't even be built into a valid
+# MJCF (ModuleCollisionError) - scores as failed/infeasible like any other collision.
 _FAILED_STATS = {"success": 0, "physics_ok": 0, "is_stable": 0, "average_velocity_mmps": 0.0, "total_distance_mm": 0.0}
 
-# graph content-hash -> {"stats": <stats.json dict>, "screenshot_path": <path or None>}.
-# run_generation() re-evaluates every carried-over survivor alongside new
-# offspring each generation (see evaluate_population()'s docstring), but
-# roblet_simulator.py's physics is fully deterministic (fixed B-sweep
-# values, no RNG) - an unchanged genotype produces byte-identical results
-# every time, so re-running the whole MuJoCo B-sweep for it is pure waste.
-# Keyed by content hash (see _graph_hash), not Python id() - a discarded
-# graph's id() can be reused by an unrelated later object once garbage
-# collected, which would silently return the WRONG graph's cached result.
+# graph content-hash -> {"stats": ..., "screenshot_path": ...}. Physics is
+# deterministic, so an unchanged genotype (e.g. a carried-over survivor)
+# skips re-simulation. Keyed by content hash, not id() (which can be reused).
 _EVAL_CACHE = {}
 
 
 def _graph_hash(G):
-    """Deterministic content hash of a genotype (full structure + node/edge
-    attributes) - _EVAL_CACHE's key. Two graphs that serialize identically
-    WILL simulate identically, so a hit here is always a correct reuse,
-    never an approximation."""
+    """Deterministic content hash of a genotype - _EVAL_CACHE's key."""
     payload = json.dumps(nx.node_link_data(G, edges="edges"), sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _is_collision_free(G, scratch_dir, rng):
     """True if the FULL mirrored graph (symmetry.build_symmetric_graph(G))
-    builds cleanly through mjcf_generator.build_assembly's own 3D
-    collision check (check_collisions=True - the same check
-    evaluate_population() relies on): no un-mated module overlaps in
-    either the flat or fully-folded pose. Checking the mirrored graph, not
-    just the half `G`, matters - the two mirrored halves can collide with
-    EACH OTHER even when the half alone is fine on its own. Also rejects
-    (False) a half-graph build_symmetric_graph can't even mirror -
-    symmetry.MirrorAnchorViolation, which GRAFT_SUBTREE/SWAP_SUBTREES can
-    produce (see its docstring) - same "invalid genotype" bucket as a
-    geometric collision, not a crash. Used to GATE a graph before it's
-    accepted into the population at all - see sobol_seed_population() and
-    make_children_collision_free() - rather than just detecting and
-    penalizing the collision after the fact during evaluation.
-
-    Repairs `G` in place (rg.ensure_min_light_sensitive) right before
-    mirroring, so every graph that passes this gate - and therefore every
-    graph that ever reaches _prepare_assembly() later - is guaranteed to
-    have at least one light-sensitive joint whenever it has a foldable
-    module at all, regardless of whether it arrived here freshly seeded or
-    post-mutation."""
+    builds cleanly through mjcf_generator's 3D collision check - checking the
+    mirrored graph matters since the two halves can collide with each other
+    even when the half alone is fine. Also repairs `G` in place
+    (rg.ensure_min_light_sensitive) before mirroring."""
     os.makedirs(scratch_dir, exist_ok=True)
     rg.ensure_min_light_sensitive(G, rng)
     try:
@@ -149,13 +93,9 @@ def _is_collision_free(G, scratch_dir, rng):
 
 
 def _build_collision_free_seed(rng, n_modules, type_weights, hinge_angle_fn, scratch_dir, max_attempts):
-    """Resamples a fresh random_seed_graph at `n_modules` up to
-    `max_attempts` times looking for one that passes _is_collision_free().
-    If every attempt at that size collides, halves the module count and
-    tries again (down to MIN_MODULES) - sparser graphs are far less
-    likely to self-overlap, so this reliably converges to SOME valid
-    graph rather than exhausting attempts forever at a size that's simply
-    too dense for random_seed_graph's geometry-blind construction."""
+    """Resamples a fresh random_seed_graph at `n_modules` up to `max_attempts`
+    times looking for one that passes _is_collision_free(). If every attempt
+    collides, halves the module count and tries again (down to MIN_MODULES)."""
     candidate_n = max(rg.MIN_MODULES, n_modules)
     while True:
         for _ in range(max_attempts):
@@ -177,14 +117,10 @@ def _build_collision_free_seed(rng, n_modules, type_weights, hinge_angle_fn, scr
 
 
 def sobol_seed_population(pop_size, seed=0, scratch_dir=None, max_attempts=15):
-    """Sobol-sampled initial genotypes (design doc's sampling plan): a
-    3D Sobol sequence over (module_count, hinge_angle_bias, fold_type_bias)
-    gives a uniform, low-discrepancy spread across the design-variable
-    space before RL-guided evolution starts refining it.
-
-    Every returned graph is validated collision-free up front (see
-    _build_collision_free_seed) - no individual enters generation 0
-    without already having passed mjcf_generator.py's 3D collision test."""
+    """Sobol-sampled initial genotypes: a 3D Sobol sequence over (module_count,
+    hinge_angle_bias, fold_type_bias) gives a uniform, low-discrepancy spread
+    across the design-variable space. Every returned graph is pre-validated
+    collision-free (see _build_collision_free_seed)."""
     sampler = qmc.Sobol(d=3, scramble=True, seed=seed)
     n = 1 << max(1, (pop_size - 1).bit_length())  # Sobol is balanced at powers of two
     draws = sampler.random(n)[:pop_size]
@@ -206,18 +142,12 @@ def sobol_seed_population(pop_size, seed=0, scratch_dir=None, max_attempts=15):
 
 
 def _prepare_assembly(G, work_dir, tag):
-    """Mirrors the half-genotype `G` into the full symmetric shape
-    (symmetry.py), writes its graph JSON, and calls build_assembly.
-    Returns an xml_path, or None if the FULL (mirrored) graph is invalid
-    - geometrically (ModuleCollisionError) or structurally
-    (symmetry.MirrorAnchorViolation, see its docstring) - callers treat
-    that the same as a failed simulation, without wasting a subprocess on
-    a model that can't even compile. Checking the mirrored graph (not
-    just the half) matters: the two mirrored halves can collide with EACH
-    OTHER even when the half alone is perfectly valid on its own.
-    Shouldn't actually trigger in practice - every graph reaching here
-    already passed _is_collision_free() at creation time - but is kept as
-    a defensive backstop, same as the ModuleCollisionError catch below."""
+    """Mirrors the half-genotype `G` into the full symmetric shape, writes its
+    graph JSON, and calls build_assembly. Returns an xml_path, or None if
+    the full (mirrored) graph is invalid (ModuleCollisionError or
+    symmetry.MirrorAnchorViolation) - callers treat that as a failed
+    simulation. Defensive backstop; graphs reaching here already passed
+    _is_collision_free() at creation time."""
     try:
         full_G = symmetry.build_symmetric_graph(G)
     except symmetry.MirrorAnchorViolation:
@@ -233,46 +163,23 @@ def _prepare_assembly(G, work_dir, tag):
     return xml_path
 
 
-# Every evaluate_population() call with at least one cache hit forces a
-# fresh re-simulation of up to this many of them anyway - a "trust but
-# verify" spot check against _EVAL_CACHE going stale/wrong (see
-# run_generation's docstring on the same class of hazard for survivor
-# bookkeeping). Without this, a cache entry that was ever wrong - however
-# it happened - silently wins repeated NSGA-III selection for the rest of
-# the process's life, since an unchanged survivor normally never gets
-# re-simulated again; this bounds how many generations that can go
-# undetected instead of relying on something incidental (a checkpoint
-# resume, which clears this in-memory cache entirely) to ever catch it.
-# Small and constant, not a fraction of the population, so its extra cost
-# stays flat regardless of pop_size.
+# Each evaluate_population() call re-simulates up to this many cache hits
+# anyway, as a "trust but verify" check that _EVAL_CACHE hasn't gone stale.
 _CACHE_SPOT_CHECK_MAX_PER_CALL = 1
 # A cache entry is flagged stale if a fresh re-simulation's avg_velocity_mmps
-# disagrees with the cached value by more than this fraction of whichever
-# magnitude is larger - loose enough that it never fires on values that
-# are merely close (there shouldn't be ANY discrepancy - the physics is
-# meant to be deterministic - so any consistent drift is worth a look),
-# tight enough to reliably catch an order-of-magnitude-wrong cached value.
+# disagrees with the cached value by more than this fraction (physics is
+# meant to be deterministic, so any consistent drift is worth flagging).
 _CACHE_SPOT_CHECK_TOLERANCE = 0.10
 
 
 def evaluate_population(graphs, work_dir, sim_seconds=7.0, max_workers=None):
-    """Writes an MJCF assembly for every graph, runs every valid one
-    through roblet_simulator.py --headless in parallel OS processes
-    (sim_executor.py), then scores each from its stats.json via
-    objectives_api. Returns a list of (objectives, f_vec, constraint)
-    aligned to `graphs`' order.
-
-    Individuals whose exact genotype (_graph_hash) was already simulated
-    in an earlier generation (typically a carried-over NSGA-III survivor,
-    re-appearing in `graphs` unchanged) skip the MuJoCo run entirely -
-    see _EVAL_CACHE - since the physics is deterministic and would just
-    reproduce the same stats.json. Its stats.json is still (re)written and
-    its previous screenshot copied forward into THIS generation's
-    work_dir, so every downstream reader (objectives_api,
-    evolution_results_visualizer.py) sees the same per-generation file
-    layout as before, just without paying for a redundant simulation -
-    except for up to _CACHE_SPOT_CHECK_MAX_PER_CALL of them, which get
-    re-simulated anyway as a spot check (see its docstring)."""
+    """Writes an MJCF assembly for every graph, runs every valid one through
+    roblet_simulator.py --headless in parallel OS processes (sim_executor.py),
+    then scores each from its stats.json. Returns a list of
+    (objectives, f_vec, constraint) aligned to `graphs`' order.
+    Individuals already simulated in an earlier generation (_EVAL_CACHE,
+    e.g. a carried-over survivor) skip the MuJoCo run, except for a few
+    spot-checked anyway (see _CACHE_SPOT_CHECK_MAX_PER_CALL)."""
     os.makedirs(work_dir, exist_ok=True)
 
     stats_paths = [None] * len(graphs)
@@ -365,17 +272,11 @@ def evaluate_individual(G, work_dir=None, sim_seconds=7.0):
 
 
 def make_children(parent_a, parent_b, ppo_trainer, rng, rl_assisted=True):
-    """One breeding step. When `rl_assisted` (main.py's
-    RL_ASSISTED_GENETIC_OPERATIONS), the RL policy itself picks mutation
-    vs. crossover (and every parameter of whichever it picks) from
-    (parent_a, parent_b) - see rl_api.py's ActorNet. When not, the exact
-    same grammar-legal action space is used but every choice is drawn
-    uniformly at random instead (random_baseline.py) - the classic-GA
-    "blind variation + NSGA-III selection" comparison arm. Returns
-    (children, decision_or_None): `children` is a list of 1 graph for a
-    mutation/GRAFT_SUBTREE, or 2 graphs for a SWAP_SUBTREES (one
-    recombined offspring per parent); `decision` is None only in the rare
-    case nothing at all was legal (falls back to a same-graph copy)."""
+    """One breeding step. `rl_assisted` picks mutation vs. crossover (and its
+    params) via the trained RL policy; otherwise random_baseline.py draws
+    uniformly over the same action space. Returns (children, decision_or_None):
+    1 child for a mutation/GRAFT_SUBTREE, 2 for a SWAP_SUBTREES; `decision`
+    is None only if nothing was legal (falls back to a same-graph copy)."""
     if not rl_api.has_any_legal_action(parent_a, parent_b):
         return [parent_a.copy()], None
 
@@ -389,30 +290,11 @@ def make_children(parent_a, parent_b, ppo_trainer, rng, rl_assisted=True):
 
 def make_children_collision_free(parent_a, parent_b, ppo_trainer, rng, scratch_dir,
                                   max_attempts=8, rl_assisted=True):
-    """Wraps make_children() with a 3D collision gate: if the proposed
-    child/children fail mjcf_generator.py's collision check
-    (_is_collision_free), the decision is rejected and a fresh one is
-    re-sampled - both arms just retry, no RL reward is recorded for a
-    rejected attempt (see run_generation's docstring for why: collision
-    outcomes are deliberately excluded from what PPOTrainer ever sees, not
-    just penalized less).
-    Falls back to a guaranteed-valid no-op copy of parent_a (parent_a is
-    already known collision-free, by induction from this same gate) if
-    every attempt still collides.
-
-    This is what keeps every individual entering a generation already
-    validated - true for BOTH arms of the RL-vs-baseline comparison,
-    since collision-gating is a controlled variable, not part of what's
-    being compared: parents start collision-free (sobol_seed_population),
-    and this function is the only source of new offspring, so the
-    invariant holds by construction for every later generation too.
-
-    Also absorbs roblet_grammar.GraftPortConflict, which apply_decision's
-    GRAFT_SUBTREE/SWAP_SUBTREES can raise (see its docstring) - there's no
-    way to mask that one in advance (it depends on the donor's internal
-    structure, only known once both the host and donor node are already
-    sampled), so it's treated the same as a rejected/colliding attempt
-    here rather than escaping as a crash."""
+    """Wraps make_children() with a 3D collision gate: a colliding
+    decision is rejected and re-sampled, up to `max_attempts` (no RL reward
+    recorded for rejected attempts - see run_generation's docstring). Falls
+    back to a no-op copy of parent_a if every attempt still collides. Also
+    absorbs roblet_grammar.GraftPortConflict, treating it like a rejection."""
     for _ in range(max_attempts):
         try:
             children, decision = make_children(parent_a, parent_b, ppo_trainer, rng, rl_assisted=rl_assisted)
@@ -420,21 +302,14 @@ def make_children_collision_free(parent_a, parent_b, ppo_trainer, rng, scratch_d
             continue
         if all(_is_collision_free(child, scratch_dir, rng) for child in children):
             return children, decision
-        # Deliberately no ppo_trainer.record() call here - see
-        # run_generation's docstring for why collision outcomes are
-        # excluded from RL's reward stream entirely rather than penalized.
     return [parent_a.copy()], None
 
 
 def _write_breeding_events(work_dir, n_parents, n_offspring, events):
-    """Writes `work_dir/breeding_events.json` - the per-generation lineage
-    log helper_scripts/evolution_results_visualizer.py reads for its
-    Mutations/Crossover sub-tabs. `parent_ids`/`child_ids` in each event
-    are indices into this generation's flat evaluated batch (0..n_parents-1
-    = carried-over survivors, re-simulated fresh; n_parents..n_parents+
-    n_offspring-1 = newly bred offspring this generation), matching the
-    `ind{i}_...` filenames evaluate_population() writes - so
-    `screenshot_ind{i}_assembly.png` is each index's screenshot."""
+    """Writes `work_dir/breeding_events.json`, the per-generation lineage log
+    evolution_results_visualizer.py reads. `parent_ids`/`child_ids` are
+    indices into this generation's flat evaluated batch (matching the
+    `ind{i}_...` filenames evaluate_population() writes)."""
     payload = dict(n_parents=n_parents, n_offspring=n_offspring, events=events)
     with open(os.path.join(work_dir, "breeding_events.json"), "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
@@ -445,18 +320,10 @@ def _reference_directions(n_obj, n_partitions=2):
 
 
 def _auto_ref_partitions(n_obj, pop_size):
-    """Largest das-dennis n_partitions whose reference-direction count
-    (comb(n_partitions + n_obj - 1, n_obj - 1)) doesn't exceed `pop_size`
-    - so NSGA-III's niching resolution scales with population size
-    instead of silently staying fixed at whatever partition count
-    happened to fit an earlier, smaller POP_SIZE (a caller that never
-    overrides run_generation's ref_partitions - true of main.py - would
-    otherwise keep e.g. 10 reference directions for 4 objectives even
-    after raising pop_size to 30, where each direction ends up niching
-    ~3 individuals on average - coarser diversity-preservation than the
-    population size could support). Falls back to 1 (comb(n_obj, n_obj-1)
-    = n_obj directions - the minimum meaningful partition count) if even
-    that already exceeds pop_size."""
+    """Largest das-dennis n_partitions whose reference-direction count doesn't
+    exceed `pop_size`, so NSGA-III's niching resolution scales with
+    population size instead of staying fixed at whatever fit an earlier,
+    smaller pop_size."""
     partitions = 1
     while math.comb(partitions + 1 + n_obj - 1, n_obj - 1) <= pop_size:
         partitions += 1
@@ -465,33 +332,14 @@ def _auto_ref_partitions(n_obj, pop_size):
 
 def update_pareto_archive(archive, candidates):
     """Maintains a run-wide, read-only record of every non-dominated
-    (Pareto-optimal) individual ever evaluated - independent of NSGA-III's
-    own environmental selection in _survive(), so a good trade-off point
-    that later gets dropped from the BREEDING population (a legitimate
-    outcome of reference-direction niching preferring front coverage over
-    any one point once the non-dominated front outgrows pop_size - see
-    _survive's docstring) is still preserved here for reporting/analysis.
+    (Pareto-optimal) individual ever evaluated, independent of NSGA-III's own
+    environmental selection - so a good trade-off dropped from the breeding
+    population (legitimate under reference-direction niching) is still kept
+    for reporting/analysis. Never fed back into breeding.
 
-    Deliberately NEVER fed back into breeding - only read by callers (e.g.
-    a future plotting/reporting function) that want "the best trade-offs
-    this run has ever found," without reintroducing the single-objective
-    bias _survive() used to have (an earlier version force-carried the
-    single scalarize-best individual through niching itself, which could
-    permanently lock in an individual that's excellent on one objective
-    and terrible on another - see _survive's docstring for what replaced
-    that).
-
-    `archive`: list of dict(graph, objectives, F) - the archive so far
-    (pass [] for a fresh run). `candidates`: this generation's FEASIBLE
-    evaluated individuals (dict with at least graph/objectives/F) - same
-    pool _survive() draws from (run_generation passes it
-    [all_records[i] for i in feasible_idx]).
-
-    Returns the updated archive: every archive member/candidate that isn't
-    dominated by anything else in the combined pool, deduplicated by graph
-    content hash first - an unchanged survivor re-evaluated generation
-    after generation (moo_api's own _EVAL_CACHE-backed determinism) would
-    otherwise re-enter as a "new" duplicate every single generation."""
+    `archive`: list of dict(graph, objectives, F) so far (pass [] for a fresh
+    run). `candidates`: this generation's feasible evaluated individuals.
+    Returns the updated archive, deduplicated by graph content hash."""
     combined = list(archive) + [dict(graph=c["graph"], objectives=c["objectives"], F=c["F"]) for c in candidates]
     if not combined:
         return []
@@ -518,59 +366,24 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
     `log["archive"]` - the updated Pareto archive (see
     update_pareto_archive) computed from `archive` (the archive so far;
     pass [] or omit on generation 0) and this generation's evaluated pool.
-    Callers that want the archive to persist across generations/resumes
-    should thread `log["archive"]` back in as next call's `archive`.
+    Thread `log["archive"]` back in as next call's `archive` to persist it.
 
-    `rl_assisted` (main.py's RL_ASSISTED_GENETIC_OPERATIONS) switches the
-    breeding operator between the trained RL policy and random_baseline.py's
-    uniform-random choice over the identical grammar-legal action space -
-    see make_children()'s docstring. Everything else (collision-gating,
-    evaluation, NSGA-III survival) is unchanged between the two, so this
-    is the one knob a RL-vs-classic-GA comparison run should toggle.
+    `rl_assisted` switches breeding between the trained RL policy and
+    random_baseline.py's uniform-random choice over the same action space -
+    see make_children()'s docstring; everything else is unchanged between
+    the two arms. Collision/instability outcomes are excluded from the RL
+    reward stream entirely (not just penalized) - see make_children_
+    collision_free's docstring; a flat penalty was tried and collapsed the
+    policy onto whichever action type can never trigger the collision gate.
 
-    Collision/instability outcomes are entirely excluded from the RL
-    reward stream (neither make_children_collision_free()'s geometry-gate
-    rejections nor a post-simulation physics/stability failure ever record
-    anything into ppo_trainer's buffer) rather than being penalized, flat
-    or otherwise. Earlier versions used a flat COLLISION_PENALTY for both:
-    that gave the policy real, measurable success at cutting its own
-    collision rate over a run (confirmed directly - see main.log/checkpoint
-    history from that era), but the mechanism behind it generalizes past
-    "avoid this specific risky move" to "avoid this whole action TYPE",
-    since every structural action (ADD_NODE, GRAFT_SUBTREE, ...) carries
-    some baseline collision risk just by being structural while several
-    non-structural ones (TOGGLE_LIGHT_SENSOR, MUTATE_LIGHT_HINGE_ANGLE)
-    structurally cannot ever trigger the gate at all - any reward
-    mechanism that can fairly compare action types across the whole buffer
-    will correctly (not incorrectly) discover and exploit that asymmetry,
-    collapsing the policy onto whichever action can never fail regardless
-    of how the penalty is scaled or normalized (confirmed twice: the
-    original -2.0-flat-penalty version collapsed onto TOGGLE_LIGHT_SENSOR,
-    and a later attempt to also restore cross-action-type comparison for
-    design-quality learning reproduced the same collapse for the same
-    reason). random_baseline.py never had this problem because it never
-    learns from ANY reward, collision or otherwise - it just re-draws
-    uniformly and eats the same wasted-retry cost every generation,
-    forever, without ever acquiring a preference. This mirrors that:
-    accept the same permanent retry cost baseline already pays, in
-    exchange for a reward stream that only ever reflects genuine
-    scalarize()-delta design quality, never collision/instability - see
-    make_children_collision_free's and this function's Phase 3 comments
-    for exactly where each removed penalty used to be recorded.
+    `n_offspring` is the number of breeding steps (parent-pair draws), not
+    the final offspring count - a SWAP_SUBTREES step produces 2 children, so
+    `log["n_offspring"]` can be slightly larger.
 
-    `n_offspring` is the number of breeding STEPS (parent-pair draws), not
-    the final offspring count: most decisions (mutation, GRAFT_SUBTREE)
-    produce 1 child, but a SWAP_SUBTREES decision produces 2 - so
-    `log["n_offspring"]` (the actual pool size fed to NSGA-III survival)
-    can be slightly larger than the `n_offspring` requested here.
-
-    Structured in 3 phases so every individual's MuJoCo evaluation - both
-    parents and every child - happens in ONE parallel batch:
-      1. breeding decisions (sequential, cheap - only needs graph
-         structure, not this generation's objective values)
-      2. evaluate_population() on parents + all children together
-      3. reward assignment (needs both parent + child objectives),
-         PPO update, and NSGA-III survival
+    Structured in 3 phases so every individual's MuJoCo evaluation happens in
+    one parallel batch: (1) breeding decisions, (2) evaluate_population() on
+    parents + all children together, (3) reward assignment + PPO update +
+    NSGA-III survival.
     """
     pop_size = len(population_graphs)
     n_offspring = n_offspring or pop_size
@@ -588,10 +401,8 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
         pb_idx = population_graphs.index(pb)
 
         children, decision = make_children_collision_free(pa, pb, ppo_trainer, rng, work_dir, rl_assisted=rl_assisted)
-        # Which parent each child's improvement is measured against: a
-        # mutation/GRAFT_SUBTREE child is a single offspring bred from
-        # parent_a, but SWAP_SUBTREES returns one recombined offspring
-        # per parent, so its second child is scored against parent_b.
+        # Which parent each child's improvement is measured against (SWAP_SUBTREES
+        # produces one child per parent; everything else produces one child from parent_a).
         baseline_idxs = [pa_idx] if len(children) == 1 else [pa_idx, pb_idx]
         breeding.append((decision, children, baseline_idxs))
 
@@ -616,16 +427,8 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
             objectives, f_vec, constraint = all_results[cursor]
             child_ids.append(cursor)
             cursor += 1
-            # `constraint` (post-simulation infeasibility - physics_ok/
-            # is_stable failure after already passing the geometry gate)
-            # deliberately does NOT add a penalty here, same reasoning as
-            # the geometry-gate rejections in make_children_collision_free:
-            # `improvement`'s only consumer is the RL reward below, and
-            # collision/instability outcomes are excluded from that reward
-            # stream entirely, not just penalized less - see this
-            # function's docstring. `constraint` itself is still tracked
-            # on offspring_records/log["n_collided"] for feasibility-first
-            # selection and reporting, just never folded into the reward.
+            # `constraint` (post-sim physics_ok/is_stable failure) is tracked on
+            # offspring_records/log["n_collided"] but never folded into the reward - see docstring.
             improvement = obj_api.scalarize(objectives) - obj_api.scalarize(parent_records[baseline_idx]["objectives"])
             improvements.append(improvement)
             offspring_records.append(dict(graph=child, objectives=objectives, F=f_vec, constraint=constraint))
@@ -649,28 +452,12 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
 
     all_records = parent_records + offspring_records
 
-    # Feasibility-first selection: ReferenceDirectionSurvival._do() does
-    # pure Pareto/niche sorting on F alone - it has no idea `constraint`
-    # even exists (this module only ever used it for RL reward penalties
-    # and the n_collided log, never attached it to the pymoo Individuals).
-    # Left unchecked, a failed simulation (all-zero objectives, since
-    # f1/f3/f4/f5 are still placeholders) isn't necessarily Pareto-
-    # dominated by anything, so it can survive into the next generation
-    # purely by not being strictly worse - which is exactly how a failed,
-    # screenshot-less individual ends up looking like a "survivor". Feasible
-    # individuals (constraint <= 0) are selected first; only if there
-    # aren't enough of them to fill the population are infeasible ones
-    # used to pad it out, so the population size never shrinks.
-    #
-    # `objectives`/`ind_id` are attached directly onto each Individual
-    # (pymoo's .set()/.get() payload, same mechanism ReferenceDirectionSurvival
-    # itself uses for "rank") rather than looked up afterward from a dict
-    # keyed by id(r["graph"]) - Python's id() is only unique for an object's
-    # LIFETIME; a discarded object's id() can be reused by an unrelated
-    # later object once garbage collected, silently returning the WRONG
-    # individual's objectives/ind_id (the exact hazard _EVAL_CACHE's own
-    # docstring already warns about, keying itself by content hash instead -
-    # this brings survivor bookkeeping in line with that same rule).
+    # Feasibility-first selection: ReferenceDirectionSurvival does pure Pareto/niche
+    # sorting on F alone, so a failed simulation (all-zero objectives) could otherwise
+    # "survive" by not being strictly worse. Feasible individuals (constraint <= 0) are
+    # selected first; infeasible ones only pad out the population if there aren't enough.
+    # objectives/ind_id are attached directly onto each Individual (not looked up by
+    # id(graph) afterward, since a discarded object's id() can be reused).
     def _survive(indices, n_survive):
         if not indices or n_survive <= 0:
             return []
@@ -691,22 +478,6 @@ def run_generation(population_graphs, ppo_trainer, rng, work_dir=None, sim_secon
     feasible_idx = [i for i, r in enumerate(all_records) if r["constraint"] <= 0]
     infeasible_idx = [i for i, r in enumerate(all_records) if r["constraint"] > 0]
 
-    # NOTE: an earlier version of this function force-carried the single
-    # best-SCALARIZED individual through regardless of niching. Reverted:
-    # ReferenceDirectionSurvival._do() already runs on all_records (parents
-    # + offspring combined, i.e. P_t ∪ Q_t) - that IS NSGA-III's own
-    # elitism, and it already keeps every non-dominated individual unless
-    # the non-dominated front itself exceeds pop_size, in which case
-    # niching picks a spread across reference directions rather than one
-    # scalarized "best" - that's the algorithm correctly prioritizing
-    # front coverage, not a bug. Forcing one scalarize-argmax individual
-    # through on top of that imposes a single-objective preference NSGA-III
-    # was never designed to have, and can permanently lock in an individual
-    # that's excellent on one objective and terrible on another (see
-    # plot_entropy_vs_velocity - this is what pinned the RL-assisted run's
-    # best-by-scalarize individual at ~worst-possible folding entropy).
-    # See update_pareto_archive() for how "never lose a good solution" is
-    # now handled instead - a read-only archive, not a change to selection.
     survivors = _survive(feasible_idx, pop_size)
     if len(survivors) < pop_size:
         logger.warning(

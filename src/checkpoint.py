@@ -1,14 +1,6 @@
 """
-Checkpoint - save/resume the whole evolution run: RL weights + optimizer
-state + training history, the current population, the breeding RNG state,
-and which generation to resume at. main.py checks for a checkpoint at
-startup and auto-resumes from it if present - no flag needed - so a crash,
-manual stop, or unhandled exception loses at most the generation that was
-in progress, never everything before it.
-
-Written via temp-file-then-atomic-rename (os.replace): a checkpoint file
-on disk is always either the previous complete one or the new complete
-one, never a partial write from a crash mid-save.
+Checkpoint - save/load evolution run state (RL weights, population, RNG,
+generation) to/from a .pt file. main.py auto-resumes from this at startup.
 """
 
 import logging
@@ -33,17 +25,12 @@ def save(path, generation, seed, rng, population, ppo_trainer):
         rng_state=rng.getstate(),
         population=[nx.node_link_data(g, edges="edges") for g in population],
         ppo=ppo_trainer.state_dict(),
-        # scalarize()'s per-objective running min/max - without this, a
-        # resumed run would start normalizing from an empty range again
-        # (briefly treating every objective as "no variation yet").
-        obj_norm=obj_api.get_normalization_state(),
+        obj_norm=obj_api.get_normalization_state(),  # objectives_api's running min/max
     )
 
     directory = os.path.dirname(os.path.abspath(path)) or "."
     os.makedirs(directory, exist_ok=True)
-    # Temp file in the SAME directory so os.replace is an atomic rename
-    # (not a cross-filesystem copy+delete, which isn't atomic and could
-    # leave a half-written file on a crash between the two steps).
+    # Temp file + os.replace for an atomic write (no partial file on a crash mid-save).
     fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=".checkpoint_", suffix=".tmp")
     os.close(fd)
     try:
@@ -67,31 +54,13 @@ def load(path, ppo_trainer):
     if not os.path.exists(path):
         return None
 
-    # weights_only=False: this payload carries plain Python objects
-    # (graph JSON dicts, RNG state tuples) alongside tensors, not just
-    # tensors - safe here since it's a checkpoint this same codebase
-    # wrote, not an untrusted third-party file.
+    # weights_only=False: payload has plain Python objects (graphs, RNG state) alongside tensors.
     payload = torch.load(path, weights_only=False)
     try:
         ppo_trainer.load_state_dict(payload["ppo"])
     except (RuntimeError, KeyError):
-        # nn.Module.load_state_dict is shape-strict (raises RuntimeError):
-        # a checkpoint saved before the RL action space or node feature
-        # vector grew (e.g. adding the light-sensitive-joint design
-        # variables' new TOGGLE_LIGHT_SENSOR/MUTATE_LIGHT_HINGE_ANGLE
-        # actions and their two new per-node features - see rl_api.py) has
-        # ActorNet/CriticNet tensors of the WRONG size for the current
-        # architecture. KeyError covers the same "incompatible
-        # architecture" bucket one level up: a checkpoint saved before
-        # PPOTrainer.state_dict()'s own dict shape changed (e.g. actor and
-        # critic used to each own a separate optimizer/encoder -
-        # "actor_optimizer"/"critic_optimizer" keys - now they share one
-        # encoder and one combined "optimizer" key - see PPOTrainer).
-        # There's no safe partial-load either way (the mismatched pieces
-        # are exactly what every other layer's weights were jointly
-        # trained against), so treat both the same as "no checkpoint" - a
-        # full fresh Sobol-reseeded start - rather than crashing main.py
-        # outright.
+        # Checkpoint's RL architecture doesn't match the current one (e.g. after an
+        # action-space/network change) - no safe partial-load, so start fresh instead.
         logger.warning(
             "Checkpoint at %s has RL weights/optimizer state that don't match the current "
             "network/trainer architecture (likely from before a design-variable/action-space "

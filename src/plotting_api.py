@@ -1,12 +1,8 @@
 """
-Plotting & Artifacts API - saves per-generation population JSON, a Pareto
-front plot (last generation, pairwise objective panels), per-fitness trend
-lines, a GA convergence plot, an entropy-vs-velocity scatter, and RL (PPO)
-training diagnostics (one PNG per metric) across a run.
-
-All figures are saved at DPI (300, "print quality") with a shared bright,
-high-contrast style (see _apply_bright_style) - proper titles/units on
-every axis, no default matplotlib grey-on-grey look.
+Plotting & Artifacts API - saves per-generation population JSON, Pareto
+front / fitness-trend / convergence / entropy-vs-velocity plots, and RL
+(PPO) training diagnostics across a run. All figures use a shared bright,
+high-contrast style (see _apply_bright_style).
 """
 
 import collections
@@ -31,33 +27,15 @@ logger = logging.getLogger(__name__)
 
 DPI = 600
 
-# Shared typography knobs - tune these instead of hunting down individual
-# fontsize= calls. FONT_FAMILY applies to every piece of text in every
-# figure (titles included) via rcParams; the two size knobs only cover
-# axis/tick labels and legend/marker-annotation text respectively (figure
-# and subplot TITLE sizes are left as each plot's own literal, since they
-# were not asked to move together with these).
+# Shared typography knobs, applied via rcParams instead of per-call fontsize=.
 FONT_FAMILY = "Arial"
 FONT_SIZE_AXIS_LABEL = 14   # axes.labelsize + tick labels
 FONT_SIZE_LEGEND = 11        # legend text + small marker/count annotations
 
 
 def _save_fig(fig, path, dpi=DPI, **savefig_kwargs):
-    """Saves and closes `fig`, but never lets a failed write (the PNG open
-    in an image viewer/IDE preview, a virus scanner or sync client holding
-    a transient lock - the OSError this raises on Windows varies:
-    PermissionError, or "[Errno 22] Invalid argument") propagate out of a
-    plotting call. main.py calls these once per generation, AFTER the
-    (expensive) simulation/breeding work is done and BEFORE
-    checkpoint.save() - an uncaught exception here would abort the whole
-    generation loop and force a resume to re-run that entire generation's
-    simulation just to regenerate a picture. Logs a warning and returns
-    None instead.
-
-    dpi defaults to this module's usual DPI=600 "print quality" - pass an
-    explicit override (e.g. the RL-vs-baseline comparison plots' 300) for a
-    figure that's meant to be a quick screen/slide look rather than
-    archival print output."""
+    """Saves and closes `fig`, logging a warning and returning None instead of
+    raising if the write fails (e.g. file locked by a viewer)."""
     try:
         fig.savefig(path, dpi=dpi, **savefig_kwargs)
     except OSError:
@@ -72,15 +50,11 @@ def _save_fig(fig, path, dpi=DPI, **savefig_kwargs):
 
 
 def _integer_x_axis(ax):
-    """Generation/step counts are always whole numbers - without this,
-    matplotlib's default tick locator can pick fractional ticks (0.00,
-    0.25, 0.50, ...) when there are only a few of them."""
+    """Forces integer tick labels (avoids fractional generation/step ticks)."""
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
 
-# Human-readable (title, axis-label-with-units) per current OBJECTIVE_NAMES
-# entry - used everywhere a plot needs to show an objective by name instead
-# of its raw dict key.
+# Human-readable (title, axis-label-with-units) per OBJECTIVE_NAMES entry.
 _OBJECTIVE_DISPLAY = {
     "f1_folded_gait_velocity": ("Folded-Gait Velocity", "Velocity - m/s"),
     "f2_entropy": ("Entropy (Folding-Complexity Gain)", "Entropy Δ = H(3D) - H(2D)"),
@@ -88,9 +62,7 @@ _OBJECTIVE_DISPLAY = {
     "f4_pheromone_speed_response": ("Pheromone Speed Response", "Speed Response - Δv / v"),
 }
 
-# One consistent bright color per current objective, reused across fitness
-# trends / entropy plot / anywhere else a specific objective needs a fixed
-# identity color instead of an arbitrary cycle color.
+# One consistent bright color per objective, reused across plots.
 _OBJECTIVE_COLOR = {
     "f1_folded_gait_velocity": "#1f77ff",   # bright blue
     "f2_entropy": "#22b14c",                # bright green
@@ -107,22 +79,15 @@ _RL_METRIC_COLOR = {
     "entropy_coef": "#ff8c00",
 }
 
-# Single-run plot_convergence() is called once per arm from two SEPARATE
-# main.py processes (RL_ASSISTED_GENETIC_OPERATIONS True writing to
-# evolution_run/, False writing to evolution_run_norl/ - see main.py's
-# module docstring), so unlike plot_convergence_comparison() it can't just
-# zip colors against a dict of runs it can see side by side. Fixing one
-# color per arm here instead keeps every convergence.png - whichever run
-# produced it - visually consistent with the comparison plots' own
-# RL-vs-baseline coloring (same two hex values as their run_colors[0:2]).
+# Fixed per-arm colors so a single-run convergence.png stays visually
+# consistent with the RL-vs-baseline comparison plots.
 _RL_ARM_COLOR = "#1f77ff"
 _BASELINE_ARM_COLOR = "#e8382b"
 
 
 def _apply_bright_style():
-    """One shared look for every figure in this module: white background,
-    bold titles, a light grid, readable font sizes - applied once at
-    import time (matplotlib rcParams are process-global)."""
+    """One shared look for every figure: white background, bold titles,
+    light grid. Applied once at import time via rcParams."""
     plt.rcParams.update({
         "figure.facecolor": "white",
         "axes.facecolor": "white",
@@ -150,22 +115,8 @@ _apply_bright_style()
 
 
 def append_generation_population(gen_idx, records, out_dir):
-    """records: list of dict(graph=nx.DiGraph, objectives=dict, ind_id=int).
-    Appends the full graph topology + objectives for every surviving
-    individual to out_dir/population_history.json - one growing file for
-    the whole run instead of a separate generation_{gen}_population.json
-    per generation (which cluttered OUTPUT_DIR and made
-    _load_all_generations re-open every prior generation's file on every
-    call). `ind_id` (optional - None if a caller doesn't have one) is the
-    survivor's index into this generation's flat ind0..indN evaluated
-    batch - lets helper_scripts/evolution_results_visualizer.py match a
-    survivor back to its exact screenshot/XML/stats.json, and tell newly
-    bred offspring (ind_id >= that generation's breeding_events.json
-    n_parents) apart from carried-over parents.
-
-    Idempotent by generation index (replaces rather than duplicates an
-    existing entry for the same `gen_idx`), matching
-    append_generation_stats()'s resume-safe behavior."""
+    """Appends this generation's surviving individuals (graph + objectives) to
+    out_dir/population_history.json. Idempotent by generation index."""
     os.makedirs(out_dir, exist_ok=True)
     population = [
         {
@@ -186,16 +137,9 @@ def append_generation_population(gen_idx, records, out_dir):
 
 
 def save_pareto_archive(archive, out_dir):
-    """Writes out_dir/pareto_archive.json - moo_api.update_pareto_archive's
-    current archive (list of dict(graph, objectives, F)), serialized the
-    same way append_generation_population serializes a graph
-    (nx.node_link_data). Unlike population_history.json this OVERWRITES
-    rather than appends each call: the archive is already the complete,
-    deduplicated, up-to-date non-dominated set as of this generation, not
-    a per-generation increment - there's nothing to accumulate on top of
-    it. Called every generation from main.py right after run_generation,
-    same as population_history.json, so a resumed run can reload it via
-    load_pareto_archive() instead of restarting the archive empty."""
+    """Writes out_dir/pareto_archive.json with the current Pareto archive
+    (list of dict(graph, objectives, F)). Overwrites each call, since the
+    archive is already the complete, deduplicated non-dominated set."""
     os.makedirs(out_dir, exist_ok=True)
     payload = [
         {
@@ -212,11 +156,7 @@ def save_pareto_archive(archive, out_dir):
 
 
 def load_pareto_archive(out_dir):
-    """Inverse of save_pareto_archive - returns [] if the run hasn't
-    written one yet (fresh run, or a run from before this archive
-    existed), otherwise the archive in the same dict(graph, objectives, F)
-    shape moo_api.update_pareto_archive expects, with `graph` restored to
-    an nx.DiGraph (nx.node_link_graph) and `F` restored to an np.ndarray."""
+    """Inverse of save_pareto_archive - returns [] if none exists yet."""
     path = os.path.join(out_dir, "pareto_archive.json")
     if not os.path.exists(path):
         return []
@@ -241,19 +181,9 @@ def _load_population_history(out_dir):
 
 
 def _load_all_generations(out_dir):
-    """Reads out_dir/population_history.json (written by
-    append_generation_population), returning [(gen_idx, population)]
-    sorted by generation index - the shared data source for every plot
-    below. Re-reads from disk each call (rather than taking an accumulated
-    in-memory history) so these plots stay correct even if a run is
-    resumed or these functions are called standalone.
-
-    Every entry's objectives dict is run through
-    objectives_api.migrate_legacy_objectives() here, ONCE, centrally - so
-    every plot function below only ever has to know about the CURRENT
-    OBJECTIVE_NAMES schema, whether the underlying file was written by
-    this code or an older pre-renumbering run (see that function's
-    docstring)."""
+    """Reads population_history.json, returning [(gen_idx, population)] sorted
+    by generation - the shared data source for every plot below. Objectives
+    are migrated to the current schema via migrate_legacy_objectives()."""
     history = _load_population_history(out_dir)
     generations = [(h["generation"], h["population"]) for h in sorted(history, key=lambda h: h["generation"])]
     for _, pop in generations:
@@ -263,14 +193,9 @@ def _load_all_generations(out_dir):
 
 
 def _population_costs_and_ranks(pop):
-    """(costs, rank): costs is an (n, len(OBJECTIVE_NAMES)) array, each
-    column min-max normalized to [0, 1] where LOWER is always better
-    (objectives_api.to_minimization_vector's convention, so a "maximize"
-    objective like f1 is sign-flipped first) - a shared, direction-
-    agnostic scale so every pairwise Pareto panel below reads the same
-    way ("down-and-left is better") regardless of which axis is which.
-    rank is pymoo's non-dominated sort front index per individual (0 =
-    the Pareto front itself, larger = more dominated)."""
+    """(costs, rank): costs is an (n, len(OBJECTIVE_NAMES)) array, each column
+    min-max normalized to [0, 1] where LOWER is always better. rank is the
+    non-dominated sort front index per individual (0 = Pareto front)."""
     F = np.array([obj_api.to_minimization_vector(e["objectives"]) for e in pop])
     value_range = np.ptp(F, axis=0)
     value_range[value_range == 0] = 1.0
@@ -284,50 +209,18 @@ def _population_costs_and_ranks(pop):
 
 
 def plot_pareto_front_last_gen(out_dir, filename="pareto_front.png", n_generations=5):
-    """Single figure, 4 panels (f1 vs f2, f2 vs f3, f3 vs f4, f4 vs f1),
-    overlaying up to `n_generations` generations' own Pareto fronts (rank-0,
-    non-dominated members only - NonDominatedSorting run separately per
-    generation, never pooled across generations), evenly spaced across the
-    run (always including the first and last recorded generation) and
-    colored by generation (like plot_entropy_vs_velocity) - so how the
-    front actually MOVED over the run is visible directly, not just its
-    final-generation position.
-
-    Deliberately NOT "every individual from a few generations, colored by
-    generation" (that's already plot_entropy_vs_velocity, for f1 vs f2) -
-    keeping only each generation's rank-0 members is what keeps this a
-    Pareto-front plot rather than a general population-drift scatter: only
-    non-dominated points are ever shown, generation by generation.
-
-    Every panel is normalized against ONE shared basis - each objective's
-    min/max across every individual, every rank, every generation in the
-    WHOLE run (not just the plotted generations) - not the last-gen-only
-    per-population normalization _population_costs_and_ranks uses
-    elsewhere. A per-generation basis would make each selected
-    generation's front independently stretch to fill the full 0-1 axis
-    regardless of whether it actually improved, hiding the very movement
-    this plot exists to show.
-
-    No line joins a front's points: each panel is a 2D slice of the full
-    4-objective front, and there's no guarantee that slice is monotonic
-    the way a true 2-objective front is, so a connecting line would imply
-    a curve shape that isn't actually there.
-
-    With only 4 objectives, it's common (not a bug) for MOST or ALL of a
-    modest-sized population to land in rank 0 at once ("dominance
-    resistance" - each individual wins on at least one objective vs. every
-    other) - NSGA-III actively preserves non-dominated individuals, which
-    reinforces this. More generations don't reliably reduce that; a larger
-    population relative to the objective count is what gives the
-    reference-direction niching room to actually differentiate within
-    rank 0."""
+    """4 panels (f1 vs f2, f2 vs f3, f3 vs f4, f4 vs f1) overlaying up to
+    `n_generations` generations' own Pareto fronts (rank-0 members only),
+    evenly spaced across the run and colored by generation, so how the
+    front moved over the run is visible directly. Normalized against one
+    shared basis (min/max across the whole run) so fronts stay comparable
+    across generations."""
     generations = _load_all_generations(out_dir)
     if not generations:
         return None
 
     # Shared normalization basis: every individual, every rank, every
-    # generation in the run - see docstring for why this can't be
-    # per-generation once multiple generations share the same axes.
+    # generation in the run.
     all_F = np.array([
         obj_api.to_minimization_vector(entry["objectives"])
         for _, pop in generations for entry in pop
@@ -338,8 +231,7 @@ def plot_pareto_front_last_gen(out_dir, filename="pareto_front.png", n_generatio
     value_range[value_range == 0] = 1.0
     f_min = all_F.min(axis=0)
 
-    # Up to n_generations, evenly spaced by index across every recorded
-    # generation, always including the first and last.
+    # Up to n_generations, evenly spaced, always including first and last.
     n_pick = min(n_generations, len(generations))
     pick_idxs = np.unique(np.round(np.linspace(0, len(generations) - 1, n_pick)).astype(int))
     selected = [generations[i] for i in pick_idxs]
@@ -370,10 +262,7 @@ def plot_pareto_front_last_gen(out_dir, filename="pareto_front.png", n_generatio
     for ax, (i, j) in zip(axes, pairs):
         ax.set_xlabel(titles[i])
         ax.set_ylabel(titles[j])
-        # Short title only - the full descriptive names are already on the
-        # axis labels; the combined "f1 vs f2: <name> vs <name>" version
-        # was long enough to visually collide with the adjacent subplot's
-        # title in the same row.
+        # Short title only - full names are already on the axis labels.
         ax.set_title(f"f{i + 1} vs f{j + 1}", fontsize=12)
         ax.set_xlim(-0.05, 1.05)
         ax.set_ylim(-0.05, 1.05)
@@ -392,21 +281,11 @@ def plot_pareto_front_last_gen(out_dir, filename="pareto_front.png", n_generatio
 
 
 def plot_pareto_parallel_coordinates(out_dir, filename="pareto_parallel_coordinates.png"):
-    """Parallel-coordinates view of the MOST RECENT generation's population
-    only (plot_pareto_front_last_gen moved to overlaying several
-    generations' own fronts instead - see its docstring - so this is no
-    longer the "same population" as that plot): one axis per objective
-    (f1..f4), one line per individual crossing all four - shows tradeoffs
-    across all objectives at once instead of one pair at a time.
-
-    Each axis plots costs' complement (1 - min-max-normalized cost), so
-    "up" always means "better" on every axis regardless of that
-    objective's own maximize/minimize direction - normalized within this
-    one generation's population (_population_costs_and_ranks), with the
-    same 3-tier rank coloring this file used to also use for
-    plot_pareto_front_last_gen: rank 0 (the actual front) in distinct
-    cyan, ranks 1-4 in flat light blue, rank 5+ in a plasma gradient by
-    rank."""
+    """Parallel-coordinates view of the most recent generation's population:
+    one axis per objective (f1..f4), one line per individual, showing
+    tradeoffs across all objectives at once. "Up" always means "better" on
+    every axis; rank 0 (front) is cyan, ranks 1-4 light blue, rank 5+ a
+    plasma gradient by rank."""
     generations = _load_all_generations(out_dir)
     if not generations:
         return None
@@ -463,14 +342,10 @@ def plot_pareto_parallel_coordinates(out_dir, filename="pareto_parallel_coordina
 
 
 def plot_fitness_trends(out_dir, filename="fitness_trends.png"):
-    """One subplot per objective (2x2 grid, f1..f4): each generation's BEST
-    value (in that objective's own "higher/lower is better" direction per
-    objectives_api.MAXIMIZE) as a solid line, PLUS the population MEAN
-    (raw arithmetic mean of that objective, not sign-corrected - unlike
-    "best," a mean has no direction to chase, it's a homogeneity readout)
-    as a dashed line - so a gap that isn't closing (mean far below best)
-    is visible per-OBJECTIVE here, not just once as one scalarized number
-    in plot_convergence."""
+    """One subplot per objective (2x2 grid, f1..f4): each generation's best
+    value (solid line) and population mean (dashed line), so a gap that
+    isn't closing is visible per-objective rather than one scalarized
+    number as in plot_convergence."""
     generations = _load_all_generations(out_dir)
     if not generations:
         return None
@@ -503,14 +378,10 @@ def plot_fitness_trends(out_dir, filename="fitness_trends.png"):
 
 
 def plot_entropy_vs_velocity(out_dir, filename="entropy_vs_velocity.png"):
-    """AO-2's "relationship between morphology complexity and locomotion"
-    view - every individual across every generation, one point each, f2
-    (entropy / folding-complexity gain) against f1 (folded-gait velocity),
-    colored by which generation it's from so a temporal drift is still
-    visible even though this isn't a per-generation line chart. Pooling
-    every individual (not just per-generation means) is what actually lets
-    a real correlation between the two objectives show up - averaging per
-    generation first would wash that out."""
+    """Scatter of every individual across every generation, f2 (entropy)
+    against f1 (folded-gait velocity), colored by generation. Pooling every
+    individual (not per-generation means) keeps any real correlation
+    visible instead of washing it out."""
     generations = _load_all_generations(out_dir)
     if not generations:
         return None
@@ -541,66 +412,20 @@ def plot_entropy_vs_velocity(out_dir, filename="entropy_vs_velocity.png"):
 
 
 def _scalarize_offline(generations):
-    """Same formula as objectives_api.scalarize() (equal-weight mean of
-    each objective normalized to [0,1] against its own observed range),
-    but with a running range built LOCALLY here instead of read from
-    objectives_api's module-global _RUNNING_MIN/_RUNNING_MAX.
+    """Same formula as objectives_api.scalarize() (equal-weight mean of each
+    objective normalized to [0,1]), but with the running min/max range
+    rebuilt locally and chronologically here instead of read from
+    objectives_api's live module-global state - so this gives the same
+    answer whether called from a live run or standalone (e.g. compare.py).
 
-    That global is intentionally online/incremental (see scalarize()'s
-    docstring) - correct for moo_api.py's live RL reward, where every
-    individual passes through objectives_api.compute_objectives() (which
-    updates the global) before anything ever scalarizes it. But this
-    module's plotting functions are explicitly designed to also work
-    standalone, from a fresh process that never called compute_objectives()
-    at all - e.g. compare.py, which only ever reads pre-computed objectives
-    back out of population_history.json (see _load_all_generations'
-    docstring: "so these plots stay correct... called standalone"). In
-    that context the global stays completely empty for every generation,
-    so scalarize() silently falls through to its raw-UNnormalized-sum
-    fallback the whole time instead of the intended equal-weighted [0,1]
-    mean - a completely different scale (dominated by whichever objective
-    has the largest raw units, e.g. yaw response in degrees) that doesn't
-    match what the SAME run's convergence.png shows when plotted live by
-    main.py (where the global genuinely is populated). That mismatch is
-    exactly what makes plot_convergence() and plot_convergence_comparison()
-    disagree about identical underlying data depending on which process
-    generated them - rebuilding the range here removes that dependency
-    entirely, so both always agree regardless of calling context.
-
-    Rebuilt chronologically (by generation, in the order given) to
-    preserve scalarize()'s own documented "normalization range widens as
-    the run progresses" behavior, rather than normalizing every generation
-    against the full run's final range (which would let a later
-    generation's discoveries retroactively reshape how an earlier
-    generation's score is read).
-
-    `generations`: [(gen_idx, population), ...] as returned by
-    _load_all_generations()/_load_comparison_runs(). Returns
-    dict[gen_idx -> list[float]] - one scalarized score per individual in
-    that generation's population, same order as the input population."""
+    `generations`: [(gen_idx, population), ...]. Returns
+    dict[gen_idx -> list[float]], one scalarized score per individual."""
     running_min, running_max = {}, {}
     scores_by_gen = {}
     for gen_idx, pop in generations:
-        # Pass 1: fold this WHOLE generation's individuals into the running
-        # range before scoring ANY of them. Updating-and-scoring one
-        # individual at a time (the obvious single-pass approach) would
-        # make an individual's score depend on which OTHER individuals in
-        # the SAME generation happened to be processed before it - an
-        # arbitrary, population_history.json-list-order artifact with no
-        # live equivalent (in a live run, every individual in a generation
-        # has already gone through compute_objectives() - which updates
-        # the range - before anything ever calls scalarize() on that
-        # generation's results, so the range is always complete for the
-        # WHOLE generation by the time any of it is scored). Worst case
-        # under the single-pass version: the very first individual ever
-        # processed sees a fully degenerate (single-point) range on every
-        # objective and falls through to scalarize()'s raw-unnormalized-
-        # sum fallback while its 29 generation-mates get properly
-        # normalized scores right next to it - producing a score with no
-        # relation to its real quality (confirmed directly: this was
-        # exactly what put a lone 1.5 spike at generation 0 in an earlier
-        # version of this function, on a scale where every other value
-        # sits in roughly [0.3, 0.8]).
+        # Pass 1: fold this whole generation into the running range before
+        # scoring any of it, so no individual's score depends on processing
+        # order within the generation.
         for entry in pop:
             objectives = entry["objectives"]
             for n in obj_api.OBJECTIVE_NAMES:
@@ -610,8 +435,7 @@ def _scalarize_offline(generations):
                 if n not in running_max or v > running_max[n]:
                     running_max[n] = v
 
-        # Pass 2: score every individual in this generation against the
-        # now-complete-for-this-generation range.
+        # Pass 2: score against the now-complete range for this generation.
         scores = []
         for entry in pop:
             objectives = entry["objectives"]
@@ -635,19 +459,9 @@ def _scalarize_offline(generations):
 
 
 def plot_convergence(out_dir, is_rl=True, filename="convergence.png"):
-    """Best vs. population-mean SCALARIZED fitness (_scalarize_offline -
-    the equal-weight, normalized combination across f1..f4, computed
-    standalone so it never depends on objectives_api's live-run-only
-    running-range state - see that function's docstring) per generation:
-    the classic GA "convergence" view - a healthy run's mean climbs toward
-    the best line as the population homogenizes around good solutions.
-
-    `is_rl`: which arm this OUTPUT_DIR belongs to (main.py's
-    RL_ASSISTED_GENETIC_OPERATIONS) - both Best and Mean are drawn in that
-    arm's single fixed color (_RL_ARM_COLOR / _BASELINE_ARM_COLOR) rather
-    than an arm-agnostic blue-for-best/red-for-mean, so a viewer looking at
-    this run's convergence.png alone (not the side-by-side comparison
-    plot) still gets the same RL=blue/baseline=red identity everywhere."""
+    """Best vs. population-mean scalarized fitness per generation - the
+    classic GA convergence view. `is_rl` selects which arm's fixed color
+    (_RL_ARM_COLOR / _BASELINE_ARM_COLOR) to draw both lines in."""
     generations = _load_all_generations(out_dir)
     if not generations:
         return None
@@ -675,25 +489,15 @@ def plot_convergence(out_dir, is_rl=True, filename="convergence.png"):
     return _save_fig(fig, path)
 
 
-# HV's reference point must weakly dominate (be worse than) every point
-# it's ever handed - since every front below is normalized into [0, 1]
-# (lower-is-better) against the whole run's own observed range, a fixed
-# point just past that range's worst possible corner works for every
-# generation without needing per-call retuning.
+# HV's reference point must be worse than every point it's ever handed;
+# since fronts are normalized to [0, 1], a fixed point just past 1.0 works.
 _HV_REF_POINT_MARGIN = 1.05
 
 
 def _run_wide_normalized(entries):
-    """(n, len(OBJECTIVE_NAMES)) array: objectives_api.to_minimization_vector
-    per entry, then min-max normalized against the range observed ACROSS
-    ALL of `entries` (not one generation's own local range, unlike
-    _population_costs_and_ranks) - so hypervolume means the same thing
-    regardless of which generation computed it, comparable as a trend
-    across the whole run. Recomputed fresh from population_history.json
-    every call - no dependency on objectives_api's in-memory running-
-    min/max state, so this gives the same answer whether called from
-    inside the live training process or standalone later (e.g. from
-    evolution_results_visualizer.py)."""
+    """(n, len(OBJECTIVE_NAMES)) array, min-max normalized against the range
+    observed across ALL of `entries` (not one generation's local range), so
+    hypervolume is comparable as a trend across the whole run."""
     F = np.array([obj_api.to_minimization_vector(e["objectives"]) for e in entries])
     lo, hi = F.min(axis=0), F.max(axis=0)
     span = hi - lo
@@ -702,21 +506,10 @@ def _run_wide_normalized(entries):
 
 
 def compute_hypervolume(out_dir):
-    """Per-generation Hypervolume (HV) - computed fresh from
-    population_history.json every call (like every other function in
-    this module - see _load_all_generations' docstring).
-
-    HV is the standard multi-objective quality indicator for a real
-    engineering problem like this one: unlike GD/IGD/IGD+, it only needs
-    a reference POINT, not a reference FRONT, so it doesn't need a known
-    "true" Pareto front (which doesn't exist here - this isn't a
-    benchmark test function) or an empirically-best-known substitute
-    (which would partly measure the run against its own output - a
-    circularity GD/IGD/IGD+ can't avoid without real ground truth, which
-    is why this module deliberately doesn't compute them).
-
-    Returns dict(generations=[...], hv=[...]), or None if there's no
-    population_history.json yet."""
+    """Per-generation Hypervolume (HV) - the standard multi-objective quality
+    indicator here since it only needs a reference point, not a known "true"
+    Pareto front (unlike GD/IGD/IGD+). Returns dict(generations=[...],
+    hv=[...]), or None if no population_history.json exists yet."""
     generations = _load_all_generations(out_dir)
     if not generations:
         return None
@@ -740,9 +533,7 @@ def compute_hypervolume(out_dir):
 
 
 def plot_hypervolume(out_dir, filename="hypervolume.png"):
-    """Hypervolume trend across generations - see compute_hypervolume for
-    why this module tracks HV alone and not GD/IGD/IGD+ (no known true
-    Pareto front to compare against for a real engineering problem)."""
+    """Hypervolume trend across generations (see compute_hypervolume)."""
     data = compute_hypervolume(out_dir)
     if not data:
         return None
@@ -761,15 +552,7 @@ def plot_hypervolume(out_dir, filename="hypervolume.png"):
 
 def append_generation_stats(gen_idx, log, out_dir):
     """Appends {generation, n_parents, n_offspring, n_collided} to
-    out_dir/generation_stats.json - the per-generation breeding/collision
-    counts from moo_api.run_generation's `log`, which aren't reconstructable
-    from population_history.json alone (that only has survivors, not
-    how many offspring were bred or how many collided). Feeds
-    plot_rl_vs_baseline_comparison's collision-rate panel.
-
-    Idempotent by generation index (replaces rather than duplicates an
-    existing entry for the same `gen_idx`) so re-running a generation
-    after a resume doesn't double-count it."""
+    out_dir/generation_stats.json. Idempotent by generation index."""
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, "generation_stats.json")
     stats = _load_generation_stats(out_dir)
@@ -794,12 +577,9 @@ def _load_generation_stats(out_dir):
         return json.load(f)
 
 
-# One consistent color per grammar action - reused by every plot below
-# that breaks something out by action type, split visually into a light
-# blue/green/gold family for the 8 mutation actions vs. bold red/purple
-# for the 2 crossover actions, so a crossover action is immediately
-# distinguishable in a stacked/grouped view instead of blending into the
-# mutation majority (see plot_action_distribution).
+# One consistent color per grammar action; mutation actions get a light
+# blue/green/gold family, crossover actions bold red/purple so they stand
+# out in stacked/grouped views.
 _ACTION_COLORS = {
     "ADD_NODE": "#1f77ff",
     "DELETE_NODE": "#5aa0ff",
@@ -815,14 +595,8 @@ _ACTION_COLORS = {
 
 
 def _load_breeding_events(out_dir):
-    """[(gen_idx, events)] for every generation with a breeding_events.json
-    (moo_api._write_breeding_events - written once per generation,
-    unconditionally, in both the RL-assisted and random-baseline arms).
-    Reuses population_history.json's own generation indices (via
-    _load_all_generations) rather than re-scanning generation_* folders
-    independently, so the two data sources never disagree about which
-    generations exist. A generation whose file is missing (e.g. an
-    interrupted/partial folder) is silently skipped."""
+    """[(gen_idx, events)] for every generation with a breeding_events.json.
+    Generations with a missing file are silently skipped."""
     generations = _load_all_generations(out_dir)
     result = []
     for gen_idx, _ in generations:
@@ -836,12 +610,8 @@ def _load_breeding_events(out_dir):
 
 
 def plot_action_distribution(out_dir, filename="action_distribution.png"):
-    """Stacked-area chart of which grammar action moo_api.make_children()
-    actually picked, as a FRACTION of that generation's breeding
-    decisions, generation by generation - the automatic version of what
-    previously required hand-counting breeding_events.json across every
-    generation folder to notice (e.g. a crossover action's band
-    collapsing toward zero within the first ~10 generations)."""
+    """Stacked-area chart of which grammar action was picked, as a fraction
+    of each generation's breeding decisions, generation by generation."""
     events_by_gen = _load_breeding_events(out_dir)
     if not events_by_gen:
         return None
@@ -875,22 +645,12 @@ def plot_action_distribution(out_dir, filename="action_distribution.png"):
 
 
 def plot_reward_and_loss_by_action(history, out_dir, filename="rl_diagnostics_by_action.png"):
-    """Two-panel bar chart breaking PPO's reward and policy loss down BY
-    grammar action type, aggregated over the whole run so far - the
-    direct diagnostic for WHY one action type's sampling probability
-    might be collapsing (see plot_action_distribution): if its reward is
-    systematically worse than other actions', that explains it rather
-    than just describing it.
-
-    `history`: rl_api.PPOTrainer.history. reward_action (set in
-    PPOTrainer.record) pairs 1:1 with reward. loss_by_action (set once
-    per PPOTrainer.update() call, from that update's LAST PPO epoch) is a
-    list of {action_name: {policy_loss, value_loss, count}} snapshots -
-    count-weighted-averaged across all of them here. Each bar is
-    annotated with its sample count, since rare actions (crossover,
-    especially once/if its probability collapses) can end up averaged
-    over far fewer samples than common ones - a mean alone would hide
-    that it's a much noisier estimate."""
+    """Two-panel bar chart of PPO's mean reward and policy loss broken down
+    by grammar action type, aggregated over the run so far - diagnoses
+    whether one action type's collapsing probability (see
+    plot_action_distribution) is explained by systematically worse reward.
+    Each bar is annotated with its sample count since rare actions can be
+    averaged over far fewer samples."""
     reward_vals = history.get("reward") or []
     reward_actions = history.get("reward_action") or []
     loss_snapshots = history.get("loss_by_action") or []
@@ -947,9 +707,7 @@ def plot_reward_and_loss_by_action(history, out_dir, filename="rl_diagnostics_by
 
 def _load_comparison_runs(run_dirs):
     """dict[label -> [(gen_idx, population), ...]] for every run_dirs entry
-    that has any data yet - shared by every plot_*_comparison function
-    below. Runs with no data yet are silently dropped (so each comparison
-    plot stays safe to call while one arm is still in progress)."""
+    that has data yet; runs with no data are silently dropped."""
     runs = {}
     for label, out_dir in run_dirs.items():
         generations = _load_all_generations(out_dir)
@@ -959,16 +717,10 @@ def _load_comparison_runs(run_dirs):
 
 
 def plot_convergence_comparison(run_dirs, comparison_out_dir, filename="convergence_comparison.png"):
-    """Multi-run counterpart to plot_convergence(): best vs. population-mean
-    SCALARIZED fitness (objectives_api.scalarize), one best/mean pair of
-    lines per run, so the RL-assisted policy's convergence behavior is
-    directly comparable against random_baseline.py's. Saved at this
-    module's usual DPI=600 "print quality" - unlike the per-generation
-    plots elsewhere in this file, this one isn't regenerated every
-    generation of a run, so there's no storage-cost reason to shrink it.
+    """Multi-run counterpart to plot_convergence(): one best/mean pair of
+    scalarized-fitness lines per run, so runs are directly comparable.
 
-    `run_dirs`: dict[label -> OUTPUT_DIR] - e.g.
-    {"RL-Guided NSGA-III": ".../evolution_run", "Standard NSGA-III": ".../evolution_run_norl"}."""
+    `run_dirs`: dict[label -> OUTPUT_DIR]."""
     os.makedirs(comparison_out_dir, exist_ok=True)
     runs = _load_comparison_runs(run_dirs)
     if not runs:
@@ -979,10 +731,7 @@ def plot_convergence_comparison(run_dirs, comparison_out_dir, filename="converge
 
     for color, (label, generations) in zip(run_colors, runs.items()):
         gen_indices = [g for g, _ in generations]
-        # Each run gets its OWN independently-rebuilt running range (see
-        # _scalarize_offline's docstring) - matching how each run's own
-        # live main.py process would have built its range from only its
-        # own individuals, never the other arm's.
+        # Each run gets its own independently-rebuilt running range.
         scores_by_gen = _scalarize_offline(generations)
         best_vals, mean_vals = [], []
         for gen_idx, _ in generations:
@@ -1005,12 +754,8 @@ def plot_convergence_comparison(run_dirs, comparison_out_dir, filename="converge
 
 def plot_fitness_trends_comparison(run_dirs, comparison_out_dir, filename="fitness_trends_comparison.png"):
     """Multi-run counterpart to plot_fitness_trends(): one subplot per
-    objective (2x2 grid, f1..f4), each generation's BEST value (solid) AND
-    population MEAN (dashed, same color) per run - so a run's best-so-far
-    progress AND how far the rest of its population lags behind it are
-    both visible per-objective, not just once as one scalarized number in
-    plot_convergence_comparison. Saved at this module's usual DPI=600 - see
-    plot_convergence_comparison's docstring for why.
+    objective, each run's best (solid) and mean (dashed) value per
+    generation.
 
     `run_dirs`: dict[label -> OUTPUT_DIR]."""
     os.makedirs(comparison_out_dir, exist_ok=True)
@@ -1039,13 +784,7 @@ def plot_fitness_trends_comparison(run_dirs, comparison_out_dir, filename="fitne
         ax.set_ylabel(ylabel)
         _integer_x_axis(ax)
 
-    # ONE shared legend for the whole figure instead of one per subplot -
-    # every subplot plots the exact same (run, best/mean) series in the
-    # exact same order/color/linestyle, so 4 identical legend boxes just
-    # repeated the same information 4x and ate into each panel's plot
-    # area. Pulled from axes[0] (any subplot's handles are representative)
-    # and placed BELOW the grid via fig.legend (not ax.legend), so it sits
-    # outside every panel rather than overlapping one of them.
+    # One shared legend below the grid instead of one per identical subplot.
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.02),
                ncol=min(len(labels), 4), fontsize=FONT_SIZE_LEGEND)
@@ -1058,10 +797,8 @@ def plot_fitness_trends_comparison(run_dirs, comparison_out_dir, filename="fitne
 
 
 def plot_collision_rate_comparison(run_dirs, comparison_out_dir, filename="collision_rate_comparison.png"):
-    """Collision rate (n_collided / n_offspring per generation, from
-    append_generation_stats' generation_stats.json), one line per run - the
-    piece of plot_rl_vs_baseline_comparison's old combined figure that's
-    neither a fitness trend nor convergence, so it stays its own plot."""
+    """Collision rate (n_collided / n_offspring per generation), one line
+    per run."""
     os.makedirs(comparison_out_dir, exist_ok=True)
     runs = _load_comparison_runs(run_dirs)
     if not runs:
@@ -1102,26 +839,10 @@ def plot_collision_rate_comparison(run_dirs, comparison_out_dir, filename="colli
 
 def plot_hypervolume_comparison(run_dirs, comparison_out_dir, filename="hypervolume_comparison.png"):
     """Multi-run counterpart to plot_hypervolume(): one HV line per run,
-    each computed via compute_hypervolume() exactly as plot_hypervolume()
-    does for that run alone - normalized against THAT RUN'S OWN observed
-    range, independently of the other run(s) - so every line here is
-    identical to that run's own standalone hypervolume.png, not a rescaled
-    version of it. Same principle plot_convergence_comparison() already
-    uses for scalarized fitness (see its "each run gets its OWN
-    independently-rebuilt running range" comment) - kept consistent here
-    rather than mixing normalization philosophies across comparison plots.
-
-    Trade-off worth knowing: because each run is normalized against its
-    own range, the two lines' absolute HV magnitudes aren't strictly
-    apples-to-apples (a run that happened to explore a narrower slice of
-    objective space can show a numerically larger HV purely from having a
-    smaller yardstick) - what's directly comparable here is each run's own
-    SHAPE/TREND (still improving? plateaued? crashed?), not a precise
-    "whose number is bigger" reading. An earlier version of this function
-    used one shared cross-run-pooled range instead specifically to make
-    the raw magnitudes comparable - reverted because it made each run's
-    line disagree with that run's own trusted standalone chart, which
-    matters more here than strict cross-run magnitude comparability.
+    each normalized against that run's own observed range (so it matches
+    that run's standalone hypervolume.png). Absolute magnitudes aren't
+    strictly apples-to-apples across runs; each run's own shape/trend is
+    what's directly comparable.
 
     `run_dirs`: dict[label -> OUTPUT_DIR]."""
     os.makedirs(comparison_out_dir, exist_ok=True)
@@ -1152,19 +873,10 @@ def plot_hypervolume_comparison(run_dirs, comparison_out_dir, filename="hypervol
 
 
 def plot_rl_vs_baseline_comparison(run_dirs, comparison_out_dir):
-    """The RL_ASSISTED_GENETIC_OPERATIONS comparison plots: GA convergence
-    (with mean), fitness trends (best only, no mean), collision rate, and
-    hypervolume - each its own separate PNG (see plot_convergence_comparison
-    / plot_fitness_trends_comparison / plot_collision_rate_comparison /
-    plot_hypervolume_comparison) - so the effect of the learned policy vs.
-    random_baseline.py's blind variation is visible directly, generation by
-    generation.
+    """Generates the four RL-vs-baseline comparison plots (convergence,
+    fitness trends, collision rate, hypervolume) as separate PNGs.
 
-    `run_dirs`: dict[label -> OUTPUT_DIR] - e.g.
-    {"RL-Guided NSGA-III": ".../evolution_run", "Standard NSGA-III": ".../evolution_run_norl"}.
-    Runs with no data yet are silently skipped (so this is safe to call
-    while one arm is still in progress). Returns {name: path_or_None} for
-    the four files."""
+    `run_dirs`: dict[label -> OUTPUT_DIR]. Returns {name: path_or_None}."""
     return dict(
         convergence=plot_convergence_comparison(run_dirs, comparison_out_dir),
         fitness_trends=plot_fitness_trends_comparison(run_dirs, comparison_out_dir),
@@ -1172,15 +884,9 @@ def plot_rl_vs_baseline_comparison(run_dirs, comparison_out_dir):
         hypervolume=plot_hypervolume_comparison(run_dirs, comparison_out_dir),
     )
 
-# A real scalarize()-delta reward (scalarize(child) - scalarize(parent))
-# is mathematically bounded to [-1, 1] - see objectives_api.scalarize.
-# moo_api.COLLISION_PENALTY is a worse-than-any-legitimate-outcome flat
-# penalty added on top of (or instead of) that delta, so anything below
-# halfway between the two clearly-separated ranges is a collision/failure
-# event, not real signal - separates the two for plot_rl_diagnostics'
-# reward panel. Derived from the actual constant (not a hardcoded copy of
-# its value) so the two can never silently drift out of sync again if
-# COLLISION_PENALTY is retuned.
+# A real scalarize()-delta reward is bounded to [-1, 1]; COLLISION_PENALTY
+# is a flat penalty far below that, so anything past this threshold is a
+# collision event, not real reward signal.
 _COLLISION_REWARD_THRESHOLD = (moo_api.COLLISION_PENALTY - 1.0) / 2
 
 
@@ -1188,26 +894,13 @@ _STEP_AXIS_LABEL = "Breeding Decision Step"
 
 
 def plot_rl_diagnostics(history, out_dir, suffix=""):
-    """One SEPARATE PNG per PPO training metric (reward-with-penalty,
-    reward-without-penalty, policy_loss, value_loss, entropy) - previously
-    a single 4x1 combined figure. history: rl_api.PPOTrainer.history (dict
-    of lists). Returns dict[metric_key -> path] for whichever metrics had
-    data.
-
-    `suffix` (e.g. main.py's "_repulsive" for PHEROMONE_RESPONSE_TYPE=
-    "repulsive") is inserted before the .png extension of every filename
-    this generates - so a file copied out of its run-specific OUTPUT_DIR
-    still identifies which run it came from instead of colliding with the
-    same-named file from a different run.
-
-    The reward metric gets its own TWO separate figures (previously one
-    2x1 combined figure) instead of the generic single-panel treatment:
-    full range (so collision-gate failures - moo_api.COLLISION_PENALTY -
-    are still visible as spikes) in "..._reward_with_penalty.png", and the
-    same series with those spikes excluded and the y-axis rescaled to fit
-    what remains in "..._reward_without_penalty.png" - see
-    _COLLISION_REWARD_THRESHOLD. Without the second plot, the real reward
-    signal is invisible against the -10 spikes on a single linear axis."""
+    """One separate PNG per PPO training metric (reward with/without
+    collision penalty, policy_loss, value_loss, entropy). `history` is
+    rl_api.PPOTrainer.history. `suffix` is inserted before each filename's
+    .png extension to identify which run it came from. Reward gets two
+    plots: full range (collision spikes visible) and with those spikes
+    excluded so the real signal isn't dwarfed by them. Returns
+    dict[metric_key -> path] for whichever metrics had data."""
     os.makedirs(out_dir, exist_ok=True)
 
     paths = {}
@@ -1252,15 +945,8 @@ def plot_rl_diagnostics(history, out_dir, suffix=""):
         if saved:
             paths["reward_without_penalty"] = saved
 
-        # Collision-gate outcome per breeding decision step: collision_mask
-        # is a per-step 0/100 spike train (rejected or not), which on its
-        # own is unreadable as a trend - every spike looks identical
-        # regardless of whether rejections are getting rarer or not. Drawn
-        # here faint/thin as context, UNDER a bold rolling-window
-        # rejection-RATE line (centered moving average of the same 0/100
-        # series) that's what actually answers "is the policy learning to
-        # stop proposing collision-prone actions" at a glance - still a
-        # line plot throughout, just two layers of it instead of one.
+        # Per-step outcome drawn faint as context, under a bold rolling-
+        # window rejection-rate line that shows the actual trend.
         fig, ax = plt.subplots(figsize=(9, 5.5))
         ax.plot(steps, collision_mask.astype(float) * 100, color=_RL_METRIC_COLOR["collision_rate"],
                 linewidth=0.8, alpha=0.25, zorder=1, label="Per-step outcome")

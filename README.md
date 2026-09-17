@@ -1,4 +1,4 @@
-# Microrobotics — Evolutionary Roblet Morphology
+# Microrobotics - Evolutionary Roblet Morphology
 
 Code for evolving the morphology of self-folding, self-assembling
 magnetically-actuated microrobots ("**Roblets**") using a Sobol-seeded,
@@ -14,40 +14,40 @@ an MJCF assembly, physically simulated, scored on multiple objectives
 
 ## Repository layout
 
-| Path | What it's for |
-|---|---|
-| [`src/main.py`](src/main.py) | Entry point — runs the RL-guided NSGA-III evolutionary loop end-to-end (checkpointing, resuming, plotting). |
-| [`src/roblet_simulator.py`](src/roblet_simulator.py) | MuJoCo simulation of a single roblet assembly (folding + magnetic actuation); also runnable standalone with a live viewer. |
-| [`src/moo_api.py`](src/moo_api.py) | Multi-objective optimization engine: population loop, breeding, evaluation, NSGA-III survival. |
-| [`src/objectives_api.py`](src/objectives_api.py) | Converts a simulation's `stats.json` into the f1..f4 objective vector used for selection/RL reward. |
-| [`src/rl_api.py`](src/rl_api.py) | Graph-transformer actor-critic (PPO) policy that selects/parameterizes mutation & crossover actions. |
-| [`src/random_baseline.py`](src/random_baseline.py) | Uniform-random genetic-operator arm, used when RL-assisted breeding is switched off (classic-GA comparison). |
-| [`src/roblet_grammar.py`](src/roblet_grammar.py) | Shared genotype schema and grammar-legal graph edit primitives (mutation/crossover actions). |
-| [`src/symmetry.py`](src/symmetry.py) | Mirrors a half-genotype graph into a full bilaterally symmetric shape at build time. |
-| [`src/entropy_api.py`](src/entropy_api.py) | Multi-scale Shannon shape-entropy metric over module positions. |
-| [`src/sim_executor.py`](src/sim_executor.py) | Runs many `roblet_simulator.py` evaluations in parallel OS processes. |
-| [`src/parallel_executor.py`](src/parallel_executor.py) | Standalone 4-way parallel simulation throughput check. |
-| [`src/checkpoint.py`](src/checkpoint.py) | Saves/loads full run state (RL weights, population, RNG, generation) for crash-safe resuming. |
-| [`src/plotting_api.py`](src/plotting_api.py) | Generates all per-run figures (Pareto front, fitness trends, convergence, RL diagnostics, ...). |
-| [`src/compare.py`](src/compare.py) | Renders the RL-guided vs. random-baseline comparison figure from two completed runs. |
-| [`src/simple_roblet.py`](src/simple_roblet.py) | Minimal single-hinge MuJoCo viewer sanity check. |
-| [`helper_scripts/mjcf_generator.py`](helper_scripts/mjcf_generator.py) | Compiles a genotype graph into an MJCF assembly XML. |
-| [`helper_scripts/graph_visualizer.py`](helper_scripts/graph_visualizer.py) | Draws a genotype graph JSON as a top-down tree. |
-| [`helper_scripts/pattern_gen.py`](helper_scripts/pattern_gen.py) | PyQt6 GUI for hand-authoring a module layout and exporting it as a genotype graph. |
-| [`helper_scripts/evolution_results_visualizer.py`](helper_scripts/evolution_results_visualizer.py) | PyQt6 GUI for browsing a completed/in-progress evolution run (population, screenshots, lineage). |
-| [`helper_scripts/plot_morphology_grid.py`](helper_scripts/plot_morphology_grid.py) | Builds a "morphology over generations" comparison figure. |
-| [`helper_scripts/plot_real_mutations.py`](helper_scripts/plot_real_mutations.py) | Builds a figure from real breeding-decision examples in a run. |
-| [`helper_scripts/plot_symmetry_before_after.py`](helper_scripts/plot_symmetry_before_after.py) | Before/after symmetry-mirroring figure for one individual. |
-| [`helper_scripts/report_best_last_generation.py`](helper_scripts/report_best_last_generation.py) | Reports the best individual from a run's last generation with its design variables and objectives. |
-| [`helper_scripts/magnet_mesh_gen.py`](helper_scripts/magnet_mesh_gen.py) | Generates the cylindrical magnet STL mesh used in the module CAD. |
-| [`helper_scripts/sample_moo.py`](helper_scripts/sample_moo.py) | Standalone pymoo NSGA-III demo (DTLZ1 benchmark), unrelated to the roblet pipeline. |
-| [`fusion_scripts/`](fusion_scripts) | Autodesk Fusion 360 script add-ins (run *inside* Fusion, not with `uv`/`python`) — see below. |
-| [`assets/cad_models`](assets/cad_models) | Fusion 360 CAD source files for the module bodies and sub-assemblies. |
-| [`meshes/`](meshes) | Exported STL meshes referenced by the MJCF assemblies. |
-| [`models/`](models) | Example/generated MJCF assembly XMLs. |
-| [`graphs/`](graphs) | Example genotype graph JSONs (hand-authored morphologies for testing). |
-| [`doc/`](doc) | Design notes (module/magnet specs). |
-| [`output/`](output) | Default destination for evolution-run artifacts (checkpoints, per-generation data, plots, screenshots). Git-ignored. |
+| Path                                                                                                | What it's for                                                                                                              |
+| --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| [`src/main.py`](src/main.py)                                                                       | Entry point — runs the RL-guided NSGA-III evolutionary loop end-to-end (checkpointing, resuming, plotting).               |
+| [`src/roblet_simulator.py`](src/roblet_simulator.py)                                               | MuJoCo simulation of a single roblet assembly (folding + magnetic actuation); also runnable standalone with a live viewer. |
+| [`src/moo_api.py`](src/moo_api.py)                                                                 | Multi-objective optimization engine: population loop, breeding, evaluation, NSGA-III survival.                             |
+| [`src/objectives_api.py`](src/objectives_api.py)                                                   | Converts a simulation's`stats.json` into the f1..f4 objective vector used for selection/RL reward.                       |
+| [`src/rl_api.py`](src/rl_api.py)                                                                   | Graph-transformer actor-critic (PPO) policy that selects/parameterizes mutation & crossover actions.                       |
+| [`src/random_baseline.py`](src/random_baseline.py)                                                 | Uniform-random genetic-operator arm, used when RL-assisted breeding is switched off (classic-GA comparison).               |
+| [`src/roblet_grammar.py`](src/roblet_grammar.py)                                                   | Shared genotype schema and grammar-legal graph edit primitives (mutation/crossover actions).                               |
+| [`src/symmetry.py`](src/symmetry.py)                                                               | Mirrors a half-genotype graph into a full bilaterally symmetric shape at build time.                                       |
+| [`src/entropy_api.py`](src/entropy_api.py)                                                         | Multi-scale Shannon shape-entropy metric over module positions.                                                            |
+| [`src/sim_executor.py`](src/sim_executor.py)                                                       | Runs many`roblet_simulator.py` evaluations in parallel OS processes.                                                     |
+| [`src/parallel_executor.py`](src/parallel_executor.py)                                             | Standalone 4-way parallel simulation throughput check.                                                                     |
+| [`src/checkpoint.py`](src/checkpoint.py)                                                           | Saves/loads full run state (RL weights, population, RNG, generation) for crash-safe resuming.                              |
+| [`src/plotting_api.py`](src/plotting_api.py)                                                       | Generates all per-run figures (Pareto front, fitness trends, convergence, RL diagnostics, ...).                            |
+| [`src/compare.py`](src/compare.py)                                                                 | Renders the RL-guided vs. random-baseline comparison figure from two completed runs.                                       |
+| [`src/simple_roblet.py`](src/simple_roblet.py)                                                     | Minimal single-hinge MuJoCo viewer sanity check.                                                                           |
+| [`helper_scripts/mjcf_generator.py`](helper_scripts/mjcf_generator.py)                             | Compiles a genotype graph into an MJCF assembly XML.                                                                       |
+| [`helper_scripts/graph_visualizer.py`](helper_scripts/graph_visualizer.py)                         | Draws a genotype graph JSON as a top-down tree.                                                                            |
+| [`helper_scripts/pattern_gen.py`](helper_scripts/pattern_gen.py)                                   | PyQt6 GUI for hand-authoring a module layout and exporting it as a genotype graph.                                         |
+| [`helper_scripts/evolution_results_visualizer.py`](helper_scripts/evolution_results_visualizer.py) | PyQt6 GUI for browsing a completed/in-progress evolution run (population, screenshots, lineage).                           |
+| [`helper_scripts/plot_morphology_grid.py`](helper_scripts/plot_morphology_grid.py)                 | Builds a "morphology over generations" comparison figure.                                                                  |
+| [`helper_scripts/plot_real_mutations.py`](helper_scripts/plot_real_mutations.py)                   | Builds a figure from real breeding-decision examples in a run.                                                             |
+| [`helper_scripts/plot_symmetry_before_after.py`](helper_scripts/plot_symmetry_before_after.py)     | Before/after symmetry-mirroring figure for one individual.                                                                 |
+| [`helper_scripts/report_best_last_generation.py`](helper_scripts/report_best_last_generation.py)   | Reports the best individual from a run's last generation with its design variables and objectives.                         |
+| [`helper_scripts/magnet_mesh_gen.py`](helper_scripts/magnet_mesh_gen.py)                           | Generates the cylindrical magnet STL mesh used in the module CAD.                                                          |
+| [`helper_scripts/sample_moo.py`](helper_scripts/sample_moo.py)                                     | Standalone pymoo NSGA-III demo (DTLZ1 benchmark), unrelated to the roblet pipeline.                                        |
+| [`fusion_scripts/`](fusion_scripts)                                                                | Autodesk Fusion 360 script add-ins (run*inside* Fusion, not with `uv`/`python`) — see below.                        |
+| [`assets/cad_models`](assets/cad_models)                                                           | Fusion 360 CAD source files for the module bodies and sub-assemblies.                                                      |
+| [`meshes/`](meshes)                                                                                | Exported STL meshes referenced by the MJCF assemblies.                                                                     |
+| [`models/`](models)                                                                                | Example/generated MJCF assembly XMLs.                                                                                      |
+| [`graphs/`](graphs)                                                                                | Example genotype graph JSONs (hand-authored morphologies for testing).                                                     |
+| [`doc/`](doc)                                                                                      | Design notes (module/magnet specs).                                                                                        |
+| [`output/`](output)                                                                                | Default destination for evolution-run artifacts (checkpoints, per-generation data, plots, screenshots). Git-ignored.       |
 
 ## Requirements
 
@@ -63,7 +63,6 @@ an MJCF assembly, physically simulated, scored on multiple objectives
    ```powershell
    python --version
    ```
-
 2. **Install `uv`**:
 
    ```powershell
@@ -77,7 +76,6 @@ an MJCF assembly, physically simulated, scored on multiple objectives
    ```powershell
    uv --version
    ```
-
 3. **Clone the repo and install dependencies**:
 
    ```powershell
@@ -89,7 +87,6 @@ an MJCF assembly, physically simulated, scored on multiple objectives
    `uv sync` creates a `.venv/` and installs everything listed in
    [`pyproject.toml`](pyproject.toml) (MuJoCo, pymoo, PyTorch + torch-geometric,
    stable-baselines3, PyQt6, trimesh, etc.).
-
 4. **Activate the virtual environment** (only needed if you want to run
    `python ...` directly instead of `uv run ...`):
 
@@ -115,14 +112,14 @@ This runs the full Sobol-seeded, RL-guided NSGA-III loop (see the module
 docstring in [`src/main.py`](src/main.py) for the per-generation pipeline).
 Key settings are constants at the top of `main.py`:
 
-| Constant | Meaning |
-|---|---|
-| `POP_SIZE` | Population size per generation |
-| `N_GENERATIONS` | Number of generations to run |
-| `SIM_SECONDS` | Simulated seconds per individual evaluation |
-| `SEED` | RNG seed for a fresh run (ignored when resuming) |
+| Constant                           | Meaning                                                                                                                                 |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `POP_SIZE`                       | Population size per generation                                                                                                          |
+| `N_GENERATIONS`                  | Number of generations to run                                                                                                            |
+| `SIM_SECONDS`                    | Simulated seconds per individual evaluation                                                                                             |
+| `SEED`                           | RNG seed for a fresh run (ignored when resuming)                                                                                        |
 | `RL_ASSISTED_GENETIC_OPERATIONS` | `True` = PPO-trained breeding policy, `False` = random-baseline (classic GA) arm — each writes to its own `output/` subdirectory |
-| `PHEROMONE_RESPONSE_TYPE` | `"attractive"` or `"repulsive"` light-response objective variant |
+| `PHEROMONE_RESPONSE_TYPE`        | `"attractive"` or `"repulsive"` light-response objective variant                                                                    |
 
 **Resuming:** the script always checks for `output/<run>/checkpoint.pt` at
 startup and automatically continues from the last completed generation — no
@@ -138,17 +135,17 @@ uv run python roblet_simulator.py --m ../models/simple_roblet.xml
 
 Opens a live MuJoCo viewer for the given model. Useful flags:
 
-| Flag | Meaning |
-|---|---|
-| `--m <path>` | MJCF model to load |
-| `--o <path>` | Output path for the simulation stats JSON |
-| `--headless` | Run without the live viewer (required for the flags below) |
-| `--capture_img` | Save a final-pose screenshot PNG |
-| `--capture_gif` | Save a movement GIF |
-| `--sweep_b` | Sweep magnetic field intensity and keep the best-performing run |
-| `--light_tests` | Run the two-stage pheromone/light-response test instead of free-roam gait |
-| `--capture_video` | With `--light_tests`, save an MP4 of each stage |
-| `--log-file <path>` / `--log-level <LEVEL>` | Logging options |
+| Flag                                            | Meaning                                                                   |
+| ----------------------------------------------- | ------------------------------------------------------------------------- |
+| `--m <path>`                                  | MJCF model to load                                                        |
+| `--o <path>`                                  | Output path for the simulation stats JSON                                 |
+| `--headless`                                  | Run without the live viewer (required for the flags below)                |
+| `--capture_img`                               | Save a final-pose screenshot PNG                                          |
+| `--capture_gif`                               | Save a movement GIF                                                       |
+| `--sweep_b`                                   | Sweep magnetic field intensity and keep the best-performing run           |
+| `--light_tests`                               | Run the two-stage pheromone/light-response test instead of free-roam gait |
+| `--capture_video`                             | With`--light_tests`, save an MP4 of each stage                          |
+| `--log-file <path>` / `--log-level <LEVEL>` | Logging options                                                           |
 
 Run `uv run python roblet_simulator.py --help` for the complete list.
 

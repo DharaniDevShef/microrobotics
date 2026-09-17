@@ -1,3 +1,11 @@
+"""
+MJCF Generator - Fusion 360 script add-in: reads every component
+occurrence's absolute transform in the active design and writes out an
+MJCF XML assembly (~/Documents/assembly_model.xml) with each body
+positioned/oriented to match its Fusion layout. Run from Fusion 360's
+Scripts and Add-Ins panel.
+"""
+
 import adsk.core, adsk.fusion, adsk.cam
 import os
 import traceback

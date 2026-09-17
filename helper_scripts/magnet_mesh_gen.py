@@ -1,3 +1,9 @@
+"""
+Magnet Mesh Gen - generates a small cylindrical magnet STL mesh (2mm
+diameter x 2mm height by default) via trimesh and writes it to
+../meshes/Magnet.stl, for use in the module CAD/MJCF assemblies.
+"""
+
 import os
 import trimesh
 

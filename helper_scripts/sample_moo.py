@@ -1,3 +1,9 @@
+"""
+Sample MOO - standalone pymoo NSGA-III demo on the DTLZ1 benchmark problem
+(not the roblet grammar/pipeline). Reference script for how the project's
+moo_api.py configures and calls NSGA3.
+"""
+
 import numpy as np
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.problems import get_problem

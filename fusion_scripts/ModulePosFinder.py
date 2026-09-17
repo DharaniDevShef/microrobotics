@@ -1,3 +1,11 @@
+"""
+Module Pos Finder - Fusion 360 script add-in: reads a target MJCF/graph
+XML layout and snaps the active design's matching module occurrences
+(anchored on Body_1) into that exact position/orientation, so the CAD
+assembly matches an evolved or hand-authored graph. Run from Fusion 360's
+Scripts and Add-Ins panel.
+"""
+
 import adsk.core, adsk.fusion, adsk.cam
 import os
 import traceback

@@ -1,3 +1,10 @@
+"""
+Pattern Generator - PyQt6 GUI for interactively laying out roblet modules
+on a hex grid, wiring up their connections by hand, and exporting the
+result as a genotype graph JSON (and, via mjcf_generator, an MJCF
+assembly) - the manual counterpart to moo_api's automated seeding.
+"""
+
 import sys
 import math
 import json

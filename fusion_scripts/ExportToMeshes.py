@@ -1,3 +1,10 @@
+"""
+Export To Meshes - Fusion 360 script add-in: exports every uniquely-named
+component in the active design's assembly tree as an STL file into
+~/Documents/meshes, skipping components with no solid bodies or already
+exported. Run from Fusion 360's Scripts and Add-Ins panel.
+"""
+
 import adsk.core, adsk.fusion, adsk.cam
 import os
 import traceback

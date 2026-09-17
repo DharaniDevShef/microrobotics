@@ -1,3 +1,9 @@
+"""
+Simple Roblet - minimal MuJoCo viewer sanity check: loads
+../models/simple_roblet.xml, drives its first hinge to 45 degrees, and
+steps the sim live so you can visually confirm the model/joint setup.
+"""
+
 import os
 import time
 import mujoco

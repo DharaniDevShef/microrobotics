@@ -1,3 +1,9 @@
+"""
+Graph Visualizer - draws a roblet genotype graph (a directed NetworkX graph
+saved as JSON, e.g. graphs/*.json) as a top-down tree with matplotlib, for
+quickly eyeballing a morphology's module hierarchy.
+"""
+
 import json
 import networkx as nx
 import matplotlib.pyplot as plt

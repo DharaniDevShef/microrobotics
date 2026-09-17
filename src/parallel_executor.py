@@ -1,3 +1,10 @@
+"""
+Parallel Executor - launches four fixed roblet_simulator.py --headless runs
+(assembly0..3.xml) as concurrent OS processes and waits for them all to
+finish. Superseded by sim_executor.py for the real evolutionary loop; kept
+as a quick standalone throughput check.
+"""
+
 import os
 import subprocess
 import time

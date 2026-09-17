@@ -1,3 +1,11 @@
+"""
+Evolution Results Visualizer - PyQt6 desktop app for browsing a completed
+(or in-progress) ../output/evolution_run: per-generation population cards
+(ranked by objectives_api.scalarize), individual screenshots, and
+mutation/crossover lineage, all read straight off that run's on-disk
+JSON/PNG artifacts.
+"""
+
 import json
 import os
 import sys
